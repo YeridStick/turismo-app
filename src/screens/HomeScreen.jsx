@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import Slider from '@react-native-community/slider';
+import * as Location from 'expo-location';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,44 +16,22 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Dimensions,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
-import * as Location from 'expo-location';
-import { Image } from 'expo-image';
-import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
+import api from '../services/api';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
-import { getPlaceArConfig } from '../services/ar';
 
-const distanceOptions = [1, 2, 5, 10, 20, 50];
-const categoriesList = [
-  { id: 'todos', name: 'Todos' },
-  { id: 1, name: 'Mirador' },
-  { id: 2, name: 'Museo' },
-  { id: 3, name: 'Cascada' },
-  { id: 4, name: 'Desierto' },
-  { id: 5, name: 'Parque' },
-];
-
-const screenWidth = Dimensions.get('window').width;
-
-const Card = ({ title, subtitle, meta, compact = false, image, onPress }) => {
+const Card = ({ title, subtitle, meta, compact = false }) => {
   return (
-    <Pressable style={[styles.card, compact && styles.cardCompact]} onPress={onPress}>
-      {image ? (
-        <Image source={{ uri: image }} style={styles.cardImage} contentFit="cover" />
-      ) : null}
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
-        {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
-      </View>
-    </Pressable>
+    <View style={[styles.card, compact && styles.cardCompact]}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
+      {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
+    </View>
   );
 };
 
-const HomeScreen = () => {
+const HomeScreen = ({ navigation }) => {
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
   const [popular, setPopular] = useState([]);
@@ -181,7 +161,6 @@ const HomeScreen = () => {
   };
 
   const renderPlace = ({ item, compact = false }) => {
-    const image = Array.isArray(item.imageUrls) && item.imageUrls.length ? item.imageUrls[0] : null;
     return (
       <Card
         title={item.name || 'Lugar sin nombre'}
@@ -192,7 +171,6 @@ const HomeScreen = () => {
         }
         image={image}
         compact={compact}
-        onPress={() => openDetail(item)}
       />
     );
   };
@@ -571,44 +549,34 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   hero: {
-    height: 420,
+    padding: SPACING.lg,
+    paddingTop: SPACING.xl,
+    backgroundColor: '#4E5AE8',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    overflow: 'hidden',
-    marginBottom: SPACING.lg,
-  },
-  heroImage: {
-    resizeMode: 'cover',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(65, 35, 143, 0.55)',
-  },
-  heroContent: {
-    flex: 1,
-    padding: SPACING.lg,
-    justifyContent: 'center',
   },
   heroBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     color: COLORS.white,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
-    borderRadius: 12,
-    fontSize: FONT_SIZES.sm,
-    marginBottom: SPACING.sm,
+    borderRadius: 20,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
   },
   heroTitle: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: 'bold',
     color: COLORS.white,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   heroSubtitle: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: FONT_SIZES.md,
-    marginBottom: SPACING.md,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: FONT_SIZES.sm,
+    marginBottom: SPACING.lg,
+    lineHeight: 22,
   },
   searchCard: {
     backgroundColor: COLORS.white,
@@ -633,50 +601,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.sm,
   },
-  filterButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  primaryButton: {
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
-  },
-  filterButtonText: {
-    color: COLORS.text,
-    fontWeight: '600',
-  },
-  searchButton: {
-    flex: 1,
-    backgroundColor: '#7B5BFF',
-    paddingVertical: SPACING.md,
     borderRadius: 12,
-    alignItems: 'center',
   },
-  searchButtonText: {
+  primaryButtonText: {
     color: COLORS.white,
     fontWeight: 'bold',
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
   },
-  heroStats: {
-    flexDirection: 'row',
-    marginTop: SPACING.lg,
-    gap: SPACING.md,
-  },
-  stat: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    padding: SPACING.md,
-    borderRadius: 14,
+  secondaryButton: {
+    borderColor: COLORS.white,
+    borderWidth: 1,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: 12,
   },
   statNumber: {
     color: COLORS.white,
-    fontWeight: 'bold',
-    fontSize: FONT_SIZES.xl,
-  },
-  statLabel: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    fontSize: FONT_SIZES.md,
   },
   section: {
     padding: SPACING.lg,
@@ -694,7 +640,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: FONT_SIZES.lg,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.md,
@@ -715,19 +661,25 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: COLORS.white,
-    padding: SPACING.md,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   cardCompact: {
-    width: 240,
+    width: 200,
+    marginBottom: 0,
+  },
+  cardImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: COLORS.border,
+  },
+  cardContent: {
+    padding: SPACING.md,
   },
   cardImage: {
     width: '100%',
@@ -739,20 +691,20 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   cardTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
-  cardSubtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textLight,
-    marginBottom: SPACING.xs,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   cardMeta: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    fontWeight: '600',
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    flex: 1,
   },
   chipRow: {
     gap: SPACING.sm,
