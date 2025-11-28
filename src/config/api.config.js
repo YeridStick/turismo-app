@@ -1,5 +1,5 @@
 // Cambia esta URL por la de tu backend
-export const API_BASE_URL = 'http://localhost:8082';
+export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com'; // http://localhost:8082 
 
 // O si estás probando localmente en LAN:
 // export const API_BASE_URL = 'http://192.168.1.X:8082'; // Reemplaza X con tu IP local
