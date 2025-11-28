@@ -8,23 +8,42 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import * as Location from 'expo-location';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 
-const Card = ({ title, subtitle, meta, compact = false }) => {
+const Card = ({ title, subtitle, meta, compact = false, onPress, imageUri }) => {
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
-      {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
-    </View>
+    <TouchableOpacity
+      style={[styles.card, compact && styles.cardCompact]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {imageUri && (
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.cardImage}
+          resizeMode="cover"
+        />
+      )}
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
+        {meta && (
+          <View style={styles.metaRow}>
+            <Ionicons name="location-outline" size={14} color={COLORS.primary} />
+            <Text style={styles.cardMeta} numberOfLines={1}>{meta}</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
   );
 };
 
-const HomeScreen = () => {
+const HomeScreen = ({ navigation }) => {
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
   const [loadingAll, setLoadingAll] = useState(true);
@@ -77,6 +96,9 @@ const HomeScreen = () => {
   };
 
   const renderPlace = ({ item, compact = false }) => {
+    // Generar imagen de ejemplo (en producción vendrían del lugar)
+    const imageUri = item.imageUrl || `https://picsum.photos/400/300?random=${item.id || Math.random()}`;
+
     return (
       <Card
         title={item.name || 'Lugar sin nombre'}
@@ -86,6 +108,8 @@ const HomeScreen = () => {
           (item.distanceMeters ? `${item.distanceMeters?.toFixed?.(0)} m` : undefined)
         }
         compact={compact}
+        imageUri={imageUri}
+        onPress={() => navigation.navigate('PlaceDetail', { place: item })}
       />
     );
   };
@@ -167,64 +191,69 @@ const styles = StyleSheet.create({
   },
   hero: {
     padding: SPACING.lg,
-    paddingTop: SPACING.xl,
-    backgroundColor: '#4E5AE8',
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    paddingTop: SPACING.xxl,
+    backgroundColor: COLORS.primary,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   heroBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     color: COLORS.white,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
-    borderRadius: 12,
-    fontSize: FONT_SIZES.sm,
-    marginBottom: SPACING.sm,
+    borderRadius: 20,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
   },
   heroTitle: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: 'bold',
     color: COLORS.white,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   heroSubtitle: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: FONT_SIZES.md,
-    marginBottom: SPACING.md,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: FONT_SIZES.sm,
+    marginBottom: SPACING.lg,
+    lineHeight: 22,
   },
   heroActions: {
     flexDirection: 'row',
     gap: SPACING.sm,
   },
   primaryButton: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: COLORS.white,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderRadius: 12,
+    flex: 1,
+    alignItems: 'center',
   },
   primaryButtonText: {
-    color: COLORS.white,
+    color: COLORS.primary,
     fontWeight: 'bold',
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
   },
   secondaryButton: {
-    borderColor: COLORS.white,
-    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderRadius: 12,
+    flex: 1,
+    alignItems: 'center',
   },
   secondaryButtonText: {
     color: COLORS.white,
     fontWeight: '600',
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
   },
   section: {
     padding: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: FONT_SIZES.lg,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.md,
@@ -241,34 +270,42 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: COLORS.white,
-    padding: SPACING.md,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 3,
+    marginBottom: SPACING.sm,
   },
   cardCompact: {
-    width: 240,
+    width: 200,
+    marginBottom: 0,
+  },
+  cardImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: COLORS.border,
+  },
+  cardContent: {
+    padding: SPACING.md,
   },
   cardTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
-  cardSubtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textLight,
-    marginBottom: SPACING.xs,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   cardMeta: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    fontWeight: '600',
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    flex: 1,
   },
   empty: {
     color: COLORS.textLight,

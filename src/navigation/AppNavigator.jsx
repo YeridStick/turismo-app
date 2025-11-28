@@ -1,75 +1,89 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../utils/constants';
 
-// Import screens (las crearemos después)
+// Import screens
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LoginScreen from '../screens/LoginScreen';
+import PlaceDetailScreen from '../screens/PlaceDetailScreen';
 
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 
-const TabNavigator = () => {
+const DrawerNavigator = () => {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          switch (route.name) {
-            case 'Home':
-              iconName = focused ? 'home' : 'home-outline';
-              break;
-            case 'Search':
-              iconName = focused ? 'search' : 'search-outline';
-              break;
-            case 'Favorites':
-              iconName = focused ? 'heart' : 'heart-outline';
-              break;
-            case 'Profile':
-              iconName = focused ? 'person' : 'person-outline';
-              break;
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
+    <Drawer.Navigator
+      screenOptions={{
+        drawerPosition: 'left',
+        drawerType: 'front',
+        drawerStyle: {
+          backgroundColor: COLORS.white,
+          width: 280,
         },
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textLight,
-        headerShown: false,
-        tabBarStyle: {
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
+        drawerActiveTintColor: COLORS.primary,
+        drawerInactiveTintColor: COLORS.textLight,
+        headerStyle: {
+          backgroundColor: COLORS.primary,
+          elevation: 0,
+          shadowOpacity: 0,
         },
-      })}
+        headerTintColor: COLORS.white,
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
     >
-      <Tab.Screen
+      <Drawer.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: 'Inicio' }}
+        options={{
+          drawerLabel: 'Inicio',
+          title: 'Descubre',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
+          ),
+        }}
       />
-      <Tab.Screen
+      <Drawer.Screen
         name="Search"
         component={SearchScreen}
-        options={{ tabBarLabel: 'Buscar' }}
+        options={{
+          drawerLabel: 'Buscar',
+          title: 'Buscar Lugares',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="search-outline" size={size} color={color} />
+          ),
+        }}
       />
-      <Tab.Screen
+      <Drawer.Screen
         name="Favorites"
         component={FavoritesScreen}
-        options={{ tabBarLabel: 'Favoritos' }}
+        options={{
+          drawerLabel: 'Favoritos',
+          title: 'Mis Favoritos',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="heart-outline" size={size} color={color} />
+          ),
+        }}
       />
-      <Tab.Screen
+      <Drawer.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarLabel: 'Perfil' }}
+        options={{
+          drawerLabel: 'Perfil',
+          title: 'Mi Perfil',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
       />
-    </Tab.Navigator>
+    </Drawer.Navigator>
   );
 };
 
@@ -77,8 +91,16 @@ const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Main" component={TabNavigator} />
+        <Stack.Screen name="Main" component={DrawerNavigator} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen
+          name="PlaceDetail"
+          component={PlaceDetailScreen}
+          options={{
+            presentation: 'card',
+            headerShown: false
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
