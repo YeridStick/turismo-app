@@ -6,7 +6,6 @@
     "entryPoint": "./App.js",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "turismoapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "ios": {
