@@ -3,7 +3,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../utils/constants';
 
 // Import screens (las crearemos después)
@@ -75,28 +74,11 @@ const TabNavigator = () => {
 };
 
 const AppNavigator = () => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return null; // Aquí podrías poner un SplashScreen
-  }
-
   return (
-    <NavigationContainer independent={true}>
-      <Stack.Navigator>
-        {user ? (
-          <Stack.Screen
-            name="Main"
-            component={TabNavigator}
-            options={{ headerShown: false }}
-          />
-        ) : (
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
-        )}
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Main" component={TabNavigator} />
+        <Stack.Screen name="Login" component={LoginScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

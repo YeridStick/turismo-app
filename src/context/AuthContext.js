@@ -31,10 +31,16 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const response = await api.post(ENDPOINTS.LOGIN, { email, password });
-      const { token, user: userData } = response.data;
+      const payload = response.data?.data || response.data;
+      const token = payload?.token;
+      const userData = payload?.user || null;
 
-      await AsyncStorage.setItem('token', token);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
+      if (token) {
+        await AsyncStorage.setItem('token', token);
+      }
+      if (userData) {
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
+      }
 
       setUser(userData);
       return { success: true };

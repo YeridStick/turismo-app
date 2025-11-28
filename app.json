@@ -3,7 +3,6 @@
     "name": "turismo-app",
     "slug": "turismo-app",
     "version": "1.0.0",
-    "entryPoint": "./App.js",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",

@@ -1,29 +1,29 @@
 // Cambia esta URL por la de tu backend
-export const API_BASE_URL = 'https://tu-backend.com/api';
+export const API_BASE_URL = 'http://localhost:8082';
 
-// O si estás probando localmente:
-// export const API_BASE_URL = 'http://192.168.1.X:3000/api'; // Reemplaza X con tu IP local
+// O si estás probando localmente en LAN:
+// export const API_BASE_URL = 'http://192.168.1.X:8082'; // Reemplaza X con tu IP local
 
 export const API_TIMEOUT = 10000;
 
 export const ENDPOINTS = {
-  // Auth
-  LOGIN: '/auth/login',
-  REGISTER: '/auth/register',
-  LOGOUT: '/auth/logout',
+  // Auth (TOTP)
+  LOGIN: '/api/auth/login-code',
+  REGISTER: '/api/auth/create/user',
+  REFRESH: '/api/auth/refresh',
+  LOGOUT: '/api/auth/logout',
+  TOTP_SETUP: '/api/auth/code/setup',
+  TOTP_CONFIRM: '/api/auth/code/confirm',
+  TOTP_STATUS: '/api/auth/code/status',
 
-  // Destinations
-  DESTINATIONS: '/destinations',
-  DESTINATION_DETAIL: (id) => `/destinations/${id}`,
-  POPULAR_DESTINATIONS: '/destinations/popular',
-  SEARCH_DESTINATIONS: '/destinations/search',
+  // Places
+  PLACES_ALL: '/api/places/all',
+  PLACES_NEARBY: '/api/places/nearby',
+  PLACES_SEARCH: '/api/places/search',
+  PLACE_DETAIL: (id) => `/api/places/${id}`,
 
-  // Bookings
-  BOOKINGS: '/bookings',
-  CREATE_BOOKING: '/bookings',
-  USER_BOOKINGS: '/bookings/user',
-
-  // User
-  PROFILE: '/user/profile',
-  UPDATE_PROFILE: '/user/profile',
+  // Feedback / Reviews
+  PLACE_RATING: (id) => `/api/pruebas/places/${id}/rating`,
+  PLACE_REVIEWS: (id) => `/api/pruebas/places/${id}/reviews`,
+  PLACE_FEEDBACK: (id) => `/api/pruebas/places/${id}/feedback`,
 };
