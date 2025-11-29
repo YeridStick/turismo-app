@@ -7,7 +7,10 @@
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Necesitamos la cámara para mostrar experiencias de realidad aumentada."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +21,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.yeridstick.turismoapp"
+      "package": "com.yeridstick.turismoapp",
+      "permissions": [
+        "CAMERA",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "output": "static",
@@ -36,11 +43,18 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "@reactvision/react-viro",
+        {
+          "cameraPermission": "Esta aplicación necesita acceso a la cámara para mostrar realidad aumentada."
+        }
       ]
     ],
     "experiments": {
       "reactCompiler": true
     },
+    "newArchEnabled": true,
     "extra": {
       "eas": {
         "projectId": "0c45beb3-fc9d-4dd1-bfc8-81c23d084c9c"

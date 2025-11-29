@@ -1,18 +1,17 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
-import { Platform } from 'react-native';
+import ARScreen from '../screens/ARScreen';
 import HomeScreen from '../screens/HomeScreen';
-import ArKitScreen from '../screens/ArKitScreen';
 
 const Stack = createNativeStackNavigator();
 
-// Navegador mínimo con una sola pantalla para descartar errores de hijos inválidos
+// Navegador con soporte AR multiplataforma usando ViroReact
 const AppNavigator = () => (
   <NavigationContainer>
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Home" component={HomeScreen} />
-      {Platform.OS === 'ios' ? <Stack.Screen name="ARKit" component={ArKitScreen} /> : null}
+      <Stack.Screen name="ARView" component={ARScreen} />
     </Stack.Navigator>
   </NavigationContainer>
 );

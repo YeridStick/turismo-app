@@ -406,13 +406,19 @@ const HomeScreen = ({ navigation }) => {
       return;
     }
     if (Platform.OS === 'android') {
-      const androidUrl = arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl;
-      if (androidUrl) {
-        const can = await Linking.canOpenURL(androidUrl);
-        if (can) {
-          await Linking.openURL(androidUrl);
+      const androidIntent = arConfig?.sceneViewerIntent;
+      const androidHttps = arConfig?.sceneViewerUrl;
+      try {
+        if (androidHttps) {
+          await Linking.openURL(androidHttps);
           return;
         }
+        if (androidIntent) {
+          await Linking.openURL(androidIntent);
+          return;
+        }
+      } catch (err) {
+        // fallback a WebView
       }
     }
     if (Platform.OS === 'ios' && arConfig?.iosQuicklookUrl) {
