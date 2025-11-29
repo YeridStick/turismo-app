@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 import { getPlaceArConfig } from '../services/ar';
@@ -188,6 +189,7 @@ const HomeScreen = ({ navigation }) => {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [coords, setCoords] = useState(null);
   const [imageIndex, setImageIndex] = useState(0);
+  const [arVisible, setArVisible] = useState(false);
   const imageListRef = useRef(null);
 
   useEffect(() => {
@@ -221,10 +223,6 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const performSearch = async () => {
-    if (!query.trim() && selectedCategory === 'todos') {
-      setPopular(places.slice(0, 6));
-      return;
-    }
     setLoadingAll(true);
     setError('');
     try {
@@ -400,7 +398,62 @@ const HomeScreen = ({ navigation }) => {
   const platformArUrl =
     Platform.OS === 'ios'
       ? arConfig?.iosQuicklookUrl || arUrl
-      : arConfig?.sceneViewerUrl || arUrl;
+      : arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl || arUrl;
+
+  const openNativeAR = async () => {
+    // Forzamos WebView embebido para tener control en la app
+    setArVisible(true);
+  };
+
+  const renderArWebView = () => {
+    if (!arUrl) return null;
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+          <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+          <style>html,body{margin:0;padding:0;height:100%;background:#0b1021;} model-viewer{width:100%;height:100%;}</style>
+        </head>
+        <body>
+          <model-viewer src="${arConfig?.modelUrl || arUrl}" ios-src="${arConfig?.iosModelUrl || ''}"
+            ar ar-modes="webxr scene-viewer quick-look" camera-controls auto-rotate shadow-intensity="1" exposure="1"
+            style="width:100%;height:100%;">
+          </model-viewer>
+        </body>
+      </html>`;
+    const handleShouldStartLoad = (event) => {
+      const url = event?.url || '';
+      if (Platform.OS === 'android' && url.startsWith('intent://')) {
+        const fallback = arConfig?.sceneViewerUrl || arUrl;
+        if (fallback) {
+          Linking.openURL(fallback).catch(() => {});
+        }
+        return false;
+      }
+      return true;
+    };
+
+    return (
+      <Modal visible={arVisible} animationType="slide" onRequestClose={() => setArVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <TouchableOpacity style={styles.arClose} onPress={() => setArVisible(false)}>
+            <Text style={styles.arCloseText}>Cerrar</Text>
+          </TouchableOpacity>
+          <WebView
+            originWhitelist={['*']}
+            source={{ html }}
+            allowsInlineMediaPlayback
+            javaScriptEnabled
+            domStorageEnabled
+            mediaPlaybackRequiresUserAction={false}
+            startInLoadingState
+            onShouldStartLoadWithRequest={handleShouldStartLoad}
+          />
+        </View>
+      </Modal>
+    );
+  };
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior="height">
@@ -562,27 +615,7 @@ const HomeScreen = ({ navigation }) => {
               keyboardShouldPersistTaps="handled"
             >
               <Text style={styles.modalTitle}>Configura tu búsqueda</Text>
-              <Text style={styles.modalSubtitle}>Categoría</Text>
-              <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
-                {categoriesList.map((chip) => (
-                  <TouchableOpacity
-                    key={chip.id}
-                    style={[styles.chip, selectedCategory === chip.id && styles.chipActive]}
-                    onPress={() => setSelectedCategory(chip.id)}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        selectedCategory === chip.id && styles.chipTextActive,
-                      ]}
-                    >
-                      {chip.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={[styles.modalSubtitle, { marginTop: SPACING.md }]}>Distancia</Text>
+              <Text style={[styles.modalSubtitle, { marginTop: SPACING.xs }]}>Distancia</Text>
               <View style={styles.quickRow}>
                 {distanceOptions.map((km) => (
                   <TouchableOpacity
@@ -611,6 +644,10 @@ const HomeScreen = ({ navigation }) => {
                 onValueChange={setDistanceKm}
               />
               <Text style={styles.sliderValue}>Radio personalizado: {distanceKm.toFixed(1)} km</Text>
+
+              <Text style={styles.modalHint}>
+                Ajusta la distancia para refinar lugares cercanos. Las categorías se seleccionan arriba.
+              </Text>
 
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalSecondary} onPress={() => setFiltersVisible(false)}>
@@ -696,10 +733,7 @@ const HomeScreen = ({ navigation }) => {
               </TouchableOpacity>
               {platformArUrl ? (
                 <>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => Linking.openURL(platformArUrl)}
-                  >
+                  <TouchableOpacity style={styles.actionButton} onPress={openNativeAR}>
                     <Text style={styles.actionButtonText}>
                       {Platform.OS === 'ios' ? 'Ver en AR (Quick Look)' : 'Ver en AR (Scene Viewer)'}
                     </Text>
@@ -716,6 +750,7 @@ const HomeScreen = ({ navigation }) => {
           )}
         </ScrollView>
       </Modal>
+      {renderArWebView()}
     </KeyboardAvoidingView>
   );
 };
@@ -1237,6 +1272,20 @@ const styles = StyleSheet.create({
     color: '#d7def1',
     fontSize: FONT_SIZES.xs,
   },
+  arClose: {
+    position: 'absolute',
+    top: SPACING.lg,
+    right: SPACING.lg,
+    zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 20,
+  },
+  arCloseText: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
   errorText: {
     color: COLORS.error,
     marginTop: SPACING.sm,
@@ -1269,6 +1318,11 @@ const styles = StyleSheet.create({
   modalScroll: {
     gap: SPACING.sm,
     paddingBottom: SPACING.md,
+  },
+  modalHint: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.xs,
   },
   modalTitle: {
     fontSize: FONT_SIZES.xl,
