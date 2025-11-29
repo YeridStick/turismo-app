@@ -17,7 +17,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.yeridstick.turismoapp"
     },
     "web": {
       "output": "static",
@@ -39,6 +40,11 @@
     ],
     "experiments": {
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0c45beb3-fc9d-4dd1-bfc8-81c23d084c9c"
+      }
     }
   }
 }

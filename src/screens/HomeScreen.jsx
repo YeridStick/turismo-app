@@ -401,8 +401,27 @@ const HomeScreen = ({ navigation }) => {
       : arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl || arUrl;
 
   const openNativeAR = async () => {
-    // Forzamos WebView embebido para tener control en la app
-    setArVisible(true);
+    if (Platform.OS === 'ios' && navigation?.navigate) {
+      navigation.navigate('ARKit', { modelUrl: arConfig?.iosModelUrl || arConfig?.modelUrl });
+      return;
+    }
+    if (Platform.OS === 'android') {
+      const androidUrl = arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl;
+      if (androidUrl) {
+        const can = await Linking.canOpenURL(androidUrl);
+        if (can) {
+          await Linking.openURL(androidUrl);
+          return;
+        }
+      }
+    }
+    if (Platform.OS === 'ios' && arConfig?.iosQuicklookUrl) {
+      await Linking.openURL(arConfig.iosQuicklookUrl);
+      return;
+    }
+    if (arUrl) {
+      setArVisible(true);
+    }
   };
 
   const renderArWebView = () => {
