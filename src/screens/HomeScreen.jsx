@@ -1,11 +1,14 @@
+import { FontAwesome } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
+import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
-  ImageBackground,
   KeyboardAvoidingView,
+  Platform,
   Linking,
   Modal,
   Pressable,
@@ -15,18 +18,154 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
+import { getPlaceArConfig } from '../services/ar';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 
-const Card = ({ title, subtitle, meta, compact = false }) => {
+const screenWidth = Dimensions.get('window').width;
+const distanceOptions = [1, 2, 5, 10, 20, 50];
+const categoriesList = [
+  { id: 'todos', name: 'Todos' },
+  { id: 1, name: 'Mirador' },
+  { id: 2, name: 'Museo' },
+  { id: 3, name: 'Cascada' },
+  { id: 4, name: 'Desierto' },
+  { id: 5, name: 'Parque' },
+];
+
+const navTabs = [
+  { id: 'todos', label: 'Todos' },
+  { id: 1, label: 'Mirador' },
+  { id: 2, label: 'Museo' },
+  { id: 3, label: 'Cascada' },
+  { id: 4, label: 'Desierto' },
+  { id: 5, label: 'Parque' },
+];
+
+const Card = ({
+  title,
+  subtitle,
+  meta,
+  variant = 'full',
+  image,
+  onPress,
+  badge,
+  rating,
+  distance,
+}) => {
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
-      {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
+    <Pressable
+      style={[styles.card, variant === 'compact' && styles.cardCompact, variant === 'wide' && styles.cardWide]}
+      onPress={onPress}
+    >
+      {image ? (
+        <View style={styles.cardImageWrapper}>
+          <Image source={{ uri: image }} style={styles.cardImage} contentFit="cover" />
+          <View style={styles.cardTopRow}>
+            <Text style={styles.cardBadge}>{badge || 'Destino'}</Text>
+            <TouchableOpacity style={styles.cardBookmark} onPress={onPress}>
+              <Text style={styles.bookmarkIcon}>S</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.cardRating}>
+            <Text style={styles.cardRatingText}>* {rating || '4.5'}</Text>
+          </View>
+        </View>
+      ) : null}
+      <View style={styles.cardBody}>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          {distance ? <Text style={styles.cardDistance}>{distance}</Text> : null}
+        </View>
+        {subtitle ? (
+          <Text style={styles.cardSubtitle} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        ) : null}
+        {meta ? (
+          <Text style={styles.cardMeta} numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+};
+
+const Footer = () => {
+  const socialIcons = [
+    { name: 'facebook', url: '#' },
+    { name: 'instagram', url: '#' },
+    { name: 'twitter', url: '#' },
+    { name: 'youtube-play', url: '#' },
+  ];
+  const legalLinks = ['Términos de Servicio', 'Privacidad', 'Cookies'];
+
+  return (
+    <View style={styles.footer}>
+      <View style={styles.footerHeader}>
+        <View style={styles.footerLogoBox}>
+          <FontAwesome name="globe" size={20} color={COLORS.white} />
+        </View>
+        <View>
+          <Text style={styles.footerTitle}>Turismo Huila</Text>
+          <Text style={styles.footerSubtitle}>
+            Descubre la magia del Huila. Naturaleza, cultura y aventura en un solo destino.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.footerSocialRow}>
+        {socialIcons.map((icon) => (
+          <TouchableOpacity key={icon.name} style={styles.footerSocialButton}>
+            <FontAwesome name={icon.name} size={16} color={COLORS.white} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.footerColumns}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.footerHeading}>Contacto</Text>
+          <View style={styles.footerContactRow}>
+            <FontAwesome name="envelope" size={16} color="#7C8EEB" />
+            <View>
+              <Text style={styles.footerContactLabel}>Email</Text>
+              <Text style={styles.footerContactValue}>info@turismohuila.com</Text>
+            </View>
+          </View>
+          <View style={styles.footerContactRow}>
+            <FontAwesome name="phone" size={16} color="#7C8EEB" />
+            <View>
+              <Text style={styles.footerContactLabel}>Teléfono</Text>
+              <Text style={styles.footerContactValue}>+57 (8) 123 4567</Text>
+            </View>
+          </View>
+          <View style={styles.footerContactRow}>
+            <FontAwesome name="map-marker" size={16} color="#7C8EEB" />
+            <View>
+              <Text style={styles.footerContactLabel}>Ubicación</Text>
+              <Text style={styles.footerContactValue}>Neiva, Huila, Colombia</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.footerDivider} />
+      <View style={styles.footerBottomRow}>
+        <Text style={styles.footerBottomText}>© 2025 Turismo Huila. Todos los derechos reservados.</Text>
+        <View style={styles.footerLegalRow}>
+          {legalLinks.map((item) => (
+            <Text key={item} style={styles.footerLegalText}>
+              {item}
+            </Text>
+          ))}
+        </View>
+      </View>
     </View>
   );
 };
@@ -35,12 +174,14 @@ const HomeScreen = ({ navigation }) => {
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
   const [popular, setPopular] = useState([]);
+  const [recommended, setRecommended] = useState([]);
   const [loadingAll, setLoadingAll] = useState(true);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('todos');
   const [distanceKm, setDistanceKm] = useState(2);
+  const [activeTab, setActiveTab] = useState('places');
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -61,6 +202,7 @@ const HomeScreen = ({ navigation }) => {
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setPlaces(data);
       setPopular(data.slice(0, 6));
+      setRecommended(data.slice(6, 12));
     } catch (err) {
       setError('No se pudo cargar el catálogo.');
     } finally {
@@ -141,6 +283,11 @@ const HomeScreen = ({ navigation }) => {
     return popular.filter((item) => item.categoryId === selectedCategory);
   }, [popular, selectedCategory]);
 
+  const filteredRecommended = useMemo(() => {
+    if (selectedCategory === 'todos') return recommended;
+    return recommended.filter((item) => item.categoryId === selectedCategory);
+  }, [recommended, selectedCategory]);
+
   const openDetail = async (item) => {
     setDetailVisible(true);
     setDetailLoading(true);
@@ -160,17 +307,24 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  const renderPlace = ({ item, compact = false }) => {
+  const renderPlace = ({ item, variant = 'full' }) => {
+    const image =
+      Array.isArray(item.imageUrls) && item.imageUrls.length ? item.imageUrls[0] : null;
+    const distanceText =
+      item.distanceMeters && item.distanceMeters > 0
+        ? `${item.distanceMeters?.toFixed?.(0)} m`
+        : null;
     return (
       <Card
         title={item.name || 'Lugar sin nombre'}
         subtitle={item.description || 'Sin descripción'}
-        meta={
-          item.address ||
-          (item.distanceMeters ? `${item.distanceMeters?.toFixed?.(0)} m` : undefined)
-        }
+        meta={item.address || item.city || 'Ubicación no disponible'}
         image={image}
-        compact={compact}
+        onPress={() => openDetail(item)}
+        variant={variant}
+        badge={item.categoryName || 'Popular'}
+        rating={item.rating || item.score || '4.5'}
+        distance={distanceText}
       />
     );
   };
@@ -243,6 +397,10 @@ const HomeScreen = ({ navigation }) => {
   const arConfig = getPlaceArConfig(selectedPlace);
   const arUrl = arConfig?.arUrl;
   const arQr = arConfig?.qrUrl;
+  const platformArUrl =
+    Platform.OS === 'ios'
+      ? arConfig?.iosQuicklookUrl || arUrl
+      : arConfig?.sceneViewerUrl || arUrl;
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior="height">
@@ -250,21 +408,53 @@ const HomeScreen = ({ navigation }) => {
         refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={loadAll} />}
         showsVerticalScrollIndicator={false}
       >
-        <ImageBackground
-          source={{
-            uri: 'https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&w=1400&q=80',
-          }}
-          style={styles.hero}
-          imageStyle={styles.heroImage}
-        >
-          <View style={styles.overlay} />
-          <View style={styles.heroContent}>
-            <Text style={styles.heroBadge}>Más de 10,000 viajeros felices</Text>
-            <Text style={styles.heroTitle}>Descubre la magia cerca de ti</Text>
+        <View style={styles.pageHeader}>
+          <View style={styles.topBar}>
+            <View>
+              <Text style={styles.locationLabel}>Explora</Text>
+              <Text style={styles.locationValue}>Cerca de ti</Text>
+            </View>
+            <Image
+              source={{
+                uri: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=200&q=60',
+              }}
+              style={styles.avatar}
+              contentFit="cover"
+            />
+          </View>
+
+          
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryTabs}
+          >
+            {categoriesList.map((chip) => (
+              <TouchableOpacity
+                key={chip.id}
+                style={[styles.categoryTab, selectedCategory === chip.id && styles.categoryTabActive]}
+                onPress={() => setSelectedCategory(chip.id)}
+              >
+                <Text
+                  style={[
+                    styles.categoryTabText,
+                    selectedCategory === chip.id && styles.categoryTabTextActive,
+                  ]}
+                >
+                  {chip.name}
+                </Text>
+                {selectedCategory === chip.id ? <View style={styles.categoryIndicator} /> : null}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={styles.searchCard}>
+            <Text style={styles.heroTitle}>Descubre lugares increíbles</Text>
             <Text style={styles.heroSubtitle}>
-              Explora paisajes únicos y experiencias inolvidables sin iniciar sesión.
+              Ajusta filtros y desliza para ver los sitios destacados.
             </Text>
-            <View style={styles.searchCard}>
+            <View style={styles.searchRow}>
               <TextInput
                 placeholder="¿A dónde quieres ir?"
                 placeholderTextColor={COLORS.textLight}
@@ -274,14 +464,17 @@ const HomeScreen = ({ navigation }) => {
                 style={styles.searchInput}
                 returnKeyType="search"
               />
-              <View style={styles.searchActions}>
-                <TouchableOpacity style={styles.filterButton} onPress={() => setFiltersVisible(true)}>
-                  <Text style={styles.filterButtonText}>Filtros</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.searchButton} onPress={performSearch}>
-                  <Text style={styles.searchButtonText}>Explorar</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={styles.searchIconButton} onPress={performSearch}>
+                <Text style={styles.searchIcon}>IR</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.searchActions}>
+              <TouchableOpacity style={styles.filterButton} onPress={() => setFiltersVisible(true)}>
+                <Text style={styles.filterButtonText}>Filtros</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.searchButton} onPress={performSearch}>
+                <Text style={styles.searchButtonText}>Explorar</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.heroStats}>
               <View style={styles.stat}>
@@ -298,37 +491,16 @@ const HomeScreen = ({ navigation }) => {
               </View>
             </View>
           </View>
-        </ImageBackground>
+        </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTag}>Destinos Populares</Text>
-          <Text style={styles.sectionTitle}>Explora lugares increíbles</Text>
-          <Text style={styles.sectionSubtitle}>
-            Ajusta por categoría y ve las imágenes destacadas de cada sitio.
-          </Text>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-          >
-            {categoriesList.map((chip) => (
-              <TouchableOpacity
-                key={chip.id}
-                style={[styles.chip, selectedCategory === chip.id && styles.chipActive]}
-                onPress={() => setSelectedCategory(chip.id)}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    selectedCategory === chip.id && styles.chipTextActive,
-                  ]}
-                >
-                  {chip.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTag}>Destinos Populares</Text>
+              <Text style={styles.sectionTitle}>Desliza para inspirarte</Text>
+            </View>
+            <Text style={styles.sectionLink}>Ver todo</Text>
+          </View>
 
           {loadingAll ? (
             <ActivityIndicator color={COLORS.primary} style={styles.loader} />
@@ -337,40 +509,13 @@ const HomeScreen = ({ navigation }) => {
               horizontal
               data={filteredPopular}
               keyExtractor={(item, idx) => `${item.id || idx}-popular`}
-              renderItem={({ item }) => renderPlace({ item, compact: true })}
+              renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
+              snapToInterval={220}
+              decelerationRate="fast"
+              snapToAlignment="start"
             />
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTag}>Cerca de ti</Text>
-              <Text style={styles.sectionTitle}>Activa ubicación para sugerencias</Text>
-            </View>
-            <TouchableOpacity style={styles.secondaryButton} onPress={loadNearby}>
-              {loadingNearby ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <Text style={styles.secondaryButtonText}>Ver cerca</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          {loadingNearby ? (
-            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
-          ) : nearby.length ? (
-            <FlatList
-              horizontal
-              data={nearby}
-              keyExtractor={(item, idx) => `${item.id || idx}-nearby`}
-              renderItem={({ item }) => renderPlace({ item, compact: true })}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-            />
-          ) : (
-            <Text style={styles.empty}>Pulsa "Ver cerca" para obtener sugerencias.</Text>
           )}
         </View>
 
@@ -383,81 +528,99 @@ const HomeScreen = ({ navigation }) => {
             <>
               {emptyState}
               <FlatList
+                horizontal
                 data={places}
                 keyExtractor={(item, idx) => `${item.id || idx}-all`}
-                renderItem={({ item }) => renderPlace({ item })}
-                scrollEnabled={false}
-                contentContainerStyle={styles.list}
+                renderItem={({ item }) => renderPlace({ item, variant: 'wide' })}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+                snapToInterval={260}
+                decelerationRate="fast"
+                snapToAlignment="start"
               />
             </>
           )}
         </View>
+        <Footer />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </ScrollView>
 
       {/* Modal filtros */}
-      <Modal visible={filtersVisible} animationType="slide" transparent>
+      <Modal
+        visible={filtersVisible}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setFiltersVisible(false)}
+      >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Configura tu búsqueda</Text>
-            <Text style={styles.modalSubtitle}>Categoría</Text>
-            <View style={[styles.chipRow, { flexWrap: 'wrap' }] }>
-              {categoriesList.map((chip) => (
-                <TouchableOpacity
-                  key={chip.id}
-                  style={[styles.chip, selectedCategory === chip.id && styles.chipActive]}
-                  onPress={() => setSelectedCategory(chip.id)}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      selectedCategory === chip.id && styles.chipTextActive,
-                    ]}
+            <ScrollView
+              contentContainerStyle={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.modalTitle}>Configura tu búsqueda</Text>
+              <Text style={styles.modalSubtitle}>Categoría</Text>
+              <View style={[styles.chipRow, { flexWrap: 'wrap' }]}>
+                {categoriesList.map((chip) => (
+                  <TouchableOpacity
+                    key={chip.id}
+                    style={[styles.chip, selectedCategory === chip.id && styles.chipActive]}
+                    onPress={() => setSelectedCategory(chip.id)}
                   >
-                    {chip.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        selectedCategory === chip.id && styles.chipTextActive,
+                      ]}
+                    >
+                      {chip.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text style={[styles.modalSubtitle, { marginTop: SPACING.md }]}>Distancia</Text>
-            <View style={styles.quickRow}>
-              {distanceOptions.map((km) => (
-                <TouchableOpacity
-                  key={km}
-                  style={[styles.quickChip, distanceKm === km && styles.quickChipActive]}
-                  onPress={() => setDistanceKm(km)}
-                >
-                  <Text
-                    style={[styles.quickChipText, distanceKm === km && styles.quickChipTextActive]}
+              <Text style={[styles.modalSubtitle, { marginTop: SPACING.md }]}>Distancia</Text>
+              <View style={styles.quickRow}>
+                {distanceOptions.map((km) => (
+                  <TouchableOpacity
+                    key={km}
+                    style={[styles.quickChip, distanceKm === km && styles.quickChipActive]}
+                    onPress={() => setDistanceKm(km)}
                   >
-                    {km} km
-                  </Text>
+                    <Text
+                      style={[styles.quickChipText, distanceKm === km && styles.quickChipTextActive]}
+                    >
+                      {km} km
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Slider
+                style={{ width: '100%', height: 40, marginTop: SPACING.sm }}
+                minimumValue={1}
+                maximumValue={50}
+                step={0.5}
+                minimumTrackTintColor="#7B5BFF"
+                maximumTrackTintColor={COLORS.border}
+                thumbTintColor="#7B5BFF"
+                value={distanceKm}
+                onValueChange={setDistanceKm}
+              />
+              <Text style={styles.sliderValue}>Radio personalizado: {distanceKm.toFixed(1)} km</Text>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalSecondary} onPress={() => setFiltersVisible(false)}>
+                  <Text style={styles.modalSecondaryText}>Cerrar</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <Slider
-              style={{ width: '100%', height: 40 }}
-              minimumValue={1}
-              maximumValue={50}
-              step={0.5}
-              minimumTrackTintColor="#7B5BFF"
-              maximumTrackTintColor={COLORS.border}
-              thumbTintColor="#7B5BFF"
-              value={distanceKm}
-              onValueChange={setDistanceKm}
-            />
-            <Text style={styles.sliderValue}>Radio personalizado: {distanceKm.toFixed(1)} km</Text>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondary} onPress={() => setFiltersVisible(false)}>
-                <Text style={styles.modalSecondaryText}>Cerrar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimary} onPress={performSearch}>
-                <Text style={styles.modalPrimaryText}>Aplicar filtros</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity style={styles.modalPrimary} onPress={performSearch}>
+                  <Text style={styles.modalPrimaryText}>Aplicar filtros</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -482,31 +645,43 @@ const HomeScreen = ({ navigation }) => {
               {renderImages(
                 Array.isArray(selectedPlace?.imageUrls) ? selectedPlace.imageUrls : []
               )}
-              <Text style={styles.detailTitle}>{selectedPlace?.name || 'Lugar'}</Text>
-              <Text style={styles.detailSubtitle}>
-                {selectedPlace?.description || 'Descripción no disponible.'}
-              </Text>
-
-              <View style={styles.infoRow}>
-                <View style={styles.infoPill}>
-                  <Text style={styles.infoLabel}>Ubicación</Text>
-                  <Text style={styles.infoValue}>{selectedPlace?.address || 'Sin dirección'}</Text>
+              <View style={styles.detailCard}>
+                <View style={styles.detailTitleRow}>
+                  <View>
+                    <Text style={styles.detailTitle}>{selectedPlace?.name || 'Lugar'}</Text>
+                    <Text style={styles.detailLocation}>
+                      {selectedPlace?.address || 'Ubicación no disponible'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.cardBookmark} onPress={() => setDetailVisible(false)}>
+                    <Text style={styles.bookmarkIcon}>S</Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.infoPill}>
-                  <Text style={styles.infoLabel}>Coordenadas</Text>
-                  <Text style={styles.infoValue}>
-                    {selectedPlace?.lat && selectedPlace?.lng
-                      ? `${selectedPlace.lat}, ${selectedPlace.lng}`
-                      : 'No disponibles'}
-                  </Text>
-                </View>
-              </View>
-
-              {selectedPlace?.distanceMeters ? (
-                <Text style={styles.distanceText}>
-                  Distancia aproximada: {selectedPlace.distanceMeters?.toFixed?.(0)} m
+                <Text style={styles.detailSubtitle}>
+                  {selectedPlace?.description || 'Descripción no disponible.'}
                 </Text>
-              ) : null}
+
+                <View style={styles.infoRow}>
+                  <View style={styles.infoPill}>
+                    <Text style={styles.infoLabel}>Ubicación</Text>
+                    <Text style={styles.infoValue}>{selectedPlace?.city || selectedPlace?.province || 'Cerca de ti'}</Text>
+                  </View>
+                  <View style={styles.infoPill}>
+                    <Text style={styles.infoLabel}>Coordenadas</Text>
+                    <Text style={styles.infoValue}>
+                      {selectedPlace?.lat && selectedPlace?.lng
+                        ? `${selectedPlace.lat}, ${selectedPlace.lng}`
+                        : 'No disponibles'}
+                    </Text>
+                  </View>
+                </View>
+
+                {selectedPlace?.distanceMeters ? (
+                  <Text style={styles.distanceText}>
+                    Distancia aproximada: {selectedPlace.distanceMeters?.toFixed?.(0)} m
+                  </Text>
+                ) : null}
+              </View>
 
               {mapUrl ? (
                 <TouchableOpacity
@@ -519,13 +694,15 @@ const HomeScreen = ({ navigation }) => {
               <TouchableOpacity style={styles.actionButtonAlt} onPress={() => setDetailVisible(false)}>
                 <Text style={styles.actionButtonAltText}>Ver mapa interactivo</Text>
               </TouchableOpacity>
-              {arUrl ? (
+              {platformArUrl ? (
                 <>
                   <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => Linking.openURL(arUrl)}
+                    onPress={() => Linking.openURL(platformArUrl)}
                   >
-                    <Text style={styles.actionButtonText}>Ver en AR (web)</Text>
+                    <Text style={styles.actionButtonText}>
+                      {Platform.OS === 'ios' ? 'Ver en AR (Quick Look)' : 'Ver en AR (Scene Viewer)'}
+                    </Text>
                   </TouchableOpacity>
                   {arQr ? (
                     <View style={styles.qrContainer}>
@@ -546,60 +723,199 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#F3F5FB',
   },
-  hero: {
+  pageHeader: {
     padding: SPACING.lg,
     paddingTop: SPACING.xl,
-    backgroundColor: '#4E5AE8',
+    backgroundColor: '#E9EDFF',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+    gap: SPACING.md,
   },
-  heroBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    color: COLORS.white,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 20,
-    fontSize: FONT_SIZES.xs,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  locationLabel: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  locationValue: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#E3E6FF',
+    borderRadius: 18,
+    padding: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  tabItemActive: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: '#5B3CF0',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  tabText: {
+    color: COLORS.textLight,
     fontWeight: '600',
-    marginBottom: SPACING.md,
+  },
+  tabTextActive: {
+    color: '#5B3CF0',
+  },
+  tabIndicator: {
+    marginTop: 6,
+    height: 3,
+    width: 28,
+    backgroundColor: '#5B3CF0',
+    borderRadius: 12,
+  },
+  categoryTabs: {
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
+  },
+  categoryTab: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    marginRight: SPACING.sm,
+  },
+  categoryTabActive: {
+    borderColor: '#5B3CF0',
+    backgroundColor: '#F2EEFF',
+  },
+  categoryTabText: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  categoryTabTextActive: {
+    color: '#5B3CF0',
+  },
+  categoryIndicator: {
+    marginTop: 6,
+    height: 3,
+    width: 28,
+    backgroundColor: '#5B3CF0',
+    borderRadius: 12,
+    alignSelf: 'center',
   },
   heroTitle: {
-    fontSize: FONT_SIZES.xxl,
+    fontSize: FONT_SIZES.xl,
     fontWeight: 'bold',
-    color: COLORS.white,
-    marginBottom: SPACING.xs,
+    color: COLORS.text,
   },
   heroSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
+    color: COLORS.textLight,
     fontSize: FONT_SIZES.sm,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
     lineHeight: 22,
   },
   searchCard: {
     backgroundColor: COLORS.white,
     padding: SPACING.md,
-    borderRadius: 16,
-    marginTop: SPACING.md,
+    borderRadius: 18,
+    gap: SPACING.sm,
     shadowColor: '#000',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    elevation: 4,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACING.sm,
   },
   searchInput: {
+    flex: 1,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: SPACING.md,
+    borderRadius: 14,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     fontSize: FONT_SIZES.md,
+    backgroundColor: '#F7F8FD',
+  },
+  searchIconButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#5B3CF0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchIcon: {
+    color: COLORS.white,
+    fontWeight: '700',
   },
   searchActions: {
     flexDirection: 'row',
     gap: SPACING.sm,
+  },
+  filterButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: SPACING.sm,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  filterButtonText: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  searchButton: {
+    flex: 1,
+    backgroundColor: '#5B3CF0',
+    paddingVertical: SPACING.sm,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  searchButtonText: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  heroStats: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    justifyContent: 'space-between',
+    marginTop: SPACING.sm,
+  },
+  stat: {
+    flex: 1,
+    backgroundColor: '#F7F8FD',
+    padding: SPACING.sm,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statLabel: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
   },
   primaryButton: {
     backgroundColor: COLORS.secondary,
@@ -613,15 +929,14 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
   },
   secondaryButton: {
-    borderColor: COLORS.white,
-    borderWidth: 1,
+    backgroundColor: '#7B5BFF',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   statNumber: {
-    color: COLORS.white,
-    fontWeight: '600',
+    color: COLORS.text,
+    fontWeight: '700',
     fontSize: FONT_SIZES.md,
   },
   section: {
@@ -645,6 +960,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.md,
   },
+  sectionLink: {
+    color: '#5B3CF0',
+    fontWeight: '600',
+  },
   sectionSubtitle: {
     color: COLORS.textLight,
     marginBottom: SPACING.md,
@@ -656,39 +975,91 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   horizontalList: {
-    gap: SPACING.sm,
+    gap: SPACING.md,
+    paddingRight: SPACING.lg,
   },
   card: {
     width: '100%',
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    overflow: 'hidden',
+    padding: SPACING.md,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+    overflow: 'hidden',
   },
   cardCompact: {
-    width: 200,
+    width: 220,
     marginBottom: 0,
   },
-  cardImage: {
-    width: '100%',
-    height: 140,
-    backgroundColor: COLORS.border,
+  cardWide: {
+    width: 260,
   },
-  cardContent: {
-    padding: SPACING.md,
+  cardImageWrapper: {
+    position: 'relative',
+    marginBottom: SPACING.sm,
   },
   cardImage: {
     width: '100%',
     height: 140,
     borderRadius: 12,
     marginBottom: SPACING.sm,
+    backgroundColor: COLORS.border,
+  },
+  cardTopRow: {
+    position: 'absolute',
+    top: SPACING.sm,
+    left: SPACING.sm,
+    right: SPACING.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardBadge: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    color: COLORS.white,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: FONT_SIZES.xs,
+  },
+  cardBookmark: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookmarkIcon: {
+    color: '#E94057',
+    fontWeight: '700',
+  },
+  cardRating: {
+    position: 'absolute',
+    bottom: SPACING.sm,
+    left: SPACING.sm,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  cardRatingText: {
+    color: COLORS.white,
+    fontWeight: '700',
   },
   cardBody: {
-    gap: 2,
+    gap: 4,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.xs,
   },
   cardTitle: {
     fontSize: FONT_SIZES.md,
@@ -696,39 +1067,52 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
+  cardSubtitle: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  cardDistance: {
+    color: '#5B3CF0',
+    fontWeight: '700',
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   cardMeta: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textLight,
-    flex: 1,
+    marginBottom: SPACING.xs,
   },
   chipRow: {
     gap: SPACING.sm,
     paddingVertical: SPACING.xs,
+  },
+  chipColumn: {
+    gap: SPACING.sm,
   },
   chip: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#D7D8E0',
     backgroundColor: COLORS.white,
+    minWidth: 140,
   },
   chipActive: {
-    backgroundColor: '#EAE6FF',
-    borderColor: '#7B5BFF',
+    backgroundColor: '#EEEBFF',
+    borderColor: '#5B3CF0',
   },
   chipText: {
     color: COLORS.text,
     fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
   },
   chipTextActive: {
     color: '#5B3CF0',
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   quickRow: {
     flexDirection: 'row',
@@ -763,6 +1147,96 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     marginBottom: SPACING.sm,
   },
+  footer: {
+    marginTop: SPACING.lg,
+    backgroundColor: '#0c1325',
+    borderRadius: 18,
+    borderBottomEndRadius: 0,
+    borderBottomStartRadius: 0,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  footerHeader: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    alignItems: 'center',
+  },
+  footerLogoBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#5B3CF0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerTitle: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: FONT_SIZES.lg,
+  },
+  footerSubtitle: {
+    color: '#a5b1d6',
+    marginTop: 2,
+  },
+  footerSocialRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  footerSocialButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  footerColumns: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+  },
+  footerHeading: {
+    color: COLORS.white,
+    fontWeight: '700',
+    marginBottom: SPACING.sm,
+  },
+  footerLink: {
+    color: '#d7def1',
+    marginBottom: SPACING.xs,
+  },
+  footerContactRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  footerContactLabel: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  footerContactValue: {
+    color: '#a5b1d6',
+  },
+  footerDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  footerBottomRow: {
+    gap: SPACING.sm,
+  },
+  footerBottomText: {
+    color: '#a5b1d6',
+    fontSize: FONT_SIZES.xs,
+  },
+  footerLegalRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    flexWrap: 'wrap',
+  },
+  footerLegalText: {
+    color: '#d7def1',
+    fontSize: FONT_SIZES.xs,
+  },
   errorText: {
     color: COLORS.error,
     marginTop: SPACING.sm,
@@ -789,7 +1263,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: SPACING.lg,
+    maxHeight: '80%',
+    width: '100%',
+  },
+  modalScroll: {
     gap: SPACING.sm,
+    paddingBottom: SPACING.md,
   },
   modalTitle: {
     fontSize: FONT_SIZES.xl,
@@ -866,11 +1345,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: COLORS.text,
   },
+  detailCard: {
+    backgroundColor: COLORS.white,
+    padding: SPACING.md,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    marginTop: SPACING.sm,
+  },
+  detailTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
   detailTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginTop: SPACING.md,
+  },
+  detailLocation: {
+    color: COLORS.textLight,
   },
   detailSubtitle: {
     color: COLORS.textLight,

@@ -1,5 +1,17 @@
 const DEFAULT_AR_MODEL = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+const DEFAULT_AR_MODEL_IOS = 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz';
 const DEFAULT_AR_PAGE = 'https://modelviewer.dev/editor';
+
+const buildSceneViewerUrl = ({ modelUrl, title }) => {
+  if (!modelUrl) return null;
+  const params = new URLSearchParams();
+  params.set('file', modelUrl);
+  params.set('mode', 'ar_preferred');
+  params.set('title', title || 'AR');
+  return `https://arvr.google.com/scene-viewer/1.0?${params.toString()}`;
+};
+
+const buildQuickLookUrl = ({ iosModelUrl }) => iosModelUrl || null;
 
 export const buildArExperienceUrl = ({ modelUrl, iosModelUrl, title }) => {
   const base = DEFAULT_AR_PAGE;
@@ -17,11 +29,13 @@ export const buildArQrUrl = (url) =>
 export const getPlaceArConfig = (place) => {
   if (!place) return null;
   const modelUrl = place.arModelUrl || place.modelUrl || place.model3dUrl || DEFAULT_AR_MODEL;
-  const iosModelUrl = place.arModelIosUrl || place.iosModelUrl || null;
+  const iosModelUrl = place.arModelIosUrl || place.iosModelUrl || DEFAULT_AR_MODEL_IOS;
   const title = place.name;
   const arUrl = buildArExperienceUrl({ modelUrl, iosModelUrl, title });
   return {
     arUrl,
     qrUrl: buildArQrUrl(arUrl),
+    sceneViewerUrl: buildSceneViewerUrl({ modelUrl, title }),
+    iosQuicklookUrl: buildQuickLookUrl({ iosModelUrl }),
   };
 };
