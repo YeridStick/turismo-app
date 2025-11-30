@@ -10,52 +10,69 @@ interface ARScreenProps {
 const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const modelUrl = route?.params?.modelUrl;
     const [isLoading, setIsLoading] = useState(true);
+    const [modelLoaded, setModelLoaded] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Simular carga del modelo (en producción, esto vendría del componente AR)
+    // Simular carga inicial de AR
     React.useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 2000);
+        const timer = setTimeout(() => setIsLoading(false), 1500);
         return () => clearTimeout(timer);
     }, []);
 
+    const handleModelLoad = () => {
+        setModelLoaded(true);
+        setError(null);
+    };
+
+    const handleModelError = (err: any) => {
+        const errorMsg = 'No se pudo cargar el modelo 3D.';
+        setError(errorMsg);
+    };
+
     return (
         <View style={styles.container}>
-            {/* Componente AR usando ViroReact (funciona en iOS y Android) */}
             <ARViewer
                 modelUrl={modelUrl}
-                onModelPlaced={() => {
-                    console.log('Modelo 3D colocado en la escena AR');
-                }}
+                onModelLoad={handleModelLoad}
+                onModelError={handleModelError}
             />
 
-            {/* Indicador de carga */}
             {isLoading && (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#5B3CF0" />
-                    <Text style={styles.loadingText}>Inicializando AR...</Text>
-                    <Text style={styles.instructionText}>
-                        Apunta la cámara a una superficie plana
-                    </Text>
+                    <Text style={styles.loadingText}>Cargando experiencia AR...</Text>
                 </View>
             )}
 
-            {/* Instrucciones */}
-            {!isLoading && (
-                <View style={styles.instructionsContainer}>
-                    <Text style={styles.instructionText}>
-                        📱 Mueve el dispositivo lentamente
-                    </Text>
-                    <Text style={styles.instructionText}>
-                        👆 Toca un plano para colocar el modelo
-                    </Text>
+            {!isLoading && !error && (
+                <View style={styles.controlsContainer}>
+                    <View style={styles.gestureHint}>
+                        <Text style={styles.gestureIcon}>👆</Text>
+                        <Text style={styles.gestureText}>Arrastra</Text>
+                    </View>
+                    <View style={styles.gestureHint}>
+                        <Text style={styles.gestureIcon}>🤏</Text>
+                        <Text style={styles.gestureText}>Escala</Text>
+                    </View>
+                    <View style={styles.gestureHint}>
+                        <Text style={styles.gestureIcon}>🔄</Text>
+                        <Text style={styles.gestureText}>Rota</Text>
+                    </View>
                 </View>
             )}
 
-            {/* Botón de cerrar */}
+            {/* Mensaje de éxito discreto */}
+            {modelLoaded && (
+                <View style={styles.statusBadge}>
+                    <Text style={styles.statusText}>✅ Modelo activo</Text>
+                </View>
+            )}
+
             <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => navigation?.goBack?.()}
             >
-                <Text style={styles.closeText}>✕ Cerrar</Text>
+                <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
         </View>
     );
@@ -67,52 +84,71 @@ const styles = StyleSheet.create({
         backgroundColor: '#000',
     },
     loadingContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        zIndex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        zIndex: 10,
     },
     loadingText: {
         color: '#fff',
-        fontSize: 18,
+        marginTop: 10,
         fontWeight: '600',
-        marginTop: 16,
     },
-    instructionsContainer: {
+    controlsContainer: {
         position: 'absolute',
-        bottom: 100,
+        bottom: 40,
         left: 20,
         right: 20,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        borderRadius: 12,
-        padding: 16,
-        zIndex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        backgroundColor: 'rgba(30,30,30,0.8)',
+        borderRadius: 20,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
     },
-    instructionText: {
+    gestureHint: {
+        alignItems: 'center',
+    },
+    gestureIcon: {
+        fontSize: 20,
+        marginBottom: 4,
+    },
+    gestureText: {
         color: '#fff',
-        fontSize: 14,
-        textAlign: 'center',
-        marginVertical: 4,
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    statusBadge: {
+        position: 'absolute',
+        top: 60,
+        alignSelf: 'center',
+        backgroundColor: 'rgba(76, 175, 80, 0.9)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    statusText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 12,
     },
     closeButton: {
         position: 'absolute',
         top: 50,
         right: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        width: 40,
+        height: 40,
         borderRadius: 20,
-        zIndex: 2,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 20,
     },
     closeText: {
         color: '#fff',
-        fontWeight: '700',
-        fontSize: 16,
+        fontSize: 20,
+        fontWeight: 'bold',
     },
 });
 

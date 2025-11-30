@@ -8,9 +8,9 @@ import {
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   Linking,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -401,32 +401,11 @@ const HomeScreen = ({ navigation }) => {
       : arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl || arUrl;
 
   const openNativeAR = async () => {
-    if (Platform.OS === 'ios' && navigation?.navigate) {
-      navigation.navigate('ARKit', { modelUrl: arConfig?.iosModelUrl || arConfig?.modelUrl });
-      return;
-    }
-    if (Platform.OS === 'android') {
-      const androidIntent = arConfig?.sceneViewerIntent;
-      const androidHttps = arConfig?.sceneViewerUrl;
-      try {
-        if (androidHttps) {
-          await Linking.openURL(androidHttps);
-          return;
-        }
-        if (androidIntent) {
-          await Linking.openURL(androidIntent);
-          return;
-        }
-      } catch (err) {
-        // fallback a WebView
-      }
-    }
-    if (Platform.OS === 'ios' && arConfig?.iosQuicklookUrl) {
-      await Linking.openURL(arConfig.iosQuicklookUrl);
-      return;
-    }
-    if (arUrl) {
-      setArVisible(true);
+    // Navegar a la pantalla AR nativa usando ViroReact
+    if (navigation?.navigate) {
+      navigation.navigate('ARView', {
+        modelUrl: arConfig?.modelUrl || arConfig?.iosModelUrl || platformArUrl
+      });
     }
   };
 
@@ -452,7 +431,7 @@ const HomeScreen = ({ navigation }) => {
       if (Platform.OS === 'android' && url.startsWith('intent://')) {
         const fallback = arConfig?.sceneViewerUrl || arUrl;
         if (fallback) {
-          Linking.openURL(fallback).catch(() => {});
+          Linking.openURL(fallback).catch(() => { });
         }
         return false;
       }
@@ -501,7 +480,7 @@ const HomeScreen = ({ navigation }) => {
             />
           </View>
 
-          
+
 
           <ScrollView
             horizontal
@@ -760,7 +739,7 @@ const HomeScreen = ({ navigation }) => {
                 <>
                   <TouchableOpacity style={styles.actionButton} onPress={openNativeAR}>
                     <Text style={styles.actionButtonText}>
-                      {Platform.OS === 'ios' ? 'Ver en AR (Quick Look)' : 'Ver en AR (Scene Viewer)'}
+                      Ver en Realidad Aumentada
                     </Text>
                   </TouchableOpacity>
                   {arQr ? (
