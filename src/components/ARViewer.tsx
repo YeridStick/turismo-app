@@ -23,17 +23,18 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Estados tipados correctamente
     const [scale, setScale] = useState<[number, number, number]>([0.3, 0.3, 0.3]);
     const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
-    const [position, setPosition] = useState<[number, number, number]>([0, 0, -1.5]);
+    // Posición inicial mejorada - más cercana al usuario
+    const [position, setPosition] = useState<[number, number, number]>([0, 0, -1.2]);
     const [modelVisible, setModelVisible] = useState(true);
 
     // Referencias para guardar el estado base durante los gestos
     const baseScale = useRef<[number, number, number]>([0.3, 0.3, 0.3]);
-    const baseRotation = useRef<[number, number, number]>([0, 0, 0]);
-    const basePosition = useRef<[number, number, number]>([0, 0, -1.5]);
+    const baseRotation = useRef(0);
+    const basePosition = useRef<[number, number, number]>([0, 0, -1.2]);
     const lastGestureTime = useRef(0);
 
     // Constantes para reseteo consistente
-    const INITIAL_POSITION: [number, number, number] = [0, 0, -1.5];
+    const INITIAL_POSITION: [number, number, number] = [0, 0, -1.2];
     const INITIAL_ROTATION: [number, number, number] = [0, 0, 0];
     const INITIAL_SCALE: [number, number, number] = [0.3, 0.3, 0.3];
 
@@ -46,10 +47,10 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                 setRotation([...INITIAL_ROTATION]);
                 setScale([...INITIAL_SCALE]);
                 basePosition.current = [...INITIAL_POSITION];
-                baseRotation.current = [...INITIAL_ROTATION];
+                baseRotation.current = 0;
                 baseScale.current = [...INITIAL_SCALE];
                 setModelVisible(true);
-                console.log('↻ Posición completamente reseteada');
+                console.log('↻ Modelo reseteado a posición inicial');
             },
             // Métodos para controlar escala desde botones
             increaseScale: () => {
@@ -65,31 +66,11 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                     const clampedScale = Math.max(newScale, 0.1);
                     return [clampedScale, clampedScale, clampedScale];
                 });
-            },
-            rotateLeft: () => {
-                setRotation(prev => {
-                    // Incremento de 45 grados (0.785 radianes) para rotación clara
-                    const newRotation = prev[1] - 0.785;
-                    return [0, newRotation, 0];
-                });
-            },
-            rotateRight: () => {
-                setRotation(prev => {
-                    const newRotation = prev[1] + 0.785;
-                    return [0, newRotation, 0];
-                });
-            },
-            // Nuevo método para rotar continuamente (presión prolongada)
-            rotateLeftSmall: () => {
-                setRotation(prev => [0, prev[1] - 0.1, 0]);
-            },
-            rotateRightSmall: () => {
-                setRotation(prev => [0, prev[1] + 0.1, 0]);
             }
         };
     }
 
-    // Gesto de Pinch mejorado con debounce
+    // Gesto de Pinch mejorado con debounce (Escalado - MANTENER)
     const onPinch = (pinchState: any, scaleFactor: number, source: any) => {
         const now = Date.now();
 
@@ -110,25 +91,20 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
         }
     };
 
-    // Gesto de Rotación mejorado - AHORA FUNCIONAL
+    // Gesto de Rotación con dos dedos (Intentar mantener)
     const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
         const now = Date.now();
 
         if (rotateState === 1) { // ROTATE_STARTED
-            baseRotation.current = [...rotation];
+            baseRotation.current = rotation[1];
             lastGestureTime.current = now;
         } else if (rotateState === 3) { // ROTATE_MOVED
             if (now - lastGestureTime.current < 16) return;
 
             lastGestureTime.current = now;
-            // Aplicar rotación de forma diferente para que funcione
-            // El factor de rotación viene en radianes
-            const rotationAmount = rotationFactor * 0.6;
-            const newRotation = baseRotation.current[1] + rotationAmount;
-
+            // Aplicar rotación
+            const newRotation = baseRotation.current + (rotationFactor * 2);
             setRotation([0, newRotation, 0]);
-
-            console.log(`🔄 Rotando: ${(newRotation * 180 / Math.PI).toFixed(1)}°`);
         }
     };
 
@@ -162,22 +138,8 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
         onModelError?.(error);
     };
 
-    // Monitorear detección de planos - MEJORADO
-    const onTrackingUpdated = (state: any) => {
-        if (state) {
-            // Log para debugging
-            if (state === 'TRACKING_NORMAL') {
-                console.log('📍 AR Tracking: NORMAL');
-            } else if (state === 'TRACKING_LIMITED') {
-                console.log('⚠️ AR Tracking: LIMITED (apunta a superficie)');
-            } else if (state === 'TRACKING_UNAVAILABLE') {
-                console.log('❌ AR Tracking: NO DISPONIBLE');
-            }
-        }
-    };
-
     return (
-        <ViroARScene onTrackingUpdated={onTrackingUpdated}>
+        <ViroARScene>
             {/* ILUMINACIÓN MEJORADA: Múltiples fuentes para mejor detección y renderizado */}
             <ViroAmbientLight color="#ffffff" intensity={1200} />
 
@@ -215,7 +177,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                         onLoadStart={() => console.log('Iniciando carga del modelo...')}
                         onLoadEnd={onModelLoadEnd}
                         onError={handleModelError}
-                        // Gestos mejorados
+                        // Gestos
                         onPinch={onPinch}
                         onRotate={onRotate}
                         // Propiedades adicionales para mejor renderizado
@@ -262,26 +224,6 @@ export const ARViewer: React.FC<ARViewerProps> = ({
             decreaseScale: () => {
                 if (sceneRef.current && sceneRef.current.decreaseScale) {
                     sceneRef.current.decreaseScale();
-                }
-            },
-            rotateLeft: () => {
-                if (sceneRef.current && sceneRef.current.rotateLeft) {
-                    sceneRef.current.rotateLeft();
-                }
-            },
-            rotateRight: () => {
-                if (sceneRef.current && sceneRef.current.rotateRight) {
-                    sceneRef.current.rotateRight();
-                }
-            },
-            rotateLeftSmall: () => {
-                if (sceneRef.current && sceneRef.current.rotateLeftSmall) {
-                    sceneRef.current.rotateLeftSmall();
-                }
-            },
-            rotateRightSmall: () => {
-                if (sceneRef.current && sceneRef.current.rotateRightSmall) {
-                    sceneRef.current.rotateRightSmall();
                 }
             }
         };
