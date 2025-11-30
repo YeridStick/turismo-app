@@ -13,7 +13,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modelLoaded, setModelLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [gestureHintsVisible, setGestureHintsVisible] = useState(true);
+    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | 'place' | null>(null);
 
     // Referencia para controlar el visor AR
     const viewerRef = useRef<any>(null);
@@ -26,11 +26,11 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const handleModelLoad = () => {
         setModelLoaded(true);
         setError(null);
-        console.log('Modelo cargado exitosamente');
+        console.log('✓ Modelo cargado exitosamente');
     };
 
     const handleModelError = (err: any) => {
-        console.error('Error en modelo:', err);
+        console.error('✗ Error en modelo:', err);
         setError('No se pudo cargar el modelo. Verifica la URL.');
         setModelLoaded(false);
     };
@@ -38,12 +38,45 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const handleResetPosition = () => {
         if (viewerRef.current) {
             viewerRef.current.resetPosition();
-            console.log('Posición reseteada');
+            setActiveControl(null);
+            console.log('↻ Posición reseteada');
         }
     };
 
-    const toggleGestureHints = () => {
-        setGestureHintsVisible(!gestureHintsVisible);
+    // Controles de escala
+    const handleIncreaseScale = () => {
+        if (viewerRef.current?.increaseScale) {
+            viewerRef.current.increaseScale();
+        }
+    };
+
+    const handleDecreaseScale = () => {
+        if (viewerRef.current?.decreaseScale) {
+            viewerRef.current.decreaseScale();
+        }
+    };
+
+    // Controles de rotación
+    const handleRotateLeft = () => {
+        if (viewerRef.current?.rotateLeft) {
+            viewerRef.current.rotateLeft();
+        }
+    };
+
+    const handleRotateRight = () => {
+        if (viewerRef.current?.rotateRight) {
+            viewerRef.current.rotateRight();
+        }
+    };
+
+    // Colocar en la superficie detectada
+    const handlePlaceOnPlane = () => {
+        if (viewerRef.current?.placeOnPlane) {
+            // Posiciona el modelo en el centro de la pantalla, en el suelo/superficie
+            viewerRef.current.placeOnPlane(0, 0, -1.5);
+            setActiveControl(null);
+            console.log('📍 Modelo posicionado en la superficie');
+        }
     };
 
     return (
@@ -55,6 +88,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 viewerRef={viewerRef}
             />
 
+            {/* Loading Overlay */}
             {isLoading && (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#5B3CF0" />
@@ -62,6 +96,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 </View>
             )}
 
+            {/* Error Message */}
             {error && (
                 <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>{error}</Text>
@@ -74,6 +109,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 </View>
             )}
 
+            {/* Controls - Solo mostrar cuando modelo está cargado */}
             {!isLoading && !error && modelLoaded && (
                 <>
                     {/* Botón Reset Posición */}
@@ -86,35 +122,133 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                         <Text style={styles.resetText}>Centrar</Text>
                     </TouchableOpacity>
 
-                    {/* Gestos información */}
-                    {gestureHintsVisible && (
-                        <View style={styles.controlsContainer}>
-                            <View style={styles.gestureHint}>
-                                <Text style={styles.gestureIcon}>🤏</Text>
-                                <Text style={styles.gestureText}>Pellizcar</Text>
-                            </View>
-                            <View style={styles.gestureHint}>
-                                <Text style={styles.gestureIcon}>🔄</Text>
-                                <Text style={styles.gestureText}>Rotar</Text>
-                            </View>
-                            <View style={styles.gestureHint}>
-                                <Text style={styles.gestureIcon}>✋</Text>
-                                <Text style={styles.gestureText}>Arrastrar</Text>
+                    {/* Panel de Control - Escala */}
+                    {activeControl === 'scale' && (
+                        <View style={styles.controlPanel}>
+                            <Text style={styles.controlTitle}>Ajustar Escala</Text>
+                            <View style={styles.controlButtons}>
+                                <TouchableOpacity
+                                    style={styles.controlButton}
+                                    onPress={handleDecreaseScale}
+                                    activeOpacity={0.7}
+                                >
+                                    <Ionicons name="remove-circle" size={28} color="#fff" />
+                                    <Text style={styles.controlButtonText}>Reducir</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.controlButton}
+                                    onPress={handleIncreaseScale}
+                                    activeOpacity={0.7}
+                                >
+                                    <Ionicons name="add-circle" size={28} color="#fff" />
+                                    <Text style={styles.controlButtonText}>Aumentar</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
                     )}
 
-                    {/* Botón para mostrar/ocultar hints */}
-                    <TouchableOpacity
-                        style={styles.toggleHintsButton}
-                        onPress={toggleGestureHints}
-                    >
-                        <Ionicons
-                            name={gestureHintsVisible ? 'eye' : 'eye-off'}
-                            size={20}
-                            color="#fff"
-                        />
-                    </TouchableOpacity>
+                    {/* Panel de Control - Rotación */}
+                    {activeControl === 'rotate' && (
+                        <View style={styles.controlPanel}>
+                            <Text style={styles.controlTitle}>Rotar Modelo</Text>
+                            <View style={styles.controlButtons}>
+                                <TouchableOpacity
+                                    style={styles.controlButton}
+                                    onPress={handleRotateLeft}
+                                    activeOpacity={0.7}
+                                >
+                                    <Ionicons name="arrow-back-circle" size={28} color="#fff" />
+                                    <Text style={styles.controlButtonText}>Izquierda</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.controlButton}
+                                    onPress={handleRotateRight}
+                                    activeOpacity={0.7}
+                                >
+                                    <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
+                                    <Text style={styles.controlButtonText}>Derecha</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Botones de selección de control */}
+                    <View style={styles.controlSelector}>
+                        <TouchableOpacity
+                            style={[
+                                styles.selectorButton,
+                                activeControl === 'scale' && styles.selectorButtonActive,
+                            ]}
+                            onPress={() => setActiveControl(activeControl === 'scale' ? null : 'scale')}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons
+                                name="expand"
+                                size={24}
+                                color={activeControl === 'scale' ? '#fff' : '#5B3CF0'}
+                            />
+                            <Text style={[
+                                styles.selectorButtonText,
+                                activeControl === 'scale' && styles.selectorButtonTextActive,
+                            ]}>
+                                Escalar
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.selectorButton,
+                                activeControl === 'rotate' && styles.selectorButtonActive,
+                            ]}
+                            onPress={() => setActiveControl(activeControl === 'rotate' ? null : 'rotate')}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons
+                                name="refresh"
+                                size={24}
+                                color={activeControl === 'rotate' ? '#fff' : '#5B3CF0'}
+                            />
+                            <Text style={[
+                                styles.selectorButtonText,
+                                activeControl === 'rotate' && styles.selectorButtonTextActive,
+                            ]}>
+                                Rotar
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.selectorButton,
+                                activeControl === 'place' && styles.selectorButtonActive,
+                            ]}
+                            onPress={() => {
+                                handlePlaceOnPlane();
+                                setActiveControl(null);
+                            }}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons
+                                name="arrow-down-circle"
+                                size={24}
+                                color={activeControl === 'place' ? '#fff' : '#5B3CF0'}
+                            />
+                            <Text style={[
+                                styles.selectorButtonText,
+                                activeControl === 'place' && styles.selectorButtonTextActive,
+                            ]}>
+                                Posicionar
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Instrucción de gestos disponibles */}
+                    <View style={styles.gestureHint}>
+                        <Text style={styles.gestureHintText}>
+                            💡 Desliza para mover el modelo
+                        </Text>
+                    </View>
                 </>
             )}
 
@@ -185,7 +319,7 @@ const styles = StyleSheet.create({
     },
     resetButton: {
         position: 'absolute',
-        bottom: 130,
+        top: 80,
         alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
@@ -205,53 +339,99 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         fontSize: 14,
     },
-    controlsContainer: {
+    // Panel de control
+    controlPanel: {
+        position: 'absolute',
+        top: 140,
+        left: 20,
+        right: 20,
+        backgroundColor: 'rgba(30, 30, 30, 0.95)',
+        borderRadius: 16,
+        padding: 16,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    controlTitle: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    controlButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        justifyContent: 'space-around',
+    },
+    controlButton: {
+        flex: 1,
+        backgroundColor: 'rgba(91, 60, 240, 0.8)',
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        gap: 6,
+        elevation: 4,
+    },
+    controlButtonText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    // Selector de controles
+    controlSelector: {
         position: 'absolute',
         bottom: 40,
         left: 20,
         right: 20,
         flexDirection: 'row',
-        justifyContent: 'space-around',
-        backgroundColor: 'rgba(30,30,30,0.9)',
-        borderRadius: 24,
-        paddingVertical: 14,
-        paddingHorizontal: 10,
-        elevation: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+        gap: 10,
+        justifyContent: 'space-between',
     },
-    gestureHint: {
+    selectorButton: {
+        flex: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 2,
+        borderColor: '#5B3CF0',
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
         alignItems: 'center',
         justifyContent: 'center',
-        flex: 1,
+        gap: 6,
+        elevation: 4,
     },
-    gestureIcon: {
-        fontSize: 22,
-        marginBottom: 6,
+    selectorButtonActive: {
+        backgroundColor: '#5B3CF0',
+        borderColor: '#fff',
     },
-    gestureText: {
-        color: '#fff',
+    selectorButtonText: {
+        color: '#5B3CF0',
         fontSize: 11,
-        fontWeight: '500',
+        fontWeight: '600',
         textAlign: 'center',
     },
-    toggleHintsButton: {
+    selectorButtonTextActive: {
+        color: '#fff',
+    },
+    // Hint de gestos
+    gestureHint: {
         position: 'absolute',
-        bottom: 50,
-        right: 20,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(91, 60, 240, 0.8)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#5B3CF0',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+        bottom: 120,
+        alignSelf: 'center',
+        backgroundColor: 'rgba(91, 60, 240, 0.7)',
+        borderRadius: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+    },
+    gestureHintText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '500',
     },
     closeButton: {
         position: 'absolute',

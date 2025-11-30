@@ -20,11 +20,12 @@ interface ARSceneProps {
 }
 
 const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRef }: ARSceneProps) => {
-    // Estados tipados correctamente para mayor precisión
+    // Estados tipados correctamente
     const [scale, setScale] = useState<[number, number, number]>([0.3, 0.3, 0.3]);
     const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
     const [position, setPosition] = useState<[number, number, number]>([0, 0, -1.5]);
     const [modelVisible, setModelVisible] = useState(true);
+    const [planeDetected, setPlaneDetected] = useState(false);
 
     // Referencias para guardar el estado base durante los gestos
     const baseScale = useRef<[number, number, number]>([0.3, 0.3, 0.3]);
@@ -40,48 +41,33 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                 setRotation([0, 0, 0]);
                 setScale([0.3, 0.3, 0.3]);
                 setModelVisible(true);
+            },
+            // Métodos para controlar escala y rotación desde botones
+            increaseScale: () => {
+                setScale(prev => {
+                    const newScale = prev[0] * 1.2;
+                    const clampedScale = Math.min(newScale, 3.5);
+                    return [clampedScale, clampedScale, clampedScale];
+                });
+            },
+            decreaseScale: () => {
+                setScale(prev => {
+                    const newScale = prev[0] * 0.8;
+                    const clampedScale = Math.max(newScale, 0.1);
+                    return [clampedScale, clampedScale, clampedScale];
+                });
+            },
+            rotateLeft: () => {
+                setRotation(prev => [0, prev[1] - 0.3, 0]);
+            },
+            rotateRight: () => {
+                setRotation(prev => [0, prev[1] + 0.3, 0]);
+            },
+            placeOnPlane: (x: number = 0, y: number = 0, z: number = -1.5) => {
+                setPosition([x, y, z]);
             }
         };
     }
-
-    // Gesto de Pinch mejorado con debounce
-    const onPinch = (pinchState: any, scaleFactor: number, source: any) => {
-        const now = Date.now();
-
-        if (pinchState === 1) { // PINCH_STARTED
-            baseScale.current = [...scale];
-            lastGestureTime.current = now;
-        } else if (pinchState === 3) { // PINCH_MOVED
-            // Aplicar debounce para evitar actualizaciones excesivas (~60fps)
-            if (now - lastGestureTime.current < 16) return;
-
-            lastGestureTime.current = now;
-            const currentScale = baseScale.current[0];
-            const newScale = currentScale * scaleFactor;
-
-            // Rango de escala más controlado
-            const clampedScale = Math.max(0.1, Math.min(newScale, 3.5));
-            setScale([clampedScale, clampedScale, clampedScale]);
-        }
-    };
-
-    // Gesto de Rotación mejorado con mayor precisión
-    const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
-        const now = Date.now();
-
-        if (rotateState === 1) { // ROTATE_STARTED
-            baseRotation.current = rotation[1];
-            lastGestureTime.current = now;
-        } else if (rotateState === 3) { // ROTATE_MOVED
-            if (now - lastGestureTime.current < 16) return;
-
-            lastGestureTime.current = now;
-            // Reducir sensibilidad significativamente para mayor control
-            const adjustedFactor = rotationFactor * 0.5;
-            const newRotation = baseRotation.current - adjustedFactor;
-            setRotation([0, newRotation, 0]);
-        }
-    };
 
     // Gesto de Drag mejorado con validación y límites
     const onDrag = (dragToPos: any, source: any) => {
@@ -102,19 +88,28 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Detectar cuando el modelo carga correctamente
     const onModelLoadEnd = () => {
         setModelVisible(true);
-        console.log('Modelo cargado correctamente');
+        console.log('✓ Modelo cargado correctamente');
         onModelLoad?.();
     };
 
     // Manejar errores de carga del modelo
     const handleModelError = (error: any) => {
-        console.error('Error cargando modelo:', error);
+        console.error('✗ Error cargando modelo:', error);
         setModelVisible(false);
         onModelError?.(error);
     };
 
+    // Monitorear detección de planos
+    const onTrackingUpdated = (state: any) => {
+        if (state && state.cameraTransform) {
+            console.log('📍 Estado de tracking:', state);
+            // Viro puede detectar planos
+            setPlaneDetected(true);
+        }
+    };
+
     return (
-        <ViroARScene>
+        <ViroARScene onTrackingUpdated={onTrackingUpdated}>
             {/* ILUMINACIÓN MEJORADA: Múltiples fuentes para mejor detección y renderizado */}
             <ViroAmbientLight color="#ffffff" intensity={1200} />
 
@@ -152,9 +147,6 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                         onLoadStart={() => console.log('Iniciando carga del modelo...')}
                         onLoadEnd={onModelLoadEnd}
                         onError={handleModelError}
-                        // Gestos mejorados
-                        onPinch={onPinch}
-                        onRotate={onRotate}
                         // Propiedades adicionales para mejor renderizado
                         renderingOrder={0}
                         lightReceivingBitMask={3}
@@ -189,6 +181,31 @@ export const ARViewer: React.FC<ARViewerProps> = ({
             resetPosition: () => {
                 if (sceneRef.current && sceneRef.current.resetPosition) {
                     sceneRef.current.resetPosition();
+                }
+            },
+            increaseScale: () => {
+                if (sceneRef.current && sceneRef.current.increaseScale) {
+                    sceneRef.current.increaseScale();
+                }
+            },
+            decreaseScale: () => {
+                if (sceneRef.current && sceneRef.current.decreaseScale) {
+                    sceneRef.current.decreaseScale();
+                }
+            },
+            rotateLeft: () => {
+                if (sceneRef.current && sceneRef.current.rotateLeft) {
+                    sceneRef.current.rotateLeft();
+                }
+            },
+            rotateRight: () => {
+                if (sceneRef.current && sceneRef.current.rotateRight) {
+                    sceneRef.current.rotateRight();
+                }
+            },
+            placeOnPlane: (x?: number, y?: number, z?: number) => {
+                if (sceneRef.current && sceneRef.current.placeOnPlane) {
+                    sceneRef.current.placeOnPlane(x || 0, y || 0, z || -1.5);
                 }
             }
         };
