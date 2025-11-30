@@ -82,84 +82,65 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                 console.log('↻ Modelo reseteado frente a la cámara');
             },
             increaseScale: () => {
-                setScale(prev => {
-                    const newScale = prev[0] * 1.2;
-                    const clampedScale = Math.min(newScale, 3.5);
-                    return [clampedScale, clampedScale, clampedScale];
-                });
-            },
-            decreaseScale: () => {
-                setScale(prev => {
-                    const newScale = prev[0] * 0.8;
-                    const clampedScale = Math.max(newScale, 0.1);
-                    return [clampedScale, clampedScale, clampedScale];
-                });
-            }
-        };
-    }
 
-    // Gesto de Pinch (Escalado)
-    const onPinch = (pinchState: any, scaleFactor: number, source: any) => {
-        const now = Date.now();
+                if (pinchState === 1) { // PINCH_STARTED
+                    baseScale.current = [...scale];
+                    lastGestureTime.current = now;
+                } else if (pinchState === 3) { // PINCH_MOVED
+                    // Debounce ligero
+                    if (now - lastGestureTime.current < 16) return;
+                    lastGestureTime.current = now;
 
-        if (pinchState === 1) { // PINCH_STARTED
-            baseScale.current = [...scale];
-            lastGestureTime.current = now;
-        } else if (pinchState === 3) { // PINCH_MOVED
-            // Debounce ligero
-            if (now - lastGestureTime.current < 16) return;
-            lastGestureTime.current = now;
+                    const currentScale = baseScale.current[0];
+                    const newScale = currentScale * scaleFactor;
+                    const clampedScale = Math.max(0.1, Math.min(newScale, 3.5));
 
-            const currentScale = baseScale.current[0];
-            const newScale = currentScale * scaleFactor;
-            const clampedScale = Math.max(0.1, Math.min(newScale, 3.5));
+                    setScale([clampedScale, clampedScale, clampedScale]);
+                }
+            };
 
-            setScale([clampedScale, clampedScale, clampedScale]);
-        }
-    };
+            // Gesto de Rotación (Eje Y)
+            const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
+                const now = Date.now();
 
-    // Gesto de Rotación (Eje Y)
-    const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
-        const now = Date.now();
+                if (rotateState === 1) { // ROTATE_STARTED
+                    baseRotation.current = rotation[1];
+                    lastGestureTime.current = now;
+                } else if (rotateState === 3) { // ROTATE_MOVED
+                    if (now - lastGestureTime.current < 16) return;
+                    lastGestureTime.current = now;
 
-        if (rotateState === 1) { // ROTATE_STARTED
-            baseRotation.current = rotation[1];
-            lastGestureTime.current = now;
-        } else if (rotateState === 3) { // ROTATE_MOVED
-            if (now - lastGestureTime.current < 16) return;
-            lastGestureTime.current = now;
+                    // rotationFactor viene en grados
+                    const newRotationY = baseRotation.current - rotationFactor;
+                    setRotation([0, newRotationY, 0]);
+                }
+            };
 
-            // rotationFactor viene en grados
-            const newRotationY = baseRotation.current - rotationFactor;
-            setRotation([0, newRotationY, 0]);
-        }
-    };
+            // Gesto de Drag (Movimiento)
+            const onDrag = (dragToPos: any, source: any) => {
+                if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
 
-    // Gesto de Drag (Movimiento)
-    const onDrag = (dragToPos: any, source: any) => {
-        if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
+                // Actualizamos la posición del NODO contenedor
+                setPosition(dragToPos);
+            };
 
-        // Actualizamos la posición del NODO contenedor
-        setPosition(dragToPos);
-    };
+            // Detectar cuando el modelo carga correctamente
+            const onModelLoadEnd = () => {
+                setModelVisible(true);
+                console.log('✓ Modelo cargado correctamente');
+                onModelLoad?.();
+            };
 
-    // Detectar cuando el modelo carga correctamente
-    const onModelLoadEnd = () => {
-        setModelVisible(true);
-        console.log('✓ Modelo cargado correctamente');
-        onModelLoad?.();
-    };
+            const handleModelError = (error: any) => {
+                console.error('✗ Error cargando modelo:', error);
+                setModelVisible(false);
+                onModelError?.(error);
+            };
 
-    const handleModelError = (error: any) => {
-        console.error('✗ Error cargando modelo:', error);
-        setModelVisible(false);
-        onModelError?.(error);
-    };
-
-    return (
-        <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
-            {/* ILUMINACIÓN */}
-            <ViroAmbientLight color="#ffffff" intensity={1000} />
+            return(
+        <ViroARScene onCameraTransformUpdate = { onCameraTransformUpdate } >
+                    {/* ILUMINACIÓN */ }
+                    < ViroAmbientLight color = "#ffffff" intensity = { 1000} />
             <ViroOmniLight color="#ffffff" intensity={800} position={[0, 5, 0]} />
             <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
 
@@ -169,7 +150,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                 Al quitar 'dragType' del ViroNode, evitamos que capture los toques
                 antes de que el objeto pueda detectar los dos dedos.
             */}
-            {modelVisible && (
+            { modelVisible && (
                 <ViroNode
                     position={position}
                     scale={scale}
@@ -192,8 +173,9 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                         onRotate={onRotate}
                     />
                 </ViroNode>
-            )}
-        </ViroARScene>
+            )
+    }
+        </ViroARScene >
     );
 };
 
@@ -223,33 +205,18 @@ export const ARViewer: React.FC<ARViewerProps> = ({
                     sceneRef.current.resetPosition();
                 }
             },
-            increaseScale: () => {
-                if (sceneRef.current && sceneRef.current.increaseScale) {
-                    sceneRef.current.increaseScale();
-                }
-            },
-            decreaseScale: () => {
-                if (sceneRef.current && sceneRef.current.decreaseScale) {
-                    sceneRef.current.decreaseScale();
-                }
-            }
-        };
-    }
-
-    return (
-        <ViroARSceneNavigator
-            autofocus={true}
             initialScene={{
-                scene: () => (
-                    <ARScene
-                        modelUrl={modelUrl}
-                        onModelLoad={onModelLoad}
-                        onModelError={onModelError}
-                        sceneRef={sceneRef}
-                    />
-                ),
-            }}
-            style={styles.container}
+            scene: () => (
+                <ARScene
+                    modelUrl={modelUrl}
+                    onModelLoad={onModelLoad}
+                    onModelError={onModelError}
+                    sceneRef={sceneRef}
+                />
+            ),
+            }
+    }
+    style = { styles.container }
         />
     );
 };
