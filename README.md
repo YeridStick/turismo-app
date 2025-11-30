@@ -25,33 +25,6 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
-## Build APK locally
-
-### Quick build (Windows)
-
-```powershell
-.\build-apk.ps1 debug
-```
-
-### Quick build (Linux/Mac)
-
-```bash
-./build-apk.sh debug
-```
-
-### Fix build errors
-
-If you get a Gradle error like `"Cannot run Project.afterEvaluate"`:
-
-```powershell
-.\fix-android-build.ps1
-```
-
-**📚 Documentation:**
-- **Quick solution:** [SOLUCION_RAPIDA.md](SOLUCION_RAPIDA.md) - Fix build errors
-- **Command reference:** [COMANDOS_BUILD.md](COMANDOS_BUILD.md) - All build commands
-- **Complete guide:** [BUILD_LOCAL_APK.md](BUILD_LOCAL_APK.md) - Detailed build guide
-
 ## Get a fresh project
 
 When you're ready, run:
