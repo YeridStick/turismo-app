@@ -164,30 +164,30 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
 
             {/* 
-                ESTRATEGIA DE GESTOS:
-                - ViroNode: Maneja la POSICIÓN (Drag). Al mover el nodo, se mueve todo.
-                - Viro3DObject: Maneja la ROTACIÓN y ESCALA. Al estar dentro, sus eventos
-                  deberían tener prioridad o funcionar en conjunto.
+                ESTRATEGIA DE GESTOS UNIFICADA:
+                Movemos TODOS los gestos (Drag, Rotate, Pinch) al Viro3DObject.
+                Al quitar 'dragType' del ViroNode, evitamos que capture los toques
+                antes de que el objeto pueda detectar los dos dedos.
             */}
             {modelVisible && (
                 <ViroNode
                     position={position}
                     scale={scale}
                     rotation={rotation}
-                    dragType="FixedToWorld"
-                    onDrag={onDrag}
+                // dragType eliminado del Node para evitar conflictos
                 >
                     <Viro3DObject
                         source={{ uri: modelUrl }}
                         type="GLB"
-                        // La escala y rotación se aplican al NODO padre para que giren sobre el centro
-                        // pero los eventos los capturamos aquí para intentar diferenciar del drag.
                         scale={[1, 1, 1]}
                         rotation={[0, 0, 0]}
                         onLoadStart={() => console.log('Iniciando carga del modelo...')}
                         onLoadEnd={onModelLoadEnd}
                         onError={handleModelError}
-                        // Gestos de dos dedos en el objeto
+
+                        // TODOS los gestos en el objeto
+                        dragType="FixedToWorld"
+                        onDrag={onDrag}
                         onPinch={onPinch}
                         onRotate={onRotate}
                     />
