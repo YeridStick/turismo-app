@@ -30,29 +30,57 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Referencias para guardar el estado base durante los gestos
     const baseScale = useRef<[number, number, number]>([0.3, 0.3, 0.3]);
     const baseRotation = useRef(0);
-    const basePosition = useRef<[number, number, number]>([0, 0, -1.2]);
     const lastGestureTime = useRef(0);
 
-    // Constantes para reseteo consistente
-    const INITIAL_POSITION: [number, number, number] = [0, 0, -1.2];
-    const INITIAL_ROTATION: [number, number, number] = [0, 0, 0];
-    const INITIAL_SCALE: [number, number, number] = [0.3, 0.3, 0.3];
+    // Referencia para la posición de la cámara
+    const cameraRef = useRef<{
+        position: [number, number, number];
+        rotation: [number, number, number];
+        forward: [number, number, number];
+    }>({
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        forward: [0, 0, -1]
+    });
+
+    // Función para calcular la posición frente a la cámara
+    const getPositionInFrontOfCamera = (distance: number = 1.2): [number, number, number] => {
+        const { position: camPos, forward } = cameraRef.current;
+        return [
+            camPos[0] + forward[0] * distance,
+            camPos[1] + forward[1] * distance,
+            camPos[2] + forward[2] * distance
+        ];
+    };
+
+    // Actualizar referencia de cámara
+    const onCameraTransformUpdate = (cameraTransform: any) => {
+        const { position: camPos, rotation: camRot, forward } = cameraTransform;
+        cameraRef.current = {
+            position: camPos,
+            rotation: camRot,
+            forward: forward
+        };
+    };
 
     // Exponer función de reset al componente padre
     if (sceneRef) {
         sceneRef.current = {
             resetPosition: () => {
-                // Reset completo y consistente
-                setPosition([...INITIAL_POSITION]);
-                setRotation([...INITIAL_ROTATION]);
-                setScale([...INITIAL_SCALE]);
-                basePosition.current = [...INITIAL_POSITION];
+                // Calcular nueva posición frente a la cámara actual
+                const newPos = getPositionInFrontOfCamera(1.2);
+
+                setPosition(newPos);
+                setRotation([0, 0, 0]);
+                setScale([0.3, 0.3, 0.3]);
+
+                // Resetear referencias base
                 baseRotation.current = 0;
-                baseScale.current = [...INITIAL_SCALE];
+                baseScale.current = [0.3, 0.3, 0.3];
+
                 setModelVisible(true);
-                console.log('↻ Modelo reseteado a posición inicial');
+                console.log('↻ Modelo reseteado frente a la cámara');
             },
-            // Métodos para controlar escala desde botones
             increaseScale: () => {
                 setScale(prev => {
                     const newScale = prev[0] * 1.2;
@@ -70,7 +98,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
         };
     }
 
-    // Gesto de Pinch mejorado con debounce (Escalado - MANTENER)
+    // Gesto de Pinch (Escalado)
     const onPinch = (pinchState: any, scaleFactor: number, source: any) => {
         const now = Date.now();
 
@@ -78,20 +106,19 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             baseScale.current = [...scale];
             lastGestureTime.current = now;
         } else if (pinchState === 3) { // PINCH_MOVED
-            // Aplicar debounce para evitar actualizaciones excesivas (~60fps)
+            // Debounce ligero
             if (now - lastGestureTime.current < 16) return;
-
             lastGestureTime.current = now;
+
             const currentScale = baseScale.current[0];
             const newScale = currentScale * scaleFactor;
-
-            // Rango de escala más controlado
             const clampedScale = Math.max(0.1, Math.min(newScale, 3.5));
+
             setScale([clampedScale, clampedScale, clampedScale]);
         }
     };
 
-    // Gesto de Rotación con dos dedos (Intentar mantener)
+    // Gesto de Rotación (Eje Y)
     const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
         const now = Date.now();
 
@@ -100,28 +127,20 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             lastGestureTime.current = now;
         } else if (rotateState === 3) { // ROTATE_MOVED
             if (now - lastGestureTime.current < 16) return;
-
             lastGestureTime.current = now;
-            // Aplicar rotación
-            const newRotation = baseRotation.current + (rotationFactor * 2);
-            setRotation([0, newRotation, 0]);
+
+            // rotationFactor viene en grados
+            const newRotationY = baseRotation.current - rotationFactor;
+            setRotation([0, newRotationY, 0]);
         }
     };
 
-    // Gesto de Drag mejorado con validación y límites
+    // Gesto de Drag (Movimiento)
     const onDrag = (dragToPos: any, source: any) => {
-        if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) {
-            return;
-        }
+        if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
 
-        // Permitir movimiento pero mantener Z dentro de rango seguro
-        const constrainedPos: [number, number, number] = [
-            Math.max(-2, Math.min(dragToPos[0], 2)),      // Limitar X
-            Math.max(-1, Math.min(dragToPos[1], 1.5)),    // Limitar Y
-            Math.max(-3, Math.min(dragToPos[2], -0.5))    // Limitar Z
-        ];
-
-        setPosition(constrainedPos);
+        // Actualizamos la posición directamente
+        setPosition(dragToPos);
     };
 
     // Detectar cuando el modelo carga correctamente
@@ -131,7 +150,6 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
         onModelLoad?.();
     };
 
-    // Manejar errores de carga del modelo
     const handleModelError = (error: any) => {
         console.error('✗ Error cargando modelo:', error);
         setModelVisible(false);
@@ -139,50 +157,33 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     };
 
     return (
-        <ViroARScene>
-            {/* ILUMINACIÓN MEJORADA: Múltiples fuentes para mejor detección y renderizado */}
-            <ViroAmbientLight color="#ffffff" intensity={1200} />
+        <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
+            {/* ILUMINACIÓN */}
+            <ViroAmbientLight color="#ffffff" intensity={1000} />
+            <ViroOmniLight color="#ffffff" intensity={800} position={[0, 5, 0]} />
+            <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
 
-            <ViroOmniLight
-                color="#ffffff"
-                intensity={800}
-                position={[0, 5, 0]}
-                attenuationStartDistance={30}
-                attenuationEndDistance={50}
-            />
-
-            <ViroOmniLight
-                color="#ffffff"
-                intensity={600}
-                position={[5, 2, -2]}
-                attenuationStartDistance={20}
-                attenuationEndDistance={40}
-            />
-
-            {/* Nodo contenedor con mejores propiedades */}
+            {/* 
+                ViroNode como contenedor de gestos.
+            */}
             {modelVisible && (
                 <ViroNode
                     position={position}
+                    scale={scale}
+                    rotation={rotation}
                     dragType="FixedToWorld"
                     onDrag={onDrag}
-                    scale={[1, 1, 1]}
+                    onPinch={onPinch}
+                    onRotate={onRotate}
                 >
-                    {/* Modelo 3D con mejor manejo de errores */}
                     <Viro3DObject
                         source={{ uri: modelUrl }}
                         type="GLB"
-                        scale={scale}
-                        rotation={rotation}
-                        position={[0, 0, 0]}
+                        scale={[1, 1, 1]}
+                        rotation={[0, 0, 0]}
                         onLoadStart={() => console.log('Iniciando carga del modelo...')}
                         onLoadEnd={onModelLoadEnd}
                         onError={handleModelError}
-                        // Gestos
-                        onPinch={onPinch}
-                        onRotate={onRotate}
-                        // Propiedades adicionales para mejor renderizado
-                        renderingOrder={0}
-                        lightReceivingBitMask={3}
                     />
                 </ViroNode>
             )}
