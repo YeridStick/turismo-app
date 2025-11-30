@@ -13,14 +13,27 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modelLoaded, setModelLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | 'place' | null>(null);
+    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | null>(null);
+    const [rotateMode, setRotateMode] = useState<'large' | 'small'>('large');
 
     // Referencia para controlar el visor AR
     const viewerRef = useRef<any>(null);
 
+    // Para rotación continua
+    const rotationIntervalRef = useRef<any>(null);
+
     React.useEffect(() => {
         const timer = setTimeout(() => setIsLoading(false), 2000);
         return () => clearTimeout(timer);
+    }, []);
+
+    React.useEffect(() => {
+        // Limpieza al desmontar
+        return () => {
+            if (rotationIntervalRef.current) {
+                clearInterval(rotationIntervalRef.current);
+            }
+        };
     }, []);
 
     const handleModelLoad = () => {
@@ -39,7 +52,11 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
         if (viewerRef.current) {
             viewerRef.current.resetPosition();
             setActiveControl(null);
-            console.log('↻ Posición reseteada');
+            if (rotationIntervalRef.current) {
+                clearInterval(rotationIntervalRef.current);
+                rotationIntervalRef.current = null;
+            }
+            console.log('↻ Posición reseteada al centro');
         }
     };
 
@@ -47,35 +64,61 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const handleIncreaseScale = () => {
         if (viewerRef.current?.increaseScale) {
             viewerRef.current.increaseScale();
+            console.log('➕ Aumentando escala');
         }
     };
 
     const handleDecreaseScale = () => {
         if (viewerRef.current?.decreaseScale) {
             viewerRef.current.decreaseScale();
+            console.log('➖ Reduciendo escala');
         }
     };
 
-    // Controles de rotación
+    // Controles de rotación - MEJORADOS
     const handleRotateLeft = () => {
         if (viewerRef.current?.rotateLeft) {
             viewerRef.current.rotateLeft();
+            console.log('⬅️ Rotando a la izquierda');
         }
     };
 
     const handleRotateRight = () => {
         if (viewerRef.current?.rotateRight) {
             viewerRef.current.rotateRight();
+            console.log('➡️ Rotando a la derecha');
         }
     };
 
-    // Colocar en la superficie detectada
-    const handlePlaceOnPlane = () => {
-        if (viewerRef.current?.placeOnPlane) {
-            // Posiciona el modelo en el centro de la pantalla, en el suelo/superficie
-            viewerRef.current.placeOnPlane(0, 0, -1.5);
-            setActiveControl(null);
-            console.log('📍 Modelo posicionado en la superficie');
+    // Rotación continua (presión prolongada)
+    const handleRotateLeftSmallStart = () => {
+        if (rotationIntervalRef.current) {
+            clearInterval(rotationIntervalRef.current);
+        }
+
+        rotationIntervalRef.current = setInterval(() => {
+            if (viewerRef.current?.rotateLeftSmall) {
+                viewerRef.current.rotateLeftSmall();
+            }
+        }, 50); // Cada 50ms
+    };
+
+    const handleRotateRightSmallStart = () => {
+        if (rotationIntervalRef.current) {
+            clearInterval(rotationIntervalRef.current);
+        }
+
+        rotationIntervalRef.current = setInterval(() => {
+            if (viewerRef.current?.rotateRightSmall) {
+                viewerRef.current.rotateRightSmall();
+            }
+        }, 50); // Cada 50ms
+    };
+
+    const handleRotateStop = () => {
+        if (rotationIntervalRef.current) {
+            clearInterval(rotationIntervalRef.current);
+            rotationIntervalRef.current = null;
         }
     };
 
@@ -148,33 +191,83 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    {/* Panel de Control - Rotación */}
+                    {/* Panel de Control - Rotación MEJORADO */}
                     {activeControl === 'rotate' && (
                         <View style={styles.controlPanel}>
                             <Text style={styles.controlTitle}>Rotar Modelo</Text>
-                            <View style={styles.controlButtons}>
-                                <TouchableOpacity
-                                    style={styles.controlButton}
-                                    onPress={handleRotateLeft}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons name="arrow-back-circle" size={28} color="#fff" />
-                                    <Text style={styles.controlButtonText}>Izquierda</Text>
-                                </TouchableOpacity>
 
+                            {/* Modo de rotación */}
+                            <View style={styles.rotationModeButtons}>
                                 <TouchableOpacity
-                                    style={styles.controlButton}
-                                    onPress={handleRotateRight}
-                                    activeOpacity={0.7}
+                                    style={[
+                                        styles.modeButton,
+                                        rotateMode === 'large' && styles.modeButtonActive,
+                                    ]}
+                                    onPress={() => setRotateMode('large')}
                                 >
-                                    <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
-                                    <Text style={styles.controlButtonText}>Derecha</Text>
+                                    <Text style={styles.modeButtonText}>45° (Rápido)</Text>
                                 </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.modeButton,
+                                        rotateMode === 'small' && styles.modeButtonActive,
+                                    ]}
+                                    onPress={() => setRotateMode('small')}
+                                >
+                                    <Text style={styles.modeButtonText}>Suave</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Botones de rotación */}
+                            <View style={styles.controlButtons}>
+                                {rotateMode === 'large' ? (
+                                    <>
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPress={handleRotateLeft}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="arrow-back-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Izquierda</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPress={handleRotateRight}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Derecha</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                ) : (
+                                    <>
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPressIn={handleRotateLeftSmallStart}
+                                            onPressOut={handleRotateStop}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="arrow-back-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Mantén</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPressIn={handleRotateRightSmallStart}
+                                            onPressOut={handleRotateStop}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Mantén</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
                             </View>
                         </View>
                     )}
 
-                    {/* Botones de selección de control */}
+                    {/* Selector de controles */}
                     <View style={styles.controlSelector}>
                         <TouchableOpacity
                             style={[
@@ -217,36 +310,12 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                                 Rotar
                             </Text>
                         </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.selectorButton,
-                                activeControl === 'place' && styles.selectorButtonActive,
-                            ]}
-                            onPress={() => {
-                                handlePlaceOnPlane();
-                                setActiveControl(null);
-                            }}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons
-                                name="arrow-down-circle"
-                                size={24}
-                                color={activeControl === 'place' ? '#fff' : '#5B3CF0'}
-                            />
-                            <Text style={[
-                                styles.selectorButtonText,
-                                activeControl === 'place' && styles.selectorButtonTextActive,
-                            ]}>
-                                Posicionar
-                            </Text>
-                        </TouchableOpacity>
                     </View>
 
                     {/* Instrucción de gestos disponibles */}
                     <View style={styles.gestureHint}>
                         <Text style={styles.gestureHintText}>
-                            💡 Desliza para mover el modelo
+                            ✋ Desliza para mover | 🔄 Dos dedos para rotar
                         </Text>
                     </View>
                 </>
@@ -255,7 +324,12 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
             {/* Botón Cerrar */}
             <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => navigation?.goBack?.()}
+                onPress={() => {
+                    if (rotationIntervalRef.current) {
+                        clearInterval(rotationIntervalRef.current);
+                    }
+                    navigation?.goBack?.();
+                }}
                 activeOpacity={0.8}
             >
                 <Text style={styles.closeText}>✕</Text>
@@ -361,6 +435,30 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         textAlign: 'center',
     },
+    rotationModeButtons: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    modeButton: {
+        flex: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        borderColor: '#5B3CF0',
+        borderRadius: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+    },
+    modeButtonActive: {
+        backgroundColor: '#5B3CF0',
+        borderColor: '#fff',
+    },
+    modeButtonText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '600',
+    },
     controlButtons: {
         flexDirection: 'row',
         gap: 12,
@@ -390,7 +488,7 @@ const styles = StyleSheet.create({
         right: 20,
         flexDirection: 'row',
         gap: 10,
-        justifyContent: 'space-between',
+        justifyContent: 'space-around',
     },
     selectorButton: {
         flex: 1,
