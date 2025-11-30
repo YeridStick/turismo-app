@@ -24,7 +24,6 @@ import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 import { getPlaceArConfig } from '../services/ar';
-import DataCacheService from '../services/DataCacheService'; // Importar servicio de caché
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 
 const screenWidth = Dimensions.get('window').width;
@@ -194,16 +193,15 @@ const HomeScreen = ({ navigation }) => {
   const imageListRef = useRef(null);
 
   useEffect(() => {
-    loadAll(false); // Carga inicial usa caché si existe
+    loadAll();
   }, []);
 
-  const loadAll = async (forceRefresh = false) => {
+  const loadAll = async () => {
     setLoadingAll(true);
     setError('');
     try {
-      // Usamos el servicio de caché en lugar de llamar a la API directamente
-      const data = await DataCacheService.getPlaces(forceRefresh);
-
+      const response = await api.get(ENDPOINTS.PLACES_ALL);
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setPlaces(data);
       setPopular(data.slice(0, 6));
       setRecommended(data.slice(6, 12));
@@ -464,7 +462,7 @@ const HomeScreen = ({ navigation }) => {
   return (
     <KeyboardAvoidingView style={styles.container} behavior="height">
       <ScrollView
-        refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={() => loadAll(true)} />}
+        refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={loadAll} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.pageHeader}>
