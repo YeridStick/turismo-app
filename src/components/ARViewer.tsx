@@ -4,82 +4,94 @@ import {
     ViroARScene,
     ViroARSceneNavigator,
     ViroNode,
+    ViroOmniLight,
     ViroQuad,
-    ViroSpotLight,
 } from '@reactvision/react-viro';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
-// URL del modelo de prueba (Pato de Khronos Group)
+// URL del modelo de prueba
 const TEST_MODEL_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb';
 
 interface ARSceneProps {
     modelUrl?: string;
     onModelLoad?: () => void;
     onModelError?: (error: any) => void;
+    sceneRef?: any;
 }
 
-/**
- * @description La escena de Realidad Aumentada que se renderiza.
- * El modelo aparece directamente frente a la cámara, sin necesidad de detectar planos.
- */
-const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError }: ARSceneProps) => {
+const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRef }: ARSceneProps) => {
     const [scale, setScale] = useState([0.2, 0.2, 0.2]);
     const [rotation, setRotation] = useState([0, 0, 0]);
+    const [position, setPosition] = useState([0, -0.3, -0.8]); // Más cerca y centrado
+
+    // Referencias para guardar el estado base durante los gestos
+    const baseScale = useRef([0.2, 0.2, 0.2]);
+    const baseRotation = useRef(0);
+
+    // Exponer función de reset al componente padre
+    if (sceneRef) {
+        sceneRef.current = {
+            resetPosition: () => {
+                setPosition([0, -0.3, -0.8]);
+                setRotation([0, 0, 0]);
+                // Mantenemos la escala actual o la reseteamos si prefieres
+            }
+        };
+    }
 
     const onPinch = (pinchState: any, scaleFactor: number, source: any) => {
-        if (pinchState === 3) { // 3 = PINCH_MOVED
-            // Ajustar la escala base multiplicada por el factor del pinch
-            const currentScale = scale[0];
+        if (pinchState === 1) { // PINCH_STARTED
+            baseScale.current = scale;
+        } else if (pinchState === 3) { // PINCH_MOVED
+            const currentScale = baseScale.current[0];
             const newScale = currentScale * scaleFactor;
-            // Limitar escala mínima y máxima
-            const clampedScale = Math.max(0.05, Math.min(newScale, 1.0));
+            const clampedScale = Math.max(0.05, Math.min(newScale, 2.0));
             setScale([clampedScale, clampedScale, clampedScale]);
         }
     };
 
     const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
-        if (rotateState === 3) { // 3 = ROTATE_MOVED
-            // Rotar solo en el eje Y (vertical)
-            const currentRotation = rotation[1];
-            const newRotation = currentRotation - rotationFactor;
+        if (rotateState === 1) { // ROTATE_STARTED
+            baseRotation.current = rotation[1];
+        } else if (rotateState === 3) { // ROTATE_MOVED
+            // rotationFactor es el cambio en rotación, lo sumamos a la base
+            const newRotation = baseRotation.current - rotationFactor;
             setRotation([0, newRotation, 0]);
         }
     };
 
+    const onDrag = (dragToPos: any, source: any) => {
+        // Actualizamos la posición mientras se arrastra para mantener el estado sincronizado
+        setPosition(dragToPos);
+    };
+
     return (
         <ViroARScene>
-            {/* Luz Ambiental */}
-            <ViroAmbientLight color="#ffffff" intensity={800} />
-
-            {/* Luz direccional para generar sombras y volumen */}
-            <ViroSpotLight
-                innerAngle={5}
-                outerAngle={90}
-                direction={[0, -1, -0.2]}
-                position={[0, 3, 1]}
+            {/* ILUMINACIÓN MEJORADA: Luz ambiental fuerte + Luz Omni para rellenar sombras */}
+            <ViroAmbientLight color="#ffffff" intensity={1000} />
+            <ViroOmniLight
                 color="#ffffff"
-                castsShadow={true}
-                shadowMapSize={2048}
-                shadowNearZ={2}
-                shadowFarZ={5}
-                shadowOpacity={0.7}
+                intensity={1000}
+                position={[0, 5, 0]}
+                attenuationStartDistance={20}
+                attenuationEndDistance={30}
             />
 
             {/* Nodo contenedor posicionable */}
             <ViroNode
-                position={[0, -0.5, -1.5]}
+                position={position}
                 dragType="FixedToWorld"
-                onDrag={() => { }}
+                onDrag={onDrag}
             >
-                {/* Sombra falsa (Quad) para dar sensación de contacto con el suelo */}
+                {/* Sombra falsa (Quad) */}
                 <ViroQuad
                     rotation={[-90, 0, 0]}
-                    position={[0, -0.01, 0]} // Un poco debajo del modelo
+                    position={[0, -0.01, 0]}
                     width={1.5}
                     height={1.5}
                     arShadowReceiver={true}
-                    style={{ opacity: 0.3 }} // Sombra suave
+                    style={{ opacity: 0.4 }}
                 />
 
                 {/* Modelo 3D */}
@@ -112,14 +124,30 @@ interface ARViewerProps {
     onModelPlaced?: () => void;
     onModelLoad?: () => void;
     onModelError?: (error: any) => void;
+    viewerRef?: any;
 }
 
 export const ARViewer: React.FC<ARViewerProps> = ({
     modelUrl,
     onModelPlaced,
     onModelLoad,
-    onModelError
+    onModelError,
+    viewerRef
 }) => {
+    // Referencia interna para comunicarse con la escena
+    const sceneRef = useRef<any>(null);
+
+    // Exponer métodos al padre (ARScreen)
+    if (viewerRef) {
+        viewerRef.current = {
+            resetPosition: () => {
+                if (sceneRef.current && sceneRef.current.resetPosition) {
+                    sceneRef.current.resetPosition();
+                }
+            }
+        };
+    }
+
     return (
         <ViroARSceneNavigator
             autofocus={true}
@@ -129,6 +157,7 @@ export const ARViewer: React.FC<ARViewerProps> = ({
                         modelUrl={modelUrl}
                         onModelLoad={onModelLoad}
                         onModelError={onModelError}
+                        sceneRef={sceneRef}
                     />
                 ),
             }}

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons'; // Asumiendo que usas Expo
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ARViewer } from '../components/ARViewer';
 
@@ -13,7 +14,9 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const [modelLoaded, setModelLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Simular carga inicial de AR
+    // Referencia para controlar el visor AR
+    const viewerRef = useRef<any>(null);
+
     React.useEffect(() => {
         const timer = setTimeout(() => setIsLoading(false), 1500);
         return () => clearTimeout(timer);
@@ -25,8 +28,13 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     };
 
     const handleModelError = (err: any) => {
-        const errorMsg = 'No se pudo cargar el modelo 3D.';
-        setError(errorMsg);
+        setError('No se pudo cargar el modelo.');
+    };
+
+    const handleResetPosition = () => {
+        if (viewerRef.current) {
+            viewerRef.current.resetPosition();
+        }
     };
 
     return (
@@ -35,37 +43,38 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 modelUrl={modelUrl}
                 onModelLoad={handleModelLoad}
                 onModelError={handleModelError}
+                viewerRef={viewerRef}
             />
 
             {isLoading && (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#5B3CF0" />
-                    <Text style={styles.loadingText}>Cargando experiencia AR...</Text>
+                    <Text style={styles.loadingText}>Cargando...</Text>
                 </View>
             )}
 
             {!isLoading && !error && (
-                <View style={styles.controlsContainer}>
-                    <View style={styles.gestureHint}>
-                        <Text style={styles.gestureIcon}>👆</Text>
-                        <Text style={styles.gestureText}>Arrastra</Text>
-                    </View>
-                    <View style={styles.gestureHint}>
-                        <Text style={styles.gestureIcon}>🤏</Text>
-                        <Text style={styles.gestureText}>Escala</Text>
-                    </View>
-                    <View style={styles.gestureHint}>
-                        <Text style={styles.gestureIcon}>🔄</Text>
-                        <Text style={styles.gestureText}>Rota</Text>
-                    </View>
-                </View>
-            )}
+                <>
+                    {/* Botón Reset Posición */}
+                    <TouchableOpacity
+                        style={styles.resetButton}
+                        onPress={handleResetPosition}
+                    >
+                        <Ionicons name="locate" size={24} color="#fff" />
+                        <Text style={styles.resetText}>Centrar Modelo</Text>
+                    </TouchableOpacity>
 
-            {/* Mensaje de éxito discreto */}
-            {modelLoaded && (
-                <View style={styles.statusBadge}>
-                    <Text style={styles.statusText}>✅ Modelo activo</Text>
-                </View>
+                    <View style={styles.controlsContainer}>
+                        <View style={styles.gestureHint}>
+                            <Text style={styles.gestureIcon}>🤏</Text>
+                            <Text style={styles.gestureText}>Escalar</Text>
+                        </View>
+                        <View style={styles.gestureHint}>
+                            <Text style={styles.gestureIcon}>🔄</Text>
+                            <Text style={styles.gestureText}>Rotar</Text>
+                        </View>
+                    </View>
+                </>
             )}
 
             <TouchableOpacity
@@ -95,17 +104,37 @@ const styles = StyleSheet.create({
         marginTop: 10,
         fontWeight: '600',
     },
+    resetButton: {
+        position: 'absolute',
+        bottom: 120,
+        alignSelf: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#5B3CF0',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 25,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
+    resetText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        marginLeft: 8,
+    },
     controlsContainer: {
         position: 'absolute',
         bottom: 40,
-        left: 20,
-        right: 20,
+        left: 40,
+        right: 40,
         flexDirection: 'row',
         justifyContent: 'space-around',
         backgroundColor: 'rgba(30,30,30,0.8)',
         borderRadius: 20,
         paddingVertical: 12,
-        paddingHorizontal: 10,
     },
     gestureHint: {
         alignItems: 'center',
@@ -118,20 +147,6 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 12,
         fontWeight: '500',
-    },
-    statusBadge: {
-        position: 'absolute',
-        top: 60,
-        alignSelf: 'center',
-        backgroundColor: 'rgba(76, 175, 80, 0.9)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-    },
-    statusText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 12,
     },
     closeButton: {
         position: 'absolute',
