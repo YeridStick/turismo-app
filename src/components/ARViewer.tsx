@@ -139,7 +139,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     const onDrag = (dragToPos: any, source: any) => {
         if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
 
-        // Actualizamos la posición directamente
+        // Actualizamos la posición del NODO contenedor
         setPosition(dragToPos);
     };
 
@@ -164,7 +164,10 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
 
             {/* 
-                ViroNode como contenedor de gestos.
+                ESTRATEGIA DE GESTOS:
+                - ViroNode: Maneja la POSICIÓN (Drag). Al mover el nodo, se mueve todo.
+                - Viro3DObject: Maneja la ROTACIÓN y ESCALA. Al estar dentro, sus eventos
+                  deberían tener prioridad o funcionar en conjunto.
             */}
             {modelVisible && (
                 <ViroNode
@@ -173,17 +176,20 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                     rotation={rotation}
                     dragType="FixedToWorld"
                     onDrag={onDrag}
-                    onPinch={onPinch}
-                    onRotate={onRotate}
                 >
                     <Viro3DObject
                         source={{ uri: modelUrl }}
                         type="GLB"
+                        // La escala y rotación se aplican al NODO padre para que giren sobre el centro
+                        // pero los eventos los capturamos aquí para intentar diferenciar del drag.
                         scale={[1, 1, 1]}
                         rotation={[0, 0, 0]}
                         onLoadStart={() => console.log('Iniciando carga del modelo...')}
                         onLoadEnd={onModelLoadEnd}
                         onError={handleModelError}
+                        // Gestos de dos dedos en el objeto
+                        onPinch={onPinch}
+                        onRotate={onRotate}
                     />
                 </ViroNode>
             )}
