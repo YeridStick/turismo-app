@@ -2,7 +2,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -18,15 +18,19 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  useWindowDimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 import { getPlaceArConfig } from '../services/ar';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
+import { BREAKPOINTS } from '../utils/responsive';
 
 const screenWidth = Dimensions.get('window').width;
+const IMAGE_PLACEHOLDER =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
 const distanceOptions = [1, 2, 5, 10, 20, 50];
 const categoriesList = [
   { id: 'todos', name: 'Todos' },
@@ -46,57 +50,74 @@ const navTabs = [
   { id: 5, label: 'Parque' },
 ];
 
-const Card = ({
-  title,
-  subtitle,
-  meta,
-  variant = 'full',
-  image,
-  onPress,
-  badge,
-  rating,
-  distance,
-}) => {
-  return (
-    <Pressable
-      style={[styles.card, variant === 'compact' && styles.cardCompact, variant === 'wide' && styles.cardWide]}
-      onPress={onPress}
-    >
-      {image ? (
-        <View style={styles.cardImageWrapper}>
-          <Image source={{ uri: image }} style={styles.cardImage} contentFit="cover" />
-          <View style={styles.cardTopRow}>
-            <Text style={styles.cardBadge}>{badge || 'Destino'}</Text>
-            <TouchableOpacity style={styles.cardBookmark} onPress={onPress}>
-              <Text style={styles.bookmarkIcon}>S</Text>
-            </TouchableOpacity>
+const Card = React.memo(
+  ({
+    title,
+    subtitle,
+    meta,
+    variant = 'full',
+    image,
+    onPress,
+    badge,
+    rating,
+    distance,
+    cardWidth,
+    imageHeight,
+  }) => {
+    return (
+      <Pressable
+        style={[
+          styles.card,
+          variant === 'compact' && styles.cardCompact,
+          variant === 'wide' && styles.cardWide,
+          variant === 'compact' && cardWidth ? { width: cardWidth } : null,
+          variant === 'wide' && cardWidth ? { width: cardWidth } : null,
+        ]}
+        onPress={onPress}
+      >
+        {image ? (
+          <View style={styles.cardImageWrapper}>
+            <Image
+              source={{ uri: image }}
+              style={[styles.cardImage, imageHeight ? { height: imageHeight } : null]}
+              contentFit="cover"
+              cachePolicy="disk"
+              placeholder={IMAGE_PLACEHOLDER}
+              transition={200}
+            />
+            <View style={styles.cardTopRow}>
+              <Text style={styles.cardBadge}>{badge || 'Destino'}</Text>
+              <TouchableOpacity style={styles.cardBookmark} onPress={onPress}>
+                <Text style={styles.bookmarkIcon}>S</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.cardRating}>
+              <Text style={styles.cardRatingText}>* {rating || '4.5'}</Text>
+            </View>
           </View>
-          <View style={styles.cardRating}>
-            <Text style={styles.cardRatingText}>* {rating || '4.5'}</Text>
+        ) : null}
+        <View style={styles.cardBody}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            {distance ? <Text style={styles.cardDistance}>{distance}</Text> : null}
           </View>
+          {subtitle ? (
+            <Text style={styles.cardSubtitle} numberOfLines={2}>
+              {subtitle}
+            </Text>
+          ) : null}
+          {meta ? (
+            <Text style={styles.cardMeta} numberOfLines={1}>
+              {meta}
+            </Text>
+          ) : null}
         </View>
-      ) : null}
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          {distance ? <Text style={styles.cardDistance}>{distance}</Text> : null}
-        </View>
-        {subtitle ? (
-          <Text style={styles.cardSubtitle} numberOfLines={2}>
-            {subtitle}
-          </Text>
-        ) : null}
-        {meta ? (
-          <Text style={styles.cardMeta} numberOfLines={1}>
-            {meta}
-          </Text>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-};
+      </Pressable>
+    );
+  }
+);
 
 const Footer = () => {
   const socialIcons = [
@@ -172,6 +193,12 @@ const Footer = () => {
 };
 
 const HomeScreen = ({ navigation }) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const isSmall = windowWidth < BREAKPOINTS.medium;
+  const cardCompactWidth = isSmall ? 200 : 220;
+  const cardWideWidth = isSmall ? 230 : 260;
+  const detailImageHeight = isSmall ? 200 : 240;
+
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
   const [popular, setPopular] = useState([]);
@@ -286,7 +313,7 @@ const HomeScreen = ({ navigation }) => {
     return recommended.filter((item) => item.categoryId === selectedCategory);
   }, [recommended, selectedCategory]);
 
-  const openDetail = async (item) => {
+  const openDetail = useCallback(async (item) => {
     setDetailVisible(true);
     setDetailLoading(true);
     setImageIndex(0);
@@ -303,91 +330,115 @@ const HomeScreen = ({ navigation }) => {
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, []);
 
-  const renderPlace = ({ item, variant = 'full' }) => {
-    const image =
-      Array.isArray(item.imageUrls) && item.imageUrls.length ? item.imageUrls[0] : null;
-    const distanceText =
-      item.distanceMeters && item.distanceMeters > 0
-        ? `${item.distanceMeters?.toFixed?.(0)} m`
-        : null;
-    return (
-      <Card
-        title={item.name || 'Lugar sin nombre'}
-        subtitle={item.description || 'Sin descripción'}
-        meta={item.address || item.city || 'Ubicación no disponible'}
-        image={image}
-        onPress={() => openDetail(item)}
-        variant={variant}
-        badge={item.categoryName || 'Popular'}
-        rating={item.rating || item.score || '4.5'}
-        distance={distanceText}
-      />
-    );
-  };
+  const renderPlace = useCallback(
+    ({ item, variant = 'full' }) => {
+      const image =
+        Array.isArray(item.imageUrls) && item.imageUrls.length ? item.imageUrls[0] : null;
+      const distanceText =
+        item.distanceMeters && item.distanceMeters > 0
+          ? `${item.distanceMeters?.toFixed?.(0)} m`
+          : null;
+
+      return (
+        <Card
+          title={item.name || 'Lugar sin nombre'}
+          subtitle={item.description || 'Sin descripción'}
+          meta={item.address || item.city || 'Ubicación no disponible'}
+          image={image}
+          onPress={() => openDetail(item)}
+          variant={variant}
+          badge={item.categoryName || 'Popular'}
+          rating={item.rating || item.score || '4.5'}
+          distance={distanceText}
+          cardWidth={
+            variant === 'compact' ? cardCompactWidth : variant === 'wide' ? cardWideWidth : undefined
+          }
+          imageHeight={variant === 'compact' ? 120 : 160}
+        />
+      );
+    },
+    [openDetail, cardCompactWidth, cardWideWidth]
+  );
 
   const emptyState = useMemo(() => {
     if (loadingAll) return null;
     return <Text style={styles.empty}>No hay lugares aún.</Text>;
   }, [loadingAll]);
 
-  const renderImages = (images) => {
-    if (!images?.length) return null;
-    return (
-      <View style={styles.sliderContainer}>
-        <FlatList
-          ref={imageListRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          data={images}
-          keyExtractor={(uri, idx) => `${uri}-${idx}`}
-          renderItem={({ item }) => (
-            <Image source={{ uri: item }} style={styles.detailImage} contentFit="cover" />
-          )}
-          onMomentumScrollEnd={(e) => {
-            const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-            setImageIndex(idx);
-          }}
-        />
-        {images.length > 1 ? (
-          <View style={styles.sliderDots}>
-            {images.map((_, idx) => (
-              <View
-                key={idx}
-                style={[styles.dot, imageIndex === idx && styles.dotActive]}
+  const renderImages = useCallback(
+    (images) => {
+      if (!images?.length) return null;
+      const getItemLayout = (_, index) => ({
+        length: windowWidth,
+        offset: windowWidth * index,
+        index,
+      });
+
+      return (
+        <View style={styles.sliderContainer}>
+          <FlatList
+            ref={imageListRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            data={images}
+            keyExtractor={(uri, idx) => `${uri}-${idx}`}
+            renderItem={({ item }) => (
+              <Image
+                source={{ uri: item }}
+                style={[styles.detailImage, { width: windowWidth, height: detailImageHeight }]}
+                contentFit="cover"
+                cachePolicy="disk"
+                placeholder={IMAGE_PLACEHOLDER}
+                transition={200}
               />
-            ))}
-          </View>
-        ) : null}
-        {images.length > 1 ? (
-          <View style={styles.sliderButtons}>
-            <TouchableOpacity
-              style={styles.sliderNav}
-              onPress={() => {
-                const next = Math.max(imageIndex - 1, 0);
-                setImageIndex(next);
-                imageListRef.current?.scrollToIndex({ index: next, animated: true });
-              }}
-            >
-              <Text style={styles.sliderNavText}>‹</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sliderNav}
-              onPress={() => {
-                const next = Math.min(imageIndex + 1, images.length - 1);
-                setImageIndex(next);
-                imageListRef.current?.scrollToIndex({ index: next, animated: true });
-              }}
-            >
-              <Text style={styles.sliderNavText}>›</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
-    );
-  };
+            )}
+            getItemLayout={getItemLayout}
+            windowSize={3}
+            maxToRenderPerBatch={3}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
+              setImageIndex(idx);
+            }}
+          />
+          {images.length > 1 ? (
+            <View style={styles.sliderDots}>
+              {images.map((_, idx) => (
+                <View key={idx} style={[styles.dot, imageIndex === idx && styles.dotActive]} />
+              ))}
+            </View>
+          ) : null}
+          {images.length > 1 ? (
+            <View style={styles.sliderButtons}>
+              <TouchableOpacity
+                style={styles.sliderNav}
+                onPress={() => {
+                  const next = Math.max(imageIndex - 1, 0);
+                  setImageIndex(next);
+                  imageListRef.current?.scrollToIndex({ index: next, animated: true });
+                }}
+              >
+                <Text style={styles.sliderNavText}>‹</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sliderNav}
+                onPress={() => {
+                  const next = Math.min(imageIndex + 1, images.length - 1);
+                  setImageIndex(next);
+                  imageListRef.current?.scrollToIndex({ index: next, animated: true });
+                }}
+              >
+                <Text style={styles.sliderNavText}>›</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      );
+    },
+    [detailImageHeight, imageIndex, windowWidth]
+  );
 
   const mapUrl = selectedPlace?.lat && selectedPlace?.lng
     ? `https://www.google.com/maps/search/?api=1&query=${selectedPlace.lat},${selectedPlace.lng}`
@@ -569,9 +620,18 @@ const HomeScreen = ({ navigation }) => {
               renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
-              snapToInterval={220}
+              snapToInterval={cardCompactWidth + SPACING.md}
               decelerationRate="fast"
               snapToAlignment="start"
+              getItemLayout={(_, index) => ({
+                length: cardCompactWidth + SPACING.md,
+                offset: (cardCompactWidth + SPACING.md) * index,
+                index,
+              })}
+              windowSize={5}
+              maxToRenderPerBatch={5}
+              initialNumToRender={6}
+              removeClippedSubviews
             />
           )}
         </View>
@@ -586,16 +646,25 @@ const HomeScreen = ({ navigation }) => {
               {emptyState}
               <FlatList
                 horizontal
-                data={places}
-                keyExtractor={(item, idx) => `${item.id || idx}-all`}
-                renderItem={({ item }) => renderPlace({ item, variant: 'wide' })}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalList}
-                snapToInterval={260}
-                decelerationRate="fast"
-                snapToAlignment="start"
-              />
-            </>
+              data={places}
+              keyExtractor={(item, idx) => `${item.id || idx}-all`}
+              renderItem={({ item }) => renderPlace({ item, variant: 'wide' })}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+              snapToInterval={cardWideWidth + SPACING.md}
+              decelerationRate="fast"
+              snapToAlignment="start"
+              getItemLayout={(_, index) => ({
+                length: cardWideWidth + SPACING.md,
+                offset: (cardWideWidth + SPACING.md) * index,
+                index,
+              })}
+              windowSize={5}
+              maxToRenderPerBatch={5}
+              initialNumToRender={6}
+              removeClippedSubviews
+            />
+          </>
           )}
         </View>
         <Footer />
@@ -899,6 +968,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     fontSize: FONT_SIZES.md,
     backgroundColor: '#F7F8FD',
+    minHeight: 48,
   },
   searchIconButton: {
     width: 46,
@@ -921,6 +991,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingVertical: SPACING.sm,
+    minHeight: 46,
     borderRadius: 12,
     alignItems: 'center',
   },
@@ -932,6 +1003,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#5B3CF0',
     paddingVertical: SPACING.sm,
+    minHeight: 46,
     borderRadius: 12,
     alignItems: 'center',
   },
@@ -1490,7 +1562,7 @@ const styles = StyleSheet.create({
   },
   detailImage: {
     width: screenWidth,
-    height: 240,
+    height: 220,
     borderRadius: 16,
   },
   sliderDots: {

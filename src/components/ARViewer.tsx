@@ -3,7 +3,6 @@ import {
     ViroAmbientLight,
     ViroARScene,
     ViroARSceneNavigator,
-    ViroNode,
     ViroOmniLight,
 } from '@reactvision/react-viro';
 import React, { useRef, useState } from 'react';
@@ -23,8 +22,8 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Estados tipados correctamente
     const [scale, setScale] = useState<[number, number, number]>([0.3, 0.3, 0.3]);
     const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
-    // Posición inicial mejorada - más cercana al usuario
-    const [position, setPosition] = useState<[number, number, number]>([0, 0, -1.2]);
+    // Posición inicial ajustada - Y en -0.3 para que esté a nivel del suelo
+    const [position, setPosition] = useState<[number, number, number]>([0, -0.3, -1.2]);
     const [modelVisible, setModelVisible] = useState(true);
 
     // Referencias para guardar el estado base durante los gestos
@@ -48,7 +47,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
         const { position: camPos, forward } = cameraRef.current;
         return [
             camPos[0] + forward[0] * distance,
-            camPos[1] + forward[1] * distance,
+            camPos[1] + forward[1] * distance - 0.3, // Ajustar Y para nivel del suelo
             camPos[2] + forward[2] * distance
         ];
     };
@@ -93,6 +92,20 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                     const newScale = prev[0] * 0.8;
                     const clampedScale = Math.max(newScale, 0.1);
                     return [clampedScale, clampedScale, clampedScale];
+                });
+            },
+            rotateLeft: () => {
+                setRotation(prev => {
+                    const newRotationY = prev[1] + 10; // Rotar 10 grados a la izquierda
+                    baseRotation.current = newRotationY;
+                    return [prev[0], newRotationY, prev[2]];
+                });
+            },
+            rotateRight: () => {
+                setRotation(prev => {
+                    const newRotationY = prev[1] - 10; // Rotar 10 grados a la derecha
+                    baseRotation.current = newRotationY;
+                    return [prev[0], newRotationY, prev[2]];
                 });
             }
         };
@@ -139,7 +152,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     const onDrag = (dragToPos: any, source: any) => {
         if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
 
-        // Actualizamos la posición del NODO contenedor
+        // Actualizamos la posición directamente
         setPosition(dragToPos);
     };
 
@@ -164,34 +177,28 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
 
             {/* 
-                ESTRATEGIA DE GESTOS UNIFICADA:
-                Movemos TODOS los gestos (Drag, Rotate, Pinch) al Viro3DObject.
-                Al quitar 'dragType' del ViroNode, evitamos que capture los toques
-                antes de que el objeto pueda detectar los dos dedos.
+                ESTRATEGIA DE GESTOS SIMPLIFICADA:
+                Aplicamos TODAS las transformaciones y gestos directamente al Viro3DObject.
+                Esto elimina conflictos de jerarquía y permite que los gestos multi-touch
+                (pinch y rotate) funcionen correctamente.
             */}
             {modelVisible && (
-                <ViroNode
+                <Viro3DObject
+                    source={{ uri: modelUrl }}
+                    type="GLB"
                     position={position}
                     scale={scale}
                     rotation={rotation}
-                // dragType eliminado del Node para evitar conflictos
-                >
-                    <Viro3DObject
-                        source={{ uri: modelUrl }}
-                        type="GLB"
-                        scale={[1, 1, 1]}
-                        rotation={[0, 0, 0]}
-                        onLoadStart={() => console.log('Iniciando carga del modelo...')}
-                        onLoadEnd={onModelLoadEnd}
-                        onError={handleModelError}
+                    onLoadStart={() => console.log('Iniciando carga del modelo...')}
+                    onLoadEnd={onModelLoadEnd}
+                    onError={handleModelError}
 
-                        // TODOS los gestos en el objeto
-                        dragType="FixedToWorld"
-                        onDrag={onDrag}
-                        onPinch={onPinch}
-                        onRotate={onRotate}
-                    />
-                </ViroNode>
+                    // TODOS los gestos aplicados directamente al objeto
+                    dragType="FixedToWorld"
+                    onDrag={onDrag}
+                    onPinch={onPinch}
+                    onRotate={onRotate}
+                />
             )}
         </ViroARScene>
     );
@@ -231,6 +238,16 @@ export const ARViewer: React.FC<ARViewerProps> = ({
             decreaseScale: () => {
                 if (sceneRef.current && sceneRef.current.decreaseScale) {
                     sceneRef.current.decreaseScale();
+                }
+            },
+            rotateLeft: () => {
+                if (sceneRef.current && sceneRef.current.rotateLeft) {
+                    sceneRef.current.rotateLeft();
+                }
+            },
+            rotateRight: () => {
+                if (sceneRef.current && sceneRef.current.rotateRight) {
+                    sceneRef.current.rotateRight();
                 }
             }
         };

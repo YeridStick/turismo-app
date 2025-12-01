@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ARViewer } from '../components/ARViewer';
 
 interface ARScreenProps {
@@ -13,14 +13,43 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modelLoaded, setModelLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeControl, setActiveControl] = useState<'scale' | null>(null);
+    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | null>(null);
+    const [showControls, setShowControls] = useState(false);
+    const [showHelpHint, setShowHelpHint] = useState(true);
 
     // Referencia para controlar el visor AR
     const viewerRef = useRef<any>(null);
+    // Referencia para el intervalo de rotación continua
+    const rotationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    // Animación para el hint de ayuda
+    const hintOpacity = useRef(new Animated.Value(1)).current;
 
     React.useEffect(() => {
         const timer = setTimeout(() => setIsLoading(false), 2000);
         return () => clearTimeout(timer);
+    }, []);
+
+    // Auto-ocultar hint de ayuda después de 5 segundos con fade out
+    React.useEffect(() => {
+        if (modelLoaded && showHelpHint) {
+            const timer = setTimeout(() => {
+                Animated.timing(hintOpacity, {
+                    toValue: 0,
+                    duration: 500,
+                    useNativeDriver: true,
+                }).start(() => setShowHelpHint(false));
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [modelLoaded, showHelpHint, hintOpacity]);
+
+    // Limpiar intervalo al desmontar
+    React.useEffect(() => {
+        return () => {
+            if (rotationIntervalRef.current) {
+                clearInterval(rotationIntervalRef.current);
+            }
+        };
     }, []);
 
     const handleModelLoad = () => {
@@ -43,6 +72,13 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
         }
     };
 
+    const toggleControls = () => {
+        setShowControls(!showControls);
+        if (!showControls) {
+            setActiveControl(null);
+        }
+    };
+
     // Controles de escala
     const handleIncreaseScale = () => {
         if (viewerRef.current?.increaseScale) {
@@ -53,6 +89,36 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const handleDecreaseScale = () => {
         if (viewerRef.current?.decreaseScale) {
             viewerRef.current.decreaseScale();
+        }
+    };
+
+    // Controles de rotación continua
+    const startRotateLeft = () => {
+        if (viewerRef.current?.rotateLeft) {
+            viewerRef.current.rotateLeft();
+        }
+        rotationIntervalRef.current = setInterval(() => {
+            if (viewerRef.current?.rotateLeft) {
+                viewerRef.current.rotateLeft();
+            }
+        }, 100);
+    };
+
+    const startRotateRight = () => {
+        if (viewerRef.current?.rotateRight) {
+            viewerRef.current.rotateRight();
+        }
+        rotationIntervalRef.current = setInterval(() => {
+            if (viewerRef.current?.rotateRight) {
+                viewerRef.current.rotateRight();
+            }
+        }, 100);
+    };
+
+    const stopRotation = () => {
+        if (rotationIntervalRef.current) {
+            clearInterval(rotationIntervalRef.current);
+            rotationIntervalRef.current = null;
         }
     };
 
@@ -99,62 +165,131 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                         <Text style={styles.resetText}>Centrar</Text>
                     </TouchableOpacity>
 
-                    {/* Panel de Control - Escala (Opcional, se puede ocultar) */}
-                    {activeControl === 'scale' && (
-                        <View style={styles.controlPanel}>
-                            <Text style={styles.controlTitle}>Ajustar Escala</Text>
-                            <View style={styles.controlButtons}>
+                    {/* Botón Toggle Controles */}
+                    <TouchableOpacity
+                        style={[styles.toggleControlsButton, showControls && styles.toggleControlsButtonActive]}
+                        onPress={toggleControls}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons
+                            name={showControls ? "close-circle" : "options"}
+                            size={28}
+                            color="#fff"
+                        />
+                    </TouchableOpacity>
+
+                    {/* Controles - Solo mostrar si showControls es true */}
+                    {showControls && (
+                        <>
+                            {/* Panel de Control - Escala */}
+                            {activeControl === 'scale' && (
+                                <View style={styles.controlPanel}>
+                                    <Text style={styles.controlTitle}>Ajustar Escala</Text>
+                                    <View style={styles.controlButtons}>
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPress={handleDecreaseScale}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="remove-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Reducir</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPress={handleIncreaseScale}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="add-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Aumentar</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Panel de Control - Rotación */}
+                            {activeControl === 'rotate' && (
+                                <View style={styles.controlPanel}>
+                                    <Text style={styles.controlTitle}>Rotar Modelo</Text>
+                                    <View style={styles.controlButtons}>
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPressIn={startRotateLeft}
+                                            onPressOut={stopRotation}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="arrow-back-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Izquierda</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.controlButton}
+                                            onPressIn={startRotateRight}
+                                            onPressOut={stopRotation}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
+                                            <Text style={styles.controlButtonText}>Derecha</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Selector de Controles */}
+                            <View style={styles.controlSelector}>
                                 <TouchableOpacity
-                                    style={styles.controlButton}
-                                    onPress={handleDecreaseScale}
-                                    activeOpacity={0.7}
+                                    style={[
+                                        styles.selectorButton,
+                                        activeControl === 'scale' && styles.selectorButtonActive,
+                                    ]}
+                                    onPress={() => setActiveControl(activeControl === 'scale' ? null : 'scale')}
+                                    activeOpacity={0.8}
                                 >
-                                    <Ionicons name="remove-circle" size={28} color="#fff" />
-                                    <Text style={styles.controlButtonText}>Reducir</Text>
+                                    <Ionicons
+                                        name="expand"
+                                        size={24}
+                                        color={activeControl === 'scale' ? '#fff' : '#5B3CF0'}
+                                    />
+                                    <Text style={[
+                                        styles.selectorButtonText,
+                                        activeControl === 'scale' && styles.selectorButtonTextActive,
+                                    ]}>
+                                        Escalar
+                                    </Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={styles.controlButton}
-                                    onPress={handleIncreaseScale}
-                                    activeOpacity={0.7}
+                                    style={[
+                                        styles.selectorButton,
+                                        activeControl === 'rotate' && styles.selectorButtonActive,
+                                    ]}
+                                    onPress={() => setActiveControl(activeControl === 'rotate' ? null : 'rotate')}
+                                    activeOpacity={0.8}
                                 >
-                                    <Ionicons name="add-circle" size={28} color="#fff" />
-                                    <Text style={styles.controlButtonText}>Aumentar</Text>
+                                    <Ionicons
+                                        name="sync"
+                                        size={24}
+                                        color={activeControl === 'rotate' ? '#fff' : '#5B3CF0'}
+                                    />
+                                    <Text style={[
+                                        styles.selectorButtonText,
+                                        activeControl === 'rotate' && styles.selectorButtonTextActive,
+                                    ]}>
+                                        Rotar
+                                    </Text>
                                 </TouchableOpacity>
                             </View>
-                        </View>
+                        </>
                     )}
 
-                    {/* Botón Escalar - Opcional */}
-                    <View style={styles.controlSelector}>
-                        <TouchableOpacity
-                            style={[
-                                styles.selectorButton,
-                                activeControl === 'scale' && styles.selectorButtonActive,
-                            ]}
-                            onPress={() => setActiveControl(activeControl === 'scale' ? null : 'scale')}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons
-                                name="expand"
-                                size={24}
-                                color={activeControl === 'scale' ? '#fff' : '#5B3CF0'}
-                            />
-                            <Text style={[
-                                styles.selectorButtonText,
-                                activeControl === 'scale' && styles.selectorButtonTextActive,
-                            ]}>
-                                Escalar
+                    {/* Hint de ayuda con auto-hide */}
+                    {showHelpHint && (
+                        <Animated.View style={[styles.gestureHint, { opacity: hintOpacity }]}>
+                            <Text style={styles.gestureHintText}>
+                                ✋ Desliza | 🤏 Pellizca | 🔄 Dos dedos para rotar
                             </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Instrucción de gestos disponibles */}
-                    <View style={styles.gestureHint}>
-                        <Text style={styles.gestureHintText}>
-                            ✋ Desliza para mover | 🤏 Pellizca para escalar
-                        </Text>
-                    </View>
+                        </Animated.View>
+                    )}
                 </>
             )}
 
@@ -245,6 +380,25 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         fontSize: 14,
     },
+    toggleControlsButton: {
+        position: 'absolute',
+        bottom: 40,
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: 'rgba(91, 60, 240, 0.9)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 8,
+        shadowColor: '#5B3CF0',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+    },
+    toggleControlsButtonActive: {
+        backgroundColor: '#FF4444',
+    },
     // Panel de control
     controlPanel: {
         position: 'absolute',
@@ -293,13 +447,13 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 40,
         left: 20,
-        right: 20,
+        right: 90,
         flexDirection: 'row',
         gap: 10,
         justifyContent: 'center',
     },
     selectorButton: {
-        width: 80,
+        flex: 1,
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         borderWidth: 2,
         borderColor: '#5B3CF0',
@@ -327,17 +481,20 @@ const styles = StyleSheet.create({
     // Hint de gestos
     gestureHint: {
         position: 'absolute',
-        bottom: 120,
+        bottom: 110,
         alignSelf: 'center',
-        backgroundColor: 'rgba(91, 60, 240, 0.7)',
+        backgroundColor: 'rgba(91, 60, 240, 0.85)',
         borderRadius: 12,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        maxWidth: '85%',
+        elevation: 4,
     },
     gestureHintText: {
         color: '#fff',
         fontSize: 12,
         fontWeight: '500',
+        textAlign: 'center',
     },
     closeButton: {
         position: 'absolute',

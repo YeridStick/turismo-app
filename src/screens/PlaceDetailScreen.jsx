@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { Image } from 'expo-image';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,17 +7,25 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  Image,
+  useWindowDimensions,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
+import { BREAKPOINTS } from '../utils/responsive';
 
 const { width } = Dimensions.get('window');
 
+const IMAGE_PLACEHOLDER =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
+
 const PlaceDetailScreen = ({ route, navigation }) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const isSmall = windowWidth < BREAKPOINTS.medium;
   const { place } = route.params;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const galleryHeight = useMemo(() => (isSmall ? 200 : 220), [isSmall]);
+  const mapHeight = useMemo(() => (isSmall ? 200 : 240), [isSmall]);
 
   // Imágenes de ejemplo (en producción vendrían del lugar)
   const images = place.images || [
@@ -55,7 +64,7 @@ const PlaceDetailScreen = ({ route, navigation }) => {
 
       <ScrollView style={styles.content}>
         {/* Galería de imágenes */}
-        <View style={styles.galleryContainer}>
+        <View style={[styles.galleryContainer, { height: galleryHeight }]}>
           <ScrollView
             horizontal
             pagingEnabled
@@ -67,8 +76,11 @@ const PlaceDetailScreen = ({ route, navigation }) => {
               <Image
                 key={image.id || index}
                 source={{ uri: image.uri }}
-                style={styles.image}
-                resizeMode="cover"
+                style={[styles.image, { width: windowWidth, height: galleryHeight }]}
+                contentFit="cover"
+                cachePolicy="disk"
+                placeholder={IMAGE_PLACEHOLDER}
+                transition={200}
               />
             ))}
           </ScrollView>
@@ -105,7 +117,7 @@ const PlaceDetailScreen = ({ route, navigation }) => {
           {/* Mapa interactivo */}
           <View style={styles.mapSection}>
             <Text style={styles.sectionTitle}>Ubicación</Text>
-            <View style={styles.mapContainer}>
+            <View style={[styles.mapContainer, { height: mapHeight }]}>
               <MapView
                 style={styles.map}
                 initialRegion={coordinates}
@@ -171,12 +183,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   galleryContainer: {
-    height: 300,
+    height: 220,
     position: 'relative',
   },
   image: {
     width: width,
-    height: 300,
+    height: '100%',
   },
   pagination: {
     position: 'absolute',
@@ -206,6 +218,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.sm,
+    lineHeight: FONT_SIZES.xxl + 4,
   },
   infoRow: {
     flexDirection: 'row',
@@ -221,7 +234,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
-    lineHeight: 24,
+    lineHeight: 26,
     marginBottom: SPACING.lg,
   },
   mapSection: {
@@ -234,7 +247,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   mapContainer: {
-    height: 250,
+    height: 220,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
@@ -252,6 +265,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: SPACING.lg,
     gap: SPACING.sm,
+    minHeight: 48,
   },
   actionButtonText: {
     color: COLORS.white,

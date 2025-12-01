@@ -1,3 +1,5 @@
+import { responsiveFont } from './responsive';
+
 export const COLORS = {
   primary: '#FF6B6B',
   secondary: '#4ECDC4',
@@ -11,7 +13,8 @@ export const COLORS = {
   border: '#E0E0E0',
 };
 
-export const SPACING = {
+export const SPACING_STEPS = {
+  base: 8,
   xs: 4,
   sm: 8,
   md: 16,
@@ -20,13 +23,22 @@ export const SPACING = {
   xxl: 48,
 };
 
+export const SPACING = {
+  xs: SPACING_STEPS.xs,
+  sm: SPACING_STEPS.sm,
+  md: SPACING_STEPS.md,
+  lg: SPACING_STEPS.lg,
+  xl: SPACING_STEPS.xl,
+  xxl: SPACING_STEPS.xxl,
+};
+
 export const FONT_SIZES = {
-  xs: 12,
-  sm: 14,
-  md: 16,
-  lg: 18,
-  xl: 24,
-  xxl: 32,
+  xs: responsiveFont(12),
+  sm: responsiveFont(14),
+  md: responsiveFont(16),
+  lg: responsiveFont(18),
+  xl: responsiveFont(24),
+  xxl: responsiveFont(32),
 };
 
 export const CATEGORIES = [
