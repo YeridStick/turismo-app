@@ -5,6 +5,7 @@ import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -64,57 +65,98 @@ const Card = React.memo(
     cardWidth,
     imageHeight,
   }) => {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }, []);
+
+    const handlePressIn = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 0.95,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const handlePressOut = () => {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 3,
+        tension: 40,
+        useNativeDriver: true,
+      }).start();
+    };
+
     return (
-      <Pressable
-        style={[
-          styles.card,
-          variant === 'compact' && styles.cardCompact,
-          variant === 'wide' && styles.cardWide,
-          variant === 'compact' && cardWidth ? { width: cardWidth } : null,
-          variant === 'wide' && cardWidth ? { width: cardWidth } : null,
-        ]}
-        onPress={onPress}
+      <Animated.View
+        style={{
+          transform: [{ scale: scaleAnim }],
+          opacity: fadeAnim,
+        }}
       >
-        {image ? (
-          <View style={styles.cardImageWrapper}>
-            <Image
-              source={{ uri: image }}
-              style={[styles.cardImage, imageHeight ? { height: imageHeight } : null]}
-              contentFit="cover"
-              cachePolicy="disk"
-              placeholder={IMAGE_PLACEHOLDER}
-              transition={200}
-            />
-            <View style={styles.cardTopRow}>
-              <Text style={styles.cardBadge}>{badge || 'Destino'}</Text>
-              <TouchableOpacity style={styles.cardBookmark} onPress={onPress}>
-                <Text style={styles.bookmarkIcon}>S</Text>
-              </TouchableOpacity>
+        <Pressable
+          style={[
+            styles.card,
+            variant === 'compact' && styles.cardCompact,
+            variant === 'wide' && styles.cardWide,
+            variant === 'compact' && cardWidth ? { width: cardWidth } : null,
+            variant === 'wide' && cardWidth ? { width: cardWidth } : null,
+          ]}
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
+          {image ? (
+            <View style={styles.cardImageWrapper}>
+              <Image
+                source={{ uri: image }}
+                style={[styles.cardImage, imageHeight ? { height: imageHeight } : null]}
+                contentFit="cover"
+                cachePolicy="disk"
+                placeholder={IMAGE_PLACEHOLDER}
+                transition={200}
+              />
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardBadge}>
+                  <Text style={styles.cardBadgeText}>{badge || 'Destino'}</Text>
+                </View>
+                <TouchableOpacity style={styles.cardBookmark} onPress={onPress}>
+                  <Text style={styles.bookmarkIcon}>♥</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.cardRating}>
+                <Text style={styles.cardRatingText}>★ {rating || '4.5'}</Text>
+              </View>
             </View>
-            <View style={styles.cardRating}>
-              <Text style={styles.cardRatingText}>* {rating || '4.5'}</Text>
+          ) : null}
+          <View style={styles.cardBody}>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {title}
+              </Text>
+              {distance ? <Text style={styles.cardDistance}>{distance}</Text> : null}
             </View>
+            {subtitle ? (
+              <Text style={styles.cardSubtitle} numberOfLines={2}>
+                {subtitle}
+              </Text>
+            ) : null}
+            {meta ? (
+              <View style={styles.cardMetaRow}>
+                <Text style={styles.cardMetaIcon}>📍</Text>
+                <Text style={styles.cardMeta} numberOfLines={1}>
+                  {meta}
+                </Text>
+              </View>
+            ) : null}
           </View>
-        ) : null}
-        <View style={styles.cardBody}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {title}
-            </Text>
-            {distance ? <Text style={styles.cardDistance}>{distance}</Text> : null}
-          </View>
-          {subtitle ? (
-            <Text style={styles.cardSubtitle} numberOfLines={2}>
-              {subtitle}
-            </Text>
-          ) : null}
-          {meta ? (
-            <Text style={styles.cardMeta} numberOfLines={1}>
-              {meta}
-            </Text>
-          ) : null}
-        </View>
-      </Pressable>
+        </Pressable>
+      </Animated.View>
     );
   }
 );
@@ -193,11 +235,11 @@ const Footer = () => {
 };
 
 const HomeScreen = ({ navigation }) => {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
-  const cardCompactWidth = isSmall ? 200 : 220;
-  const cardWideWidth = isSmall ? 230 : 260;
-  const detailImageHeight = isSmall ? 200 : 240;
+  const cardCompactWidth = isSmall ? 260 : 300;
+  const cardWideWidth = isSmall ? 280 : 340;
+  const detailImageHeight = windowHeight * 0.65;
 
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
@@ -217,7 +259,9 @@ const HomeScreen = ({ navigation }) => {
   const [coords, setCoords] = useState(null);
   const [imageIndex, setImageIndex] = useState(0);
   const [arVisible, setArVisible] = useState(false);
+  const [showDetailInfo, setShowDetailInfo] = useState(false);
   const imageListRef = useRef(null);
+  const slideUpAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadAll();
@@ -355,7 +399,7 @@ const HomeScreen = ({ navigation }) => {
           cardWidth={
             variant === 'compact' ? cardCompactWidth : variant === 'wide' ? cardWideWidth : undefined
           }
-          imageHeight={variant === 'compact' ? 120 : 160}
+          imageHeight={variant === 'compact' ? 200 : 240}
         />
       );
     },
@@ -367,6 +411,17 @@ const HomeScreen = ({ navigation }) => {
     return <Text style={styles.empty}>No hay lugares aún.</Text>;
   }, [loadingAll]);
 
+  const toggleDetailInfo = () => {
+    const toValue = showDetailInfo ? 0 : 1;
+    setShowDetailInfo(!showDetailInfo);
+    Animated.spring(slideUpAnim, {
+      toValue,
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const renderImages = useCallback(
     (images) => {
       if (!images?.length) return null;
@@ -377,7 +432,7 @@ const HomeScreen = ({ navigation }) => {
       });
 
       return (
-        <View style={styles.sliderContainer}>
+        <View style={[styles.sliderContainer, { height: detailImageHeight }]}>
           <FlatList
             ref={imageListRef}
             horizontal
@@ -386,14 +441,33 @@ const HomeScreen = ({ navigation }) => {
             data={images}
             keyExtractor={(uri, idx) => `${uri}-${idx}`}
             renderItem={({ item }) => (
-              <Image
-                source={{ uri: item }}
-                style={[styles.detailImage, { width: windowWidth, height: detailImageHeight }]}
-                contentFit="cover"
-                cachePolicy="disk"
-                placeholder={IMAGE_PLACEHOLDER}
-                transition={200}
-              />
+              <View style={{ width: windowWidth, height: detailImageHeight }}>
+                <Image
+                  source={{ uri: item }}
+                  style={[styles.detailImage, { width: windowWidth, height: detailImageHeight }]}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  placeholder={IMAGE_PLACEHOLDER}
+                  transition={200}
+                />
+                {/* Información sencilla sobre la imagen */}
+                <View style={styles.imageInfoOverlay}>
+                  <View style={styles.imageInfoTop}>
+                    <View style={styles.imageBadge}>
+                      <Text style={styles.imageBadgeText}>{selectedPlace?.categoryName || 'Destino'}</Text>
+                    </View>
+                    <Text style={styles.imageCounter}>{imageIndex + 1}/{images.length}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.moreInfoButton}
+                    onPress={toggleDetailInfo}
+                  >
+                    <Text style={styles.moreInfoText}>
+                      {showDetailInfo ? '▼ Ocultar detalles' : '▲ Ver más detalles'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
             getItemLayout={getItemLayout}
             windowSize={3}
@@ -434,10 +508,51 @@ const HomeScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           ) : null}
+
+          {/* Panel de información detallada deslizable */}
+          <Animated.View
+            style={[
+              styles.detailInfoPanel,
+              {
+                transform: [
+                  {
+                    translateY: slideUpAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [300, 0],
+                    }),
+                  },
+                ],
+                opacity: slideUpAnim,
+              },
+            ]}
+          >
+            <View style={styles.detailInfoContent}>
+              <Text style={styles.detailInfoTitle}>{selectedPlace?.name}</Text>
+              <Text style={styles.detailInfoDescription}>
+                {selectedPlace?.description || 'Sin descripción disponible'}
+              </Text>
+              <View style={styles.detailInfoStats}>
+                <View style={styles.detailInfoStat}>
+                  <Text style={styles.detailInfoStatIcon}>⭐</Text>
+                  <Text style={styles.detailInfoStatText}>{selectedPlace?.rating || '4.5'}</Text>
+                </View>
+                <View style={styles.detailInfoStat}>
+                  <Text style={styles.detailInfoStatIcon}>📍</Text>
+                  <Text style={styles.detailInfoStatText}>{selectedPlace?.city || selectedPlace?.province || 'Huila'}</Text>
+                </View>
+                {selectedPlace?.distanceMeters && (
+                  <View style={styles.detailInfoStat}>
+                    <Text style={styles.detailInfoStatIcon}>🚶</Text>
+                    <Text style={styles.detailInfoStatText}>{selectedPlace.distanceMeters.toFixed(0)} m</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Animated.View>
         </View>
       );
     },
-    [detailImageHeight, imageIndex, windowWidth]
+    [detailImageHeight, imageIndex, windowWidth, showDetailInfo, slideUpAnim, selectedPlace]
   );
 
   const mapUrl = selectedPlace?.lat && selectedPlace?.lng
@@ -522,13 +637,12 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.locationLabel}>Explora</Text>
               <Text style={styles.locationValue}>Cerca de ti</Text>
             </View>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=200&q=60',
-              }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={() => {/* TODO: Navigate to login */}}
+            >
+              <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+            </TouchableOpacity>
           </View>
 
 
@@ -855,12 +969,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: COLORS.white,
+  loginButton: {
+    backgroundColor: '#5B3CF0',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 20,
+    shadowColor: '#5B3CF0',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  loginButtonText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: FONT_SIZES.sm,
   },
   tabBar: {
     flexDirection: 'row',
@@ -1092,23 +1215,22 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: COLORS.white,
-    padding: SPACING.md,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    padding: SPACING.lg,
+    borderRadius: 24,
+    borderWidth: 0,
+    shadowColor: '#5B3CF0',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
     overflow: 'hidden',
   },
   cardCompact: {
-    width: 220,
+    width: 300,
     marginBottom: 0,
   },
   cardWide: {
-    width: 260,
+    width: 340,
   },
   cardImageWrapper: {
     position: 'relative',
@@ -1116,39 +1238,48 @@ const styles = StyleSheet.create({
   },
   cardImage: {
     width: '100%',
-    height: 140,
-    borderRadius: 12,
-    marginBottom: SPACING.sm,
+    height: 200,
+    borderRadius: 16,
+    marginBottom: SPACING.md,
     backgroundColor: COLORS.border,
   },
   cardTopRow: {
     position: 'absolute',
-    top: SPACING.sm,
-    left: SPACING.sm,
-    right: SPACING.sm,
+    top: SPACING.md,
+    left: SPACING.md,
+    right: SPACING.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   cardBadge: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(91, 60, 240, 0.9)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: 16,
+    backdropFilter: 'blur(10px)',
+  },
+  cardBadgeText: {
     color: COLORS.white,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: 12,
     fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
   },
   cardBookmark: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   bookmarkIcon: {
     color: '#E94057',
-    fontWeight: '700',
+    fontSize: FONT_SIZES.lg,
   },
   cardRating: {
     position: 'absolute',
@@ -1164,23 +1295,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cardBody: {
-    gap: 4,
+    gap: SPACING.xs,
   },
   cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: SPACING.xs,
+    marginBottom: SPACING.xs,
   },
   cardTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: 'bold',
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '800',
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    flex: 1,
   },
   cardSubtitle: {
     color: COLORS.textLight,
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.md,
+    lineHeight: 22,
   },
   cardDistance: {
     color: '#5B3CF0',
@@ -1191,10 +1324,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  cardMetaIcon: {
+    fontSize: FONT_SIZES.md,
+  },
   cardMeta: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textLight,
-    marginBottom: SPACING.xs,
+    flex: 1,
   },
   chipRow: {
     gap: SPACING.sm,
@@ -1612,6 +1753,109 @@ const styles = StyleSheet.create({
   qrImage: {
     width: 180,
     height: 180,
+  },
+  imageInfoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+    padding: SPACING.lg,
+  },
+  imageInfoTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  imageBadge: {
+    backgroundColor: 'rgba(91, 60, 240, 0.95)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 20,
+    backdropFilter: 'blur(10px)',
+  },
+  imageBadgeText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+  },
+  imageCounter: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 20,
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+  },
+  moreInfoButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: 25,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  moreInfoText: {
+    color: '#5B3CF0',
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+  },
+  detailInfoPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -5 },
+    elevation: 10,
+  },
+  detailInfoContent: {
+    padding: SPACING.xl,
+    gap: SPACING.md,
+  },
+  detailInfoTitle: {
+    fontSize: FONT_SIZES.xxl,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  detailInfoDescription: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textLight,
+    lineHeight: 24,
+  },
+  detailInfoStats: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  detailInfoStat: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: '#F7F8FD',
+    padding: SPACING.md,
+    borderRadius: 16,
+  },
+  detailInfoStatIcon: {
+    fontSize: FONT_SIZES.xl,
+  },
+  detailInfoStatText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.text,
+    flex: 1,
   },
 });
 
