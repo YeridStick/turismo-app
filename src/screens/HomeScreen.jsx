@@ -36,7 +36,31 @@ import { formatDistance } from '../utils/utils';
 const screenWidth = Dimensions.get('window').width;
 const IMAGE_PLACEHOLDER =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
-const distanceOptions = [1, 2, 5, 10, 20, 50];
+const MAX_DISTANCE_KM = 100; // Fácil de subir si se requiere más radio máximo
+const distanceOptions = [1, 2, 5, 10, 20, 50, MAX_DISTANCE_KM];
+const fallbackCenter = { latitude: 2.9386, longitude: -75.2811 }; // Centro de respaldo para evitar coords vacías
+
+const isSameCoords = (a, b, tolerance = 0.000001) => {
+  if (!a || !b) return false;
+  return (
+    Math.abs(a.latitude - b.latitude) < tolerance &&
+    Math.abs(a.longitude - b.longitude) < tolerance
+  );
+};
+
+const distanceBetweenMeters = (from, to) => {
+  if (!from || !to) return Infinity;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const lat1 = toRad(from.latitude);
+  const lat2 = toRad(to.latitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
 const categoriesList = [
   { id: 'todos', name: 'Todos' },
   { id: 1, name: 'Mirador' },
@@ -315,6 +339,8 @@ const HomeScreen = ({ navigation }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [coords, setCoords] = useState(null);
+  const [nearbyCache, setNearbyCache] = useState({ radiusKm: 0, coords: null, data: [], categoryId: null });
+  const [maxDistanceKm, setMaxDistanceKm] = useState(MAX_DISTANCE_KM);
   const [imageIndex, setImageIndex] = useState(0);
   const [arVisible, setArVisible] = useState(false);
   const [showDetailInfo, setShowDetailInfo] = useState(false);
@@ -327,12 +353,12 @@ const HomeScreen = ({ navigation }) => {
     loadPopular();
   }, []);
 
-  // Load nearby places when distance changes
+  // Load nearby places when distance or category changes
   useEffect(() => {
     if (coords) {
       loadNearby();
     }
-  }, [distanceKm]);
+  }, [distanceKm, selectedCategory]);
 
   const loadAll = async () => {
     setLoadingAll(true);
@@ -446,16 +472,64 @@ const HomeScreen = ({ navigation }) => {
         setLoadingNearby(false);
         return;
       }
-      setCoords(coordsData);
+      if (!isSameCoords(coords, coordsData)) {
+        setCoords(coordsData);
+      }
+
+      const categoryId =
+        selectedCategory !== 'todos' ? Number(selectedCategory) : null;
+
+      // Si ya tenemos un radio mayor en caché y mismas coords/categoría, filtramos sin pedir a la API
+      const sameCoords =
+        nearbyCache.coords &&
+        Math.abs(nearbyCache.coords.latitude - coordsData.latitude) < 0.0001 &&
+        Math.abs(nearbyCache.coords.longitude - coordsData.longitude) < 0.0001;
+      const cacheCategory = nearbyCache.categoryId ?? null;
+      const canReuseCategory = cacheCategory === categoryId;
+
+      const targetRadiusMeters = distanceKm * 1000;
+
+      if (
+        sameCoords &&
+        canReuseCategory &&
+        nearbyCache.radiusKm >= distanceKm &&
+        nearbyCache.data.length
+      ) {
+        const filtered = nearbyCache.data.filter((p) => {
+          const withinDistance =
+            typeof p.distanceMeters === 'number'
+              ? p.distanceMeters <= targetRadiusMeters
+              : p.lat && p.lng
+                ? distanceBetweenMeters(coordsData, { latitude: p.lat, longitude: p.lng }) <= targetRadiusMeters
+                : false;
+          const withinCategory =
+            categoryId == null ? true : Number(p.categoryId) === Number(categoryId);
+          return withinDistance && withinCategory;
+        });
+
+        // Si el filtrado deja 0 resultados, reconsultamos para no mostrar vacío por un cache viejo
+        if (filtered.length > 0) {
+          setNearby(filtered);
+          return;
+        }
+      }
+
       const params = {
         lat: coordsData.latitude,
         lng: coordsData.longitude,
-        radiusMeters: distanceKm * 1000,
+        radiusMeters: targetRadiusMeters,
         limit: 12,
+        categoryId: categoryId ?? undefined,
       };
       const response = await api.get(ENDPOINTS.PLACES_NEARBY, { params });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setNearby(data);
+      setNearbyCache({
+        radiusKm: distanceKm,
+        coords: coordsData,
+        data,
+        categoryId,
+      });
     } catch (err) {
       setError('No se pudo cargar lugares cercanos.');
     } finally {
@@ -469,12 +543,12 @@ const HomeScreen = ({ navigation }) => {
 
   const filteredNearby = useMemo(() => {
     if (selectedCategory === 'todos') return nearby;
-    return nearby.filter((item) => item.categoryId === selectedCategory);
+    return nearby.filter((item) => Number(item.categoryId) === Number(selectedCategory));
   }, [nearby, selectedCategory]);
 
   const filteredRecommended = useMemo(() => {
     if (selectedCategory === 'todos') return recommended;
-    return recommended.filter((item) => item.categoryId === selectedCategory);
+    return recommended.filter((item) => Number(item.categoryId) === Number(selectedCategory));
   }, [recommended, selectedCategory]);
 
   const openDetail = useCallback(async (item) => {
@@ -842,7 +916,20 @@ const HomeScreen = ({ navigation }) => {
                 Lugares cercanos ({distanceKm.toFixed(1)} km)
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setShowMap(true)}>
+            <TouchableOpacity
+              onPress={async () => {
+                // Asegura coords antes de abrir el mapa; si falla, usa fallback
+                if (!coords) {
+                  const loc = await ensureLocation();
+                  if (loc) {
+                    setCoords(loc);
+                  } else {
+                    setCoords(fallbackCenter);
+                  }
+                }
+                setShowMap(true);
+              }}
+            >
               <Text style={styles.sectionLink}>Ver mapa</Text>
             </TouchableOpacity>
           </View>
@@ -957,7 +1044,7 @@ const HomeScreen = ({ navigation }) => {
               <Slider
                 style={{ width: '100%', height: 40, marginTop: SPACING.sm }}
                 minimumValue={1}
-                maximumValue={50}
+                maximumValue={maxDistanceKm}
                 step={0.5}
                 minimumTrackTintColor="#7B5BFF"
                 maximumTrackTintColor={COLORS.border}
@@ -965,7 +1052,7 @@ const HomeScreen = ({ navigation }) => {
                 value={distanceKm}
                 onValueChange={setDistanceKm}
               />
-              <Text style={styles.sliderValue}>Radio personalizado: {distanceKm.toFixed(1)} km</Text>
+              <Text style={styles.sliderValue}>Radio personalizado: {distanceKm.toFixed(1)} km (máx {maxDistanceKm} km)</Text>
 
               <Text style={styles.modalHint}>
                 Ajusta la distancia para refinar lugares cercanos. Las categorías se seleccionan arriba.
@@ -1087,48 +1174,66 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.mapCloseText}>×</Text>
             </TouchableOpacity>
           </View>
-          {coords ? (
+          {(() => {
+            const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
+              ? coords
+              : fallbackCenter;
+            const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
+            if (!hasCoords) return null;
+            const delta = Math.max(distanceKm / 111, 0.02);
+            return (
             <MapView
               style={styles.map}
               initialRegion={{
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-                latitudeDelta: distanceKm / 111, // Approximate conversion to degrees
-                longitudeDelta: distanceKm / 111,
+                latitude: center.latitude,
+                longitude: center.longitude,
+                latitudeDelta: delta, // Approximate conversion to degrees
+                longitudeDelta: delta,
               }}
               showsUserLocation
               showsMyLocationButton
             >
               {/* Circle showing search radius */}
-              <Circle
-                center={{
-                  latitude: coords.latitude,
-                  longitude: coords.longitude,
-                }}
-                radius={distanceKm * 1000} // Convert km to meters
-                strokeColor="rgba(123, 91, 255, 0.5)"
-                fillColor="rgba(123, 91, 255, 0.1)"
-                strokeWidth={2}
-              />
+              {coords &&
+                Number.isFinite(coords.latitude) &&
+                Number.isFinite(coords.longitude) && (
+                  <Circle
+                    center={{
+                      latitude: coords.latitude,
+                      longitude: coords.longitude,
+                    }}
+                    radius={distanceKm * 1000} // Convert km to meters
+                    strokeColor="rgba(123, 91, 255, 0.5)"
+                    fillColor="rgba(123, 91, 255, 0.1)"
+                    strokeWidth={2}
+                  />
+                )}
 
               {/* Markers for nearby places */}
-              {filteredNearby.map((place) => (
-                <Marker
-                  key={place.id}
-                  coordinate={{
-                    latitude: place.lat,
-                    longitude: place.lng,
-                  }}
-                  title={place.name}
-                  description={place.description}
-                  onCalloutPress={() => {
-                    setShowMap(false);
-                    openDetail(place);
-                  }}
-                />
-              ))}
+              {filteredNearby
+                .filter(
+                  (place) =>
+                    Number.isFinite(place?.lat) &&
+                    Number.isFinite(place?.lng)
+                )
+                .map((place) => (
+                  <Marker
+                    key={place.id}
+                    coordinate={{
+                      latitude: place.lat,
+                      longitude: place.lng,
+                    }}
+                    title={place.name}
+                    description={place.description}
+                    onCalloutPress={() => {
+                      setShowMap(false);
+                      openDetail(place);
+                    }}
+                  />
+                ))}
             </MapView>
-          ) : (
+            );
+          })() || (
             <View style={styles.mapEmptyState}>
               <ActivityIndicator size="large" color={COLORS.primary} />
               <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>

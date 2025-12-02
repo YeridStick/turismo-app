@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import ARScreen from '../screens/ARScreen';
 import HomeScreen from '../screens/HomeScreen';
+import MapScreen from '../screens/MapScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -12,6 +13,7 @@ const AppNavigator = () => (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="ARView" component={ARScreen} />
+      <Stack.Screen name="Map" component={MapScreen} />
     </Stack.Navigator>
   </NavigationContainer>
 );
