@@ -24,14 +24,7 @@ import {
   View,
   useWindowDimensions
 } from 'react-native';
-// Import MapView only on native platforms (iOS/Android)
-let MapView, Marker, Circle;
-if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  MapView = maps.default;
-  Marker = maps.Marker;
-  Circle = maps.Circle;
-}
+// Map components are now loaded dynamically.
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
@@ -324,6 +317,20 @@ const Footer = () => {
 
 const HomeScreen = ({ navigation }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [MapComponents, setMapComponents] = useState({ MapView: null, Marker: null, Circle: null });
+  const { MapView, Marker, Circle } = MapComponents;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      import('react-native-maps').then((module) => {
+        setMapComponents({
+          MapView: module.default,
+          Marker: module.Marker,
+          Circle: module.Circle,
+        });
+      });
+    }
+  }, []);
   const isSmall = windowWidth < BREAKPOINTS.medium;
   const cardCompactWidth = Math.min(windowWidth - SPACING.lg * 1.5, isSmall ? windowWidth - SPACING.md * 2 : 420);
   const cardWideWidth = isSmall ? 280 : 340;
@@ -923,22 +930,24 @@ const HomeScreen = ({ navigation }) => {
                 Lugares cercanos ({distanceKm.toFixed(1)} km)
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={async () => {
-                // Asegura coords antes de abrir el mapa; si falla, usa fallback
-                if (!coords) {
-                  const loc = await ensureLocation();
-                  if (loc) {
-                    setCoords(loc);
-                  } else {
-                    setCoords(fallbackCenter);
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity
+                onPress={async () => {
+                  // Asegura coords antes de abrir el mapa; si falla, usa fallback
+                  if (!coords) {
+                    const loc = await ensureLocation();
+                    if (loc) {
+                      setCoords(loc);
+                    } else {
+                      setCoords(fallbackCenter);
+                    }
                   }
-                }
-                setShowMap(true);
-              }}
-            >
-              <Text style={styles.sectionLink}>Ver mapa</Text>
-            </TouchableOpacity>
+                  setShowMap(true);
+                }}
+              >
+                <Text style={styles.sectionLink}>Ver mapa</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.paddingLeft}>
@@ -1181,64 +1190,77 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.mapCloseText}>×</Text>
             </TouchableOpacity>
           </View>
-          {coords ? (
-            <MapView
-              style={styles.map}
-              initialRegion={{
-                latitude: center.latitude,
-                longitude: center.longitude,
-                latitudeDelta: delta, // Approximate conversion to degrees
-                longitudeDelta: delta,
-              }}
-              showsUserLocation
-              showsMyLocationButton
-            >
-              {/* Circle showing search radius */}
-              {coords &&
-                Number.isFinite(coords.latitude) &&
-                Number.isFinite(coords.longitude) && (
-                  <Circle
-                    center={{
-                      latitude: coords.latitude,
-                      longitude: coords.longitude,
-                    }}
-                    radius={distanceKm * 1000} // Convert km to meters
-                    strokeColor="rgba(123, 91, 255, 0.5)"
-                    fillColor="rgba(123, 91, 255, 0.1)"
-                    strokeWidth={2}
-                  />
-                )}
-
-              {/* Markers for nearby places */}
-              {filteredNearby
-                .filter(
-                  (place) =>
-                    Number.isFinite(place?.lat) &&
-                    Number.isFinite(place?.lng)
-                )
-                .map((place) => (
-                  <Marker
-                    key={place.id}
-                    coordinate={{
-                      latitude: place.lat,
-                      longitude: place.lng,
-                    }}
-                    title={place.name}
-                    description={place.description}
-                    onCalloutPress={() => {
-                      setShowMap(false);
-                      openDetail(place);
-                    }}
-                  />
-                ))}
-            </MapView>
-            );
-          })() || (
-            <View style={styles.mapEmptyState}>
-              <ActivityIndicator size="large" color={COLORS.primary} />
-              <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
-            </View>
-          )}
+          {Platform.OS === 'web'
+            ? <View style={styles.mapEmptyState}>
+                <Text style={styles.mapEmptyText}>El mapa no está disponible en la versión web.</Text>
+              </View>
+            : (MapView && Marker && Circle) ? (() => {
+                const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
+                  ? coords
+                  : fallbackCenter;
+                const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
+                if (!hasCoords) {
+                    return (
+                        <View style={styles.mapEmptyState}>
+                            <ActivityIndicator size="large" color={COLORS.primary} />
+                            <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
+                        </View>
+                    );
+                }
+                const delta = Math.max(distanceKm / 111, 0.02);
+                return (
+                <MapView
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: center.latitude,
+                    longitude: center.longitude,
+                    latitudeDelta: delta,
+                    longitudeDelta: delta,
+                  }}
+                  showsUserLocation
+                  showsMyLocationButton
+                >
+                  {Circle && coords &&
+                    Number.isFinite(coords.latitude) &&
+                    Number.isFinite(coords.longitude) && (
+                      <Circle
+                        center={coords}
+                        radius={distanceKm * 1000}
+                        strokeColor="rgba(123, 91, 255, 0.5)"
+                        fillColor="rgba(123, 91, 255, 0.1)"
+                        strokeWidth={2}
+                      />
+                    )}
+                  {Marker && filteredNearby
+                    .filter(
+                      (place) =>
+                        Number.isFinite(place?.lat) &&
+                        Number.isFinite(place?.lng)
+                    )
+                    .map((place) => (
+                      <Marker
+                        key={place.id}
+                        coordinate={{
+                          latitude: place.lat,
+                          longitude: place.lng,
+                        }}
+                        title={place.name}
+                        description={place.description}
+                        onCalloutPress={() => {
+                          setShowMap(false);
+                          openDetail(place);
+                        }}
+                      />
+                    ))}
+                </MapView>
+                );
+              })()
+            : (
+              <View style={styles.mapEmptyState}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={styles.mapEmptyText}>Cargando mapa...</Text>
+              </View>
+            )}
         </View>
       </Modal>
 
