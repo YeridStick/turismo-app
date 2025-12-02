@@ -20,7 +20,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions
+  useWindowDimensions,
+  ImageBackground
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
@@ -92,7 +93,51 @@ const Card = React.memo(
       }).start();
     };
 
-    return (
+    const renderCompact = () => (
+      <Pressable
+        style={[styles.popularCard, cardWidth ? { width: cardWidth } : null]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <Animated.View
+          style={{
+            transform: [{ scale: scaleAnim }],
+            opacity: fadeAnim,
+          }}
+        >
+          <ImageBackground
+            source={{ uri: image || IMAGE_PLACEHOLDER }}
+            style={styles.popularImage}
+            imageStyle={styles.popularImageRadius}
+          >
+            <View style={styles.popularFadeLayerOne} pointerEvents="none" />
+            <View style={styles.popularFadeLayerTwo} pointerEvents="none" />
+            <View style={styles.popularFadeLayerThree} pointerEvents="none" />
+            <View style={styles.popularTopRow}>
+              <View style={[styles.cardRating, styles.popularRating]}>
+                <Text style={styles.cardRatingText}>★ {rating || '4.5'}</Text>
+              </View>
+            </View>
+            <View style={styles.popularTextBlock}>
+              <Text style={styles.popularTitle} numberOfLines={2}>
+                {title}
+              </Text>
+              {meta ? (
+                <View style={styles.popularMetaRow}>
+                  <FontAwesome name="map-marker" size={FONT_SIZES.md} color={COLORS.white} />
+                  <Text style={styles.popularMeta} numberOfLines={1}>
+                    {meta}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </ImageBackground>
+        </Animated.View>
+      </Pressable>
+    );
+
+    const renderDefault = () => (
       <Animated.View
         style={{
           transform: [{ scale: scaleAnim }],
@@ -125,9 +170,6 @@ const Card = React.memo(
                 <View style={styles.cardBadge}>
                   <Text style={styles.cardBadgeText}>{badge || 'Destino'}</Text>
                 </View>
-                <TouchableOpacity style={styles.cardBookmark} onPress={onPress}>
-                  <Text style={styles.bookmarkIcon}>♥</Text>
-                </TouchableOpacity>
               </View>
               <View style={styles.cardRating}>
                 <Text style={styles.cardRatingText}>★ {rating || '4.5'}</Text>
@@ -148,7 +190,7 @@ const Card = React.memo(
             ) : null}
             {meta ? (
               <View style={styles.cardMetaRow}>
-                <Text style={styles.cardMetaIcon}>📍</Text>
+                <FontAwesome name="map-marker" size={FONT_SIZES.md} color={COLORS.textLight} />
                 <Text style={styles.cardMeta} numberOfLines={1}>
                   {meta}
                 </Text>
@@ -158,6 +200,11 @@ const Card = React.memo(
         </Pressable>
       </Animated.View>
     );
+
+    if (variant === 'compact') {
+      return renderCompact();
+    }
+    return renderDefault();
   }
 );
 
@@ -237,7 +284,7 @@ const Footer = () => {
 const HomeScreen = ({ navigation }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
-  const cardCompactWidth = isSmall ? 260 : 300;
+  const cardCompactWidth = Math.min(windowWidth - SPACING.lg * 1.5, isSmall ? windowWidth - SPACING.md * 2 : 420);
   const cardWideWidth = isSmall ? 280 : 340;
   const detailImageHeight = windowHeight * 0.65;
 
@@ -537,7 +584,7 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.detailInfoStatText}>{selectedPlace?.rating || '4.5'}</Text>
                 </View>
                 <View style={styles.detailInfoStat}>
-                  <Text style={styles.detailInfoStatIcon}>📍</Text>
+                  <FontAwesome name="map-marker" size={FONT_SIZES.lg} color={COLORS.text} />
                   <Text style={styles.detailInfoStatText}>{selectedPlace?.city || selectedPlace?.province || 'Huila'}</Text>
                 </View>
                 {selectedPlace?.distanceMeters && (
@@ -716,7 +763,7 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
+          <View style={[styles.sectionHeader, styles.sectionText]}>
             <View>
               <Text style={styles.sectionTag}>Destinos Populares</Text>
               <Text style={styles.sectionTitle}>Desliza para inspirarte</Text>
@@ -751,8 +798,10 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTag}>Catálogo</Text>
-          <Text style={styles.sectionTitle}>Todos los lugares</Text>
+          <View style={styles.sectionText}>
+            <Text style={styles.sectionTag}>Catálogo</Text>
+            <Text style={styles.sectionTitle}>Todos los lugares</Text>
+          </View>
           {loadingAll ? (
             <ActivityIndicator color={COLORS.primary} style={styles.loader} />
           ) : (
@@ -948,8 +997,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F5FB',
   },
   pageHeader: {
-    padding: SPACING.lg,
     paddingTop: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
     backgroundColor: '#E9EDFF',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
@@ -1071,11 +1121,6 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: 18,
     gap: SPACING.sm,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
   },
   searchRow: {
     flexDirection: 'row',
@@ -1174,13 +1219,16 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
   },
   section: {
-    padding: SPACING.lg,
+    paddingVertical: SPACING.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: SPACING.md,
+  },
+  sectionText: {
+    paddingHorizontal: SPACING.lg,
   },
   sectionTag: {
     alignSelf: 'flex-start',
@@ -1218,11 +1266,6 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     borderRadius: 24,
     borderWidth: 0,
-    shadowColor: '#5B3CF0',
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
     overflow: 'hidden',
   },
   cardCompact: {
@@ -1335,6 +1378,89 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textLight,
+    flex: 1,
+  },
+  popularCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    height: 360,
+    backgroundColor: COLORS.border,
+  },
+  popularImage: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'flex-end',
+  },
+  popularImageRadius: {
+    borderRadius: 24,
+  },
+  popularFadeLayerOne: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '65%',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  popularFadeLayerTwo: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '45%',
+    backgroundColor: 'rgba(0,0,0,0.32)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  popularFadeLayerThree: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '30%',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  popularTopRow: {
+    position: 'absolute',
+    top: SPACING.md,
+    left: SPACING.md,
+    right: SPACING.md,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  popularRating: {
+    position: 'relative',
+    bottom: undefined,
+    left: undefined,
+    right: 0,
+    top: 0,
+  },
+  popularTextBlock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.xs,
+  },
+  popularTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '800',
+  },
+  popularMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  popularMeta: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
     flex: 1,
   },
   chipRow: {
