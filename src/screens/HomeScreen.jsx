@@ -24,6 +24,7 @@ import {
   View,
   useWindowDimensions
 } from 'react-native';
+import MapView, { Marker, Circle } from 'react-native-maps';
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
@@ -301,6 +302,7 @@ const HomeScreen = ({ navigation }) => {
   const [nearby, setNearby] = useState([]);
   const [popular, setPopular] = useState([]);
   const [recommended, setRecommended] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
   const [loadingAll, setLoadingAll] = useState(true);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [error, setError] = useState('');
@@ -316,6 +318,7 @@ const HomeScreen = ({ navigation }) => {
   const [imageIndex, setImageIndex] = useState(0);
   const [arVisible, setArVisible] = useState(false);
   const [showDetailInfo, setShowDetailInfo] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const imageListRef = useRef(null);
   const slideUpAnim = useRef(new Animated.Value(0)).current;
 
@@ -323,6 +326,13 @@ const HomeScreen = ({ navigation }) => {
     loadAll();
     loadPopular();
   }, []);
+
+  // Load nearby places when distance changes
+  useEffect(() => {
+    if (coords) {
+      loadNearby();
+    }
+  }, [distanceKm]);
 
   const loadAll = async () => {
     setLoadingAll(true);
@@ -368,18 +378,18 @@ const HomeScreen = ({ navigation }) => {
         }
       }
 
-      // Load nearby places for popular section
+      // Load nearby places with user's current distance preference
       const response = await api.get(ENDPOINTS.PLACES_NEARBY, {
         params: {
           lat: coordsData.latitude,
           lng: coordsData.longitude,
-          radiusMeters: 10000, // 10km radius for popular nearby places
+          radiusMeters: distanceKm * 1000, // Use user's distance preference
           limit: 20,
         },
       });
 
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPopular(data);
+      setNearby(data); // Save to nearby instead of popular
     } catch (err) {
       setError('No se pudo cargar lugares populares.');
     }
@@ -414,7 +424,11 @@ const HomeScreen = ({ navigation }) => {
         },
       });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPopular(data); // Show all filtered results
+      setSearchResults(data); // Save search results separately
+      // Also refresh nearby places with current distance
+      if (coordsData) {
+        loadNearby();
+      }
     } catch (err) {
       setError('No se pudo realizar la búsqueda.');
     } finally {
@@ -453,10 +467,10 @@ const HomeScreen = ({ navigation }) => {
     await Promise.all([loadAll(), loadPopular()]);
   };
 
-  const filteredPopular = useMemo(() => {
-    if (selectedCategory === 'todos') return popular;
-    return popular.filter((item) => item.categoryId === selectedCategory);
-  }, [popular, selectedCategory]);
+  const filteredNearby = useMemo(() => {
+    if (selectedCategory === 'todos') return nearby;
+    return nearby.filter((item) => item.categoryId === selectedCategory);
+  }, [nearby, selectedCategory]);
 
   const filteredRecommended = useMemo(() => {
     if (selectedCategory === 'todos') return recommended;
@@ -824,19 +838,29 @@ const HomeScreen = ({ navigation }) => {
           <View style={[styles.sectionHeader, styles.sectionText]}>
             <View>
               <Text style={styles.sectionTag}>Destinos Populares</Text>
-              <Text style={styles.sectionTitle}>Desliza para inspirarte</Text>
+              <Text style={styles.sectionTitle}>
+                Lugares cercanos ({distanceKm.toFixed(1)} km)
+              </Text>
             </View>
-            <Text style={styles.sectionLink}>Ver todo</Text>
+            <TouchableOpacity onPress={() => setShowMap(true)}>
+              <Text style={styles.sectionLink}>Ver mapa</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.paddingLeft}>
-            {loadingAll ? (
+            {loadingNearby ? (
               <ActivityIndicator color={COLORS.primary} style={styles.loader} />
+            ) : filteredNearby.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  No hay lugares cercanos en este radio. Prueba aumentar la distancia.
+                </Text>
+              </View>
             ) : (
               <FlatList
                 horizontal
-                data={filteredPopular}
-                keyExtractor={(item, idx) => `${item.id || idx}-popular`}
+                data={filteredNearby}
+                keyExtractor={(item, idx) => `${item.id || idx}-nearby`}
                 renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.horizontalList}
@@ -1048,6 +1072,71 @@ const HomeScreen = ({ navigation }) => {
           )}
         </ScrollView>
       </Modal>
+
+      {/* Modal mapa de lugares cercanos */}
+      <Modal visible={showMap} animationType="slide" onRequestClose={() => setShowMap(false)}>
+        <View style={styles.mapContainer}>
+          <View style={styles.mapHeader}>
+            <View>
+              <Text style={styles.mapTitle}>Lugares Cercanos</Text>
+              <Text style={styles.mapSubtitle}>
+                {filteredNearby.length} lugares en {distanceKm.toFixed(1)} km
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.mapCloseButton} onPress={() => setShowMap(false)}>
+              <Text style={styles.mapCloseText}>×</Text>
+            </TouchableOpacity>
+          </View>
+          {coords ? (
+            <MapView
+              style={styles.map}
+              initialRegion={{
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                latitudeDelta: distanceKm / 111, // Approximate conversion to degrees
+                longitudeDelta: distanceKm / 111,
+              }}
+              showsUserLocation
+              showsMyLocationButton
+            >
+              {/* Circle showing search radius */}
+              <Circle
+                center={{
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                }}
+                radius={distanceKm * 1000} // Convert km to meters
+                strokeColor="rgba(123, 91, 255, 0.5)"
+                fillColor="rgba(123, 91, 255, 0.1)"
+                strokeWidth={2}
+              />
+
+              {/* Markers for nearby places */}
+              {filteredNearby.map((place) => (
+                <Marker
+                  key={place.id}
+                  coordinate={{
+                    latitude: place.lat,
+                    longitude: place.lng,
+                  }}
+                  title={place.name}
+                  description={place.description}
+                  onCalloutPress={() => {
+                    setShowMap(false);
+                    openDetail(place);
+                  }}
+                />
+              ))}
+            </MapView>
+          ) : (
+            <View style={styles.mapEmptyState}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
+            </View>
+          )}
+        </View>
+      </Modal>
+
       {renderArWebView()}
     </KeyboardAvoidingView>
   );
@@ -2031,6 +2120,68 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
     flex: 1,
+  },
+  // Map modal styles
+  mapContainer: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+  },
+  mapHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    paddingTop: Platform.OS === 'ios' ? SPACING.xxl * 2 : SPACING.xl,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  mapTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  mapSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textLight,
+    marginTop: 4,
+  },
+  mapCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mapCloseText: {
+    fontSize: 30,
+    fontWeight: '300',
+    color: COLORS.text,
+  },
+  map: {
+    flex: 1,
+  },
+  mapEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  mapEmptyText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textLight,
+    marginTop: SPACING.md,
+  },
+  emptyContainer: {
+    padding: SPACING.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textLight,
+    textAlign: 'center',
   },
 });
 
