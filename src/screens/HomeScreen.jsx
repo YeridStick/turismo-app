@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -8,6 +9,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  ImageBackground,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -20,8 +22,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useWindowDimensions,
-  ImageBackground
+  useWindowDimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
@@ -111,9 +112,11 @@ const Card = React.memo(
             style={styles.popularImage}
             imageStyle={styles.popularImageRadius}
           >
-            <View style={styles.popularFadeLayerOne} pointerEvents="none" />
-            <View style={styles.popularFadeLayerTwo} pointerEvents="none" />
-            <View style={styles.popularFadeLayerThree} pointerEvents="none" />
+            <LinearGradient
+              colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.8)']}
+              style={styles.popularFade}
+              pointerEvents="none"
+            />
             <View style={styles.popularTopRow}>
               <View style={[styles.cardRating, styles.popularRating]}>
                 <Text style={styles.cardRatingText}>★ {rating || '4.5'}</Text>
@@ -686,7 +689,7 @@ const HomeScreen = ({ navigation }) => {
             </View>
             <TouchableOpacity
               style={styles.loginButton}
-              onPress={() => {/* TODO: Navigate to login */}}
+              onPress={() => {/* TODO: Navigate to login */ }}
             >
               <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
             </TouchableOpacity>
@@ -771,30 +774,32 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.sectionLink}>Ver todo</Text>
           </View>
 
-          {loadingAll ? (
-            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
-          ) : (
-            <FlatList
-              horizontal
-              data={filteredPopular}
-              keyExtractor={(item, idx) => `${item.id || idx}-popular`}
-              renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              snapToInterval={cardCompactWidth + SPACING.md}
-              decelerationRate="fast"
-              snapToAlignment="start"
-              getItemLayout={(_, index) => ({
-                length: cardCompactWidth + SPACING.md,
-                offset: (cardCompactWidth + SPACING.md) * index,
-                index,
-              })}
-              windowSize={5}
-              maxToRenderPerBatch={5}
-              initialNumToRender={6}
-              removeClippedSubviews
-            />
-          )}
+          <View style={styles.paddingLeft}>
+            {loadingAll ? (
+              <ActivityIndicator color={COLORS.primary} style={styles.loader} />
+            ) : (
+              <FlatList
+                horizontal
+                data={filteredPopular}
+                keyExtractor={(item, idx) => `${item.id || idx}-popular`}
+                renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+                snapToInterval={cardCompactWidth + SPACING.md}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                getItemLayout={(_, index) => ({
+                  length: cardCompactWidth + SPACING.md,
+                  offset: (cardCompactWidth + SPACING.md) * index,
+                  index,
+                })}
+                windowSize={5}
+                maxToRenderPerBatch={5}
+                initialNumToRender={6}
+                removeClippedSubviews
+              />
+            )}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -809,25 +814,25 @@ const HomeScreen = ({ navigation }) => {
               {emptyState}
               <FlatList
                 horizontal
-              data={places}
-              keyExtractor={(item, idx) => `${item.id || idx}-all`}
-              renderItem={({ item }) => renderPlace({ item, variant: 'wide' })}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              snapToInterval={cardWideWidth + SPACING.md}
-              decelerationRate="fast"
-              snapToAlignment="start"
-              getItemLayout={(_, index) => ({
-                length: cardWideWidth + SPACING.md,
-                offset: (cardWideWidth + SPACING.md) * index,
-                index,
-              })}
-              windowSize={5}
-              maxToRenderPerBatch={5}
-              initialNumToRender={6}
-              removeClippedSubviews
-            />
-          </>
+                data={places}
+                keyExtractor={(item, idx) => `${item.id || idx}-all`}
+                renderItem={({ item }) => renderPlace({ item, variant: 'wide' })}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+                snapToInterval={cardWideWidth + SPACING.md}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                getItemLayout={(_, index) => ({
+                  length: cardWideWidth + SPACING.md,
+                  offset: (cardWideWidth + SPACING.md) * index,
+                  index,
+                })}
+                windowSize={5}
+                maxToRenderPerBatch={5}
+                initialNumToRender={6}
+                removeClippedSubviews
+              />
+            </>
           )}
         </View>
         <Footer />
@@ -1117,10 +1122,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   searchCard: {
-    backgroundColor: COLORS.white,
-    padding: SPACING.md,
-    borderRadius: 18,
+    padding: 0,
+    borderRadius: 0,
     gap: SPACING.sm,
+    backgroundColor: 'transparent',
   },
   searchRow: {
     flexDirection: 'row',
@@ -1249,6 +1254,9 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     color: COLORS.textLight,
     marginBottom: SPACING.md,
+  },
+  paddingLeft: {
+    paddingLeft: SPACING.md,
   },
   loader: {
     marginTop: SPACING.md,
@@ -1394,33 +1402,12 @@ const styles = StyleSheet.create({
   popularImageRadius: {
     borderRadius: 24,
   },
-  popularFadeLayerOne: {
+  popularFade: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: '65%',
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  popularFadeLayerTwo: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '45%',
-    backgroundColor: 'rgba(0,0,0,0.32)',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  popularFadeLayerThree: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '30%',
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    height: '70%',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
