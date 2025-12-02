@@ -807,10 +807,11 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.sectionTag}>Catálogo</Text>
             <Text style={styles.sectionTitle}>Todos los lugares</Text>
           </View>
+
           {loadingAll ? (
             <ActivityIndicator color={COLORS.primary} style={styles.loader} />
           ) : (
-            <>
+            <View style={styles.paddingLeft}>
               {emptyState}
               <FlatList
                 horizontal
@@ -832,9 +833,10 @@ const HomeScreen = ({ navigation }) => {
                 initialNumToRender={6}
                 removeClippedSubviews
               />
-            </>
+            </View>
           )}
         </View>
+
         <Footer />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </ScrollView>
