@@ -24,14 +24,7 @@ import {
   View,
   useWindowDimensions
 } from 'react-native';
-// Import MapView only on native platforms (iOS/Android)
-let MapView, Marker, Circle;
-if (Platform.OS !== 'web') {
-  const maps = require('react-native-maps');
-  MapView = maps.default;
-  Marker = maps.Marker;
-  Circle = maps.Circle;
-}
+import { MapView, Marker, Circle } from '../components/Map';
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
@@ -1094,17 +1087,7 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.mapCloseText}>×</Text>
             </TouchableOpacity>
           </View>
-          {Platform.OS === 'web' ? (
-            <View style={styles.mapEmptyState}>
-              <FontAwesome name="map" size={64} color={COLORS.textLight} />
-              <Text style={styles.mapEmptyText}>
-                El mapa interactivo no está disponible en web.
-              </Text>
-              <Text style={[styles.mapEmptyText, { marginTop: SPACING.sm }]}>
-                Usa la app móvil para ver lugares cercanos en el mapa.
-              </Text>
-            </View>
-          ) : coords && MapView ? (
+          {coords ? (
             <MapView
               style={styles.map}
               initialRegion={{
