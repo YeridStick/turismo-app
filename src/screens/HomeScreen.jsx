@@ -321,13 +321,29 @@ const HomeScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadAll();
+    loadPopular();
   }, []);
 
   const loadAll = async () => {
     setLoadingAll(true);
     setError('');
     try {
-      // Try to get location for proximity-based results
+      // Always load ALL places for the "Todos los lugares" section
+      const response = await api.get(ENDPOINTS.PLACES_ALL);
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setPlaces(data);
+      setRecommended(data.slice(6, 20)); // Show items 7-20 in recommended
+    } catch (err) {
+      setError('No se pudo cargar el catálogo.');
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
+  const loadPopular = async () => {
+    setError('');
+    try {
+      // Get location for nearby places
       let coordsData = coords;
       if (!coordsData) {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -337,35 +353,35 @@ const HomeScreen = ({ navigation }) => {
             coordsData = loc.coords;
             setCoords(coordsData);
           } catch (err) {
-            // Location failed, will use fallback
+            // Location failed, fallback to all places for popular section
+            const response = await api.get(ENDPOINTS.PLACES_ALL);
+            const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+            setPopular(data.slice(0, 10));
+            return;
           }
+        } else {
+          // No location permission, fallback to all places
+          const response = await api.get(ENDPOINTS.PLACES_ALL);
+          const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+          setPopular(data.slice(0, 10));
+          return;
         }
       }
 
-      let response;
-      if (coordsData) {
-        // Use nearby endpoint with large radius for initial load
-        response = await api.get(ENDPOINTS.PLACES_NEARBY, {
-          params: {
-            lat: coordsData.latitude,
-            lng: coordsData.longitude,
-            radiusMeters: 50000, // 50km radius
-            limit: 100,
-          },
-        });
-      } else {
-        // Fallback to all places
-        response = await api.get(ENDPOINTS.PLACES_ALL);
-      }
+      // Load nearby places for popular section
+      const response = await api.get(ENDPOINTS.PLACES_NEARBY, {
+        params: {
+          lat: coordsData.latitude,
+          lng: coordsData.longitude,
+          radiusMeters: 10000, // 10km radius for popular nearby places
+          limit: 20,
+        },
+      });
 
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPlaces(data);
-      setPopular(data); // Show all results in popular section
-      setRecommended(data.slice(6, 20)); // Show items 7-20 in recommended
+      setPopular(data);
     } catch (err) {
-      setError('No se pudo cargar el catálogo.');
-    } finally {
-      setLoadingAll(false);
+      setError('No se pudo cargar lugares populares.');
     }
   };
 
@@ -431,6 +447,10 @@ const HomeScreen = ({ navigation }) => {
     } finally {
       setLoadingNearby(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    await Promise.all([loadAll(), loadPopular()]);
   };
 
   const filteredPopular = useMemo(() => {
@@ -713,7 +733,7 @@ const HomeScreen = ({ navigation }) => {
   return (
     <KeyboardAvoidingView style={styles.container} behavior="height">
       <ScrollView
-        refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={loadAll} />}
+        refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={handleRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.pageHeader}>
