@@ -319,22 +319,46 @@ const HomeScreen = ({ navigation }) => {
   const imageListRef = useRef(null);
   const slideUpAnim = useRef(new Animated.Value(0)).current;
 
+  // Cache para todos los lugares (evita múltiples llamadas al backend)
+  const cachedPlacesRef = useRef(null);
+  const cacheTimestampRef = useRef(null);
+  const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutos de caché
+
   useEffect(() => {
     loadAll();
     loadPopular();
   }, []);
 
-  const loadAll = async () => {
+  const loadAll = async (forceRefresh = false) => {
     setLoadingAll(true);
     setError('');
     try {
-      // Always load ALL places for the "Todos los lugares" section
-      const response = await api.get(ENDPOINTS.PLACES_ALL);
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPlaces(data);
-      setRecommended(data.slice(6, 20)); // Show items 7-20 in recommended
+      // Verificar si hay caché válido
+      const now = Date.now();
+      const cacheAge = cacheTimestampRef.current ? now - cacheTimestampRef.current : Infinity;
+
+      if (!forceRefresh && cachedPlacesRef.current && cacheAge < CACHE_DURATION_MS) {
+        // Usar datos del caché
+        console.log('📦 Usando caché de lugares (edad:', Math.round(cacheAge / 1000), 'segundos)');
+        setPlaces(cachedPlacesRef.current);
+        setRecommended(cachedPlacesRef.current.slice(6, 20));
+      } else {
+        // Hacer llamada al backend y actualizar caché
+        console.log('🌐 Cargando todos los lugares desde el backend...');
+        const response = await api.get(ENDPOINTS.PLACES_ALL);
+        const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+
+        // Actualizar caché
+        cachedPlacesRef.current = data;
+        cacheTimestampRef.current = now;
+
+        setPlaces(data);
+        setRecommended(data.slice(6, 20));
+        console.log('✅ Caché actualizado con', data.length, 'lugares');
+      }
     } catch (err) {
       setError('No se pudo cargar el catálogo.');
+      console.error('❌ Error cargando lugares:', err);
     } finally {
       setLoadingAll(false);
     }
@@ -343,7 +367,8 @@ const HomeScreen = ({ navigation }) => {
   const loadPopular = async () => {
     setError('');
     try {
-      // Get location for nearby places
+      // SIEMPRE llama al backend (necesita calcular distancias con ubicación actual)
+      // NO usa caché porque las distancias dependen de la ubicación del usuario
       let coordsData = coords;
       if (!coordsData) {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -399,6 +424,8 @@ const HomeScreen = ({ navigation }) => {
     setLoadingAll(true);
     setError('');
     try {
+      // SIEMPRE llama al backend para búsqueda aproximada/fuzzy
+      // NO usa caché porque necesita búsqueda en tiempo real del servidor
       let coordsData = coords;
       if (!coordsData && distanceKm > 0) {
         coordsData = await ensureLocation();
@@ -450,7 +477,8 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleRefresh = async () => {
-    await Promise.all([loadAll(), loadPopular()]);
+    // Forzar actualización (ignorar caché) en pull-to-refresh
+    await Promise.all([loadAll(true), loadPopular()]);
   };
 
   const filteredPopular = useMemo(() => {
