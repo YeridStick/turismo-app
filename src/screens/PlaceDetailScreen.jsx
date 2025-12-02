@@ -8,8 +8,15 @@ import {
   TouchableOpacity,
   Dimensions,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+// Import MapView only on native platforms (iOS/Android)
+let MapView, Marker;
+if (Platform.OS !== 'web') {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+}
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
@@ -118,21 +125,33 @@ const PlaceDetailScreen = ({ route, navigation }) => {
           <View style={styles.mapSection}>
             <Text style={styles.sectionTitle}>Ubicación</Text>
             <View style={[styles.mapContainer, { height: mapHeight }]}>
-              <MapView
-                style={styles.map}
-                initialRegion={coordinates}
-                scrollEnabled={true}
-                zoomEnabled={true}
-              >
-                <Marker
-                  coordinate={{
-                    latitude: coordinates.latitude,
-                    longitude: coordinates.longitude,
-                  }}
-                  title={place.name}
-                  description={place.address}
-                />
-              </MapView>
+              {Platform.OS === 'web' ? (
+                <View style={styles.webMapPlaceholder}>
+                  <Ionicons name="map-outline" size={48} color={COLORS.textLight} />
+                  <Text style={styles.webMapText}>
+                    El mapa interactivo no está disponible en web
+                  </Text>
+                  <Text style={styles.webMapSubtext}>
+                    Usa la app móvil para ver el mapa
+                  </Text>
+                </View>
+              ) : MapView ? (
+                <MapView
+                  style={styles.map}
+                  initialRegion={coordinates}
+                  scrollEnabled={true}
+                  zoomEnabled={true}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: coordinates.latitude,
+                      longitude: coordinates.longitude,
+                    }}
+                    title={place.name}
+                    description={place.address}
+                  />
+                </MapView>
+              ) : null}
             </View>
           </View>
 
@@ -255,6 +274,26 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  webMapPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    padding: SPACING.lg,
+  },
+  webMapText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+    fontWeight: '600',
+  },
+  webMapSubtext: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
   },
   actionButton: {
     backgroundColor: COLORS.primary,
