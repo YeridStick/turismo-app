@@ -24,7 +24,14 @@ import {
   View,
   useWindowDimensions
 } from 'react-native';
-import MapView, { Marker, Circle } from 'react-native-maps';
+// Import MapView only on native platforms (iOS/Android)
+let MapView, Marker, Circle;
+if (Platform.OS !== 'web') {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+  Circle = maps.Circle;
+}
 import { WebView } from 'react-native-webview';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
@@ -1174,14 +1181,7 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.mapCloseText}>×</Text>
             </TouchableOpacity>
           </View>
-          {(() => {
-            const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
-              ? coords
-              : fallbackCenter;
-            const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
-            if (!hasCoords) return null;
-            const delta = Math.max(distanceKm / 111, 0.02);
-            return (
+          {coords ? (
             <MapView
               style={styles.map}
               initialRegion={{
