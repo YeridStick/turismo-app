@@ -30,6 +30,7 @@ import api from '../services/api';
 import { getPlaceArConfig } from '../services/ar';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
+import { formatDistance } from '../utils/utils';
 
 const screenWidth = Dimensions.get('window').width;
 const IMAGE_PLACEHOLDER =
@@ -184,7 +185,12 @@ const Card = React.memo(
               <Text style={styles.cardTitle} numberOfLines={1}>
                 {title}
               </Text>
-              {distance ? <Text style={styles.cardDistance}>{distance}</Text> : null}
+              {distance ? (
+                <View style={styles.cardDistanceContainer}>
+                  <FontAwesome name="location-arrow" size={FONT_SIZES.sm} color="#5B3CF0" />
+                  <Text style={styles.cardDistance}>{distance}</Text>
+                </View>
+              ) : null}
             </View>
             {subtitle ? (
               <Text style={styles.cardSubtitle} numberOfLines={2}>
@@ -321,11 +327,41 @@ const HomeScreen = ({ navigation }) => {
     setLoadingAll(true);
     setError('');
     try {
-      const response = await api.get(ENDPOINTS.PLACES_ALL);
+      // Try to get location for proximity-based results
+      let coordsData = coords;
+      if (!coordsData) {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          try {
+            const loc = await Location.getCurrentPositionAsync({});
+            coordsData = loc.coords;
+            setCoords(coordsData);
+          } catch (err) {
+            // Location failed, will use fallback
+          }
+        }
+      }
+
+      let response;
+      if (coordsData) {
+        // Use nearby endpoint with large radius for initial load
+        response = await api.get(ENDPOINTS.PLACES_NEARBY, {
+          params: {
+            lat: coordsData.latitude,
+            lng: coordsData.longitude,
+            radiusMeters: 50000, // 50km radius
+            limit: 100,
+          },
+        });
+      } else {
+        // Fallback to all places
+        response = await api.get(ENDPOINTS.PLACES_ALL);
+      }
+
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setPlaces(data);
-      setPopular(data.slice(0, 6));
-      setRecommended(data.slice(6, 12));
+      setPopular(data); // Show all results in popular section
+      setRecommended(data.slice(6, 20)); // Show items 7-20 in recommended
     } catch (err) {
       setError('No se pudo cargar el catálogo.');
     } finally {
@@ -362,7 +398,7 @@ const HomeScreen = ({ navigation }) => {
         },
       });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPopular(data.slice(0, 6));
+      setPopular(data); // Show all filtered results
     } catch (err) {
       setError('No se pudo realizar la búsqueda.');
     } finally {
@@ -430,10 +466,9 @@ const HomeScreen = ({ navigation }) => {
     ({ item, variant = 'full' }) => {
       const image =
         Array.isArray(item.imageUrls) && item.imageUrls.length ? item.imageUrls[0] : null;
-      const distanceText =
-        item.distanceMeters && item.distanceMeters > 0
-          ? `${item.distanceMeters?.toFixed?.(0)} m`
-          : null;
+
+      // Format distance from meters using utility function
+      const distanceText = formatDistance(item.distanceMeters);
 
       return (
         <Card
@@ -1367,6 +1402,11 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: FONT_SIZES.md,
     lineHeight: 22,
+  },
+  cardDistanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   cardDistance: {
     color: '#5B3CF0',
