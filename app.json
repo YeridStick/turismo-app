@@ -9,7 +9,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Necesitamos la cámara para mostrar experiencias de realidad aumentada."
+        "NSCameraUsageDescription": "Necesitamos la cámara para mostrar experiencias de realidad aumentada.",
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrarte sitios turísticos cercanos en el mapa."
       },
       "config": {
         "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
@@ -27,7 +28,9 @@
       "package": "com.yeridstick.turismoapp",
       "permissions": [
         "CAMERA",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "config": {
         "googleMaps": {
@@ -56,6 +59,13 @@
         "@reactvision/react-viro",
         {
           "cameraPermission": "Esta aplicación necesita acceso a la cámara para mostrar realidad aumentada."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permite que $(PRODUCT_NAME) use tu ubicación para mostrarte sitios turísticos cercanos.",
+          "locationWhenInUsePermission": "Permite que $(PRODUCT_NAME) use tu ubicación para mostrarte sitios turísticos cercanos."
         }
       ]
     ],

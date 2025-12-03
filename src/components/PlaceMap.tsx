@@ -1,11 +1,13 @@
 import React from 'react';
 import { Linking, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING } from '../utils/constants';
 
 interface PlaceMapProps {
     visible: boolean;
     onClose: () => void;
     place: {
+        id?: number;
         name?: string;
         lat?: number;
         lng?: number;
@@ -14,6 +16,8 @@ interface PlaceMapProps {
 }
 
 const PlaceMap: React.FC<PlaceMapProps> = ({ visible, onClose, place }) => {
+    const navigation = useNavigation();
+
     if (!place?.lat || !place?.lng) {
         return (
             <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
@@ -32,6 +36,12 @@ const PlaceMap: React.FC<PlaceMapProps> = ({ visible, onClose, place }) => {
 
     // URL de Google Maps
     const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
+
+    const handleOpenFullMap = () => {
+        onClose();
+        // @ts-ignore - navegación de react-navigation
+        navigation.navigate('Map', { placeId: place.id });
+    };
 
     return (
         <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
@@ -60,20 +70,27 @@ const PlaceMap: React.FC<PlaceMapProps> = ({ visible, onClose, place }) => {
                     <View style={styles.divider} />
 
                     <Text style={styles.infoText}>
-                        El mapa interactivo estará disponible en la versión compilada de la app.
+                        Usa el mapa interactivo para ver tu ubicación y explorar sitios cercanos.
                     </Text>
 
                     <TouchableOpacity
                         style={styles.button}
+                        onPress={handleOpenFullMap}
+                    >
+                        <Text style={styles.buttonText}>🗺️ Ver en Mapa Interactivo</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.buttonSecondary}
                         onPress={() => {
                             Linking.openURL(googleMapsUrl);
                         }}
                     >
-                        <Text style={styles.buttonText}>🗺️ Abrir en Google Maps</Text>
+                        <Text style={styles.buttonSecondaryText}>📍 Abrir en Google Maps</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.buttonSecondary} onPress={onClose}>
-                        <Text style={styles.buttonSecondaryText}>Cerrar</Text>
+                    <TouchableOpacity style={styles.buttonTertiary} onPress={onClose}>
+                        <Text style={styles.buttonTertiaryText}>Cerrar</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -171,9 +188,23 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#ddd',
+        borderColor: '#5B3CF0',
     },
     buttonSecondaryText: {
+        color: '#5B3CF0',
+        fontWeight: '600',
+        fontSize: 15,
+    },
+    buttonTertiary: {
+        marginTop: SPACING.sm,
+        backgroundColor: 'transparent',
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#ddd',
+    },
+    buttonTertiaryText: {
         color: COLORS.text,
         fontWeight: '600',
         fontSize: 15,
