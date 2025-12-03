@@ -1,12 +1,22 @@
-import {
-    Viro3DObject,
-    ViroAmbientLight,
-    ViroARScene,
-    ViroARSceneNavigator,
-    ViroOmniLight,
-} from '@reactvision/react-viro';
 import React, { useRef, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { getAREnableInstructions, getARUnavailableReason, isARSupported } from '../utils/PlatformDetector';
+
+// Importación condicional de ViroReact
+let Viro3DObject: any;
+let ViroAmbientLight: any;
+let ViroARScene: any;
+let ViroARSceneNavigator: any;
+let ViroOmniLight: any;
+
+if (isARSupported()) {
+    const ViroModule = require('@reactvision/react-viro');
+    Viro3DObject = ViroModule.Viro3DObject;
+    ViroAmbientLight = ViroModule.ViroAmbientLight;
+    ViroARScene = ViroModule.ViroARScene;
+    ViroARSceneNavigator = ViroModule.ViroARSceneNavigator;
+    ViroOmniLight = ViroModule.ViroOmniLight;
+}
 
 // URL del modelo de prueba
 const TEST_MODEL_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb';
@@ -212,6 +222,20 @@ interface ARViewerProps {
     viewerRef?: any;
 }
 
+// Componente de fallback cuando AR no está soportado
+const ARUnsupportedFallback: React.FC = () => {
+    return (
+        <View style={styles.fallbackContainer}>
+            <View style={styles.fallbackContent}>
+                <Text style={styles.fallbackIcon}>📱</Text>
+                <Text style={styles.fallbackTitle}>AR No Disponible</Text>
+                <Text style={styles.fallbackReason}>{getARUnavailableReason()}</Text>
+                <Text style={styles.fallbackInstructions}>{getAREnableInstructions()}</Text>
+            </View>
+        </View>
+    );
+};
+
 export const ARViewer: React.FC<ARViewerProps> = ({
     modelUrl,
     onModelPlaced,
@@ -219,6 +243,11 @@ export const ARViewer: React.FC<ARViewerProps> = ({
     onModelError,
     viewerRef
 }) => {
+    // Verificar si AR está soportado
+    if (!isARSupported()) {
+        return <ARUnsupportedFallback />;
+    }
+
     // Referencia interna para comunicarse con la escena
     const sceneRef = useRef<any>(null);
 
@@ -274,5 +303,46 @@ export const ARViewer: React.FC<ARViewerProps> = ({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+    },
+    fallbackContainer: {
+        flex: 1,
+        backgroundColor: '#1a1a1a',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    fallbackContent: {
+        backgroundColor: 'rgba(91, 60, 240, 0.1)',
+        borderRadius: 20,
+        padding: 30,
+        alignItems: 'center',
+        maxWidth: 400,
+        borderWidth: 2,
+        borderColor: '#5B3CF0',
+    },
+    fallbackIcon: {
+        fontSize: 64,
+        marginBottom: 20,
+    },
+    fallbackTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#fff',
+        marginBottom: 15,
+        textAlign: 'center',
+    },
+    fallbackReason: {
+        fontSize: 16,
+        color: '#ccc',
+        marginBottom: 20,
+        textAlign: 'center',
+        lineHeight: 24,
+    },
+    fallbackInstructions: {
+        fontSize: 14,
+        color: '#5B3CF0',
+        textAlign: 'center',
+        lineHeight: 22,
+        fontStyle: 'italic',
     },
 });

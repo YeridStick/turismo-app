@@ -346,7 +346,7 @@ const HomeScreen = ({ navigation }) => {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('todos');
-  const [distanceKm, setDistanceKm] = useState(2);
+  const [distanceKm, setDistanceKm] = useState(5); // Aumentado de 2 a 5 km para mostrar más lugares
   const [activeTab, setActiveTab] = useState('places');
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -424,7 +424,7 @@ const HomeScreen = ({ navigation }) => {
           lat: coordsData.latitude,
           lng: coordsData.longitude,
           radiusMeters: distanceKm * 1000, // Use user's distance preference
-          limit: 20,
+          limit: 50, // Aumentado de 20 a 50 para consistencia
         },
       });
 
@@ -532,7 +532,7 @@ const HomeScreen = ({ navigation }) => {
         lat: coordsData.latitude,
         lng: coordsData.longitude,
         radiusMeters: targetRadiusMeters,
-        limit: 12,
+        limit: 50, // Aumentado de 12 a 50 para mostrar más resultados
         categoryId: categoryId ?? undefined,
       };
       const response = await api.get(ENDPOINTS.PLACES_NEARBY, { params });
@@ -1192,23 +1192,23 @@ const HomeScreen = ({ navigation }) => {
           </View>
           {Platform.OS === 'web'
             ? <View style={styles.mapEmptyState}>
-                <Text style={styles.mapEmptyText}>El mapa no está disponible en la versión web.</Text>
-              </View>
+              <Text style={styles.mapEmptyText}>El mapa no está disponible en la versión web.</Text>
+            </View>
             : (MapView && Marker && Circle) ? (() => {
-                const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
-                  ? coords
-                  : fallbackCenter;
-                const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
-                if (!hasCoords) {
-                    return (
-                        <View style={styles.mapEmptyState}>
-                            <ActivityIndicator size="large" color={COLORS.primary} />
-                            <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
-                        </View>
-                    );
-                }
-                const delta = Math.max(distanceKm / 111, 0.02);
+              const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
+                ? coords
+                : fallbackCenter;
+              const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
+              if (!hasCoords) {
                 return (
+                  <View style={styles.mapEmptyState}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
+                  </View>
+                );
+              }
+              const delta = Math.max(distanceKm / 111, 0.02);
+              return (
                 <MapView
                   style={styles.map}
                   initialRegion={{
@@ -1253,14 +1253,14 @@ const HomeScreen = ({ navigation }) => {
                       />
                     ))}
                 </MapView>
-                );
-              })()
-            : (
-              <View style={styles.mapEmptyState}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.mapEmptyText}>Cargando mapa...</Text>
-              </View>
-            )}
+              );
+            })()
+              : (
+                <View style={styles.mapEmptyState}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                  <Text style={styles.mapEmptyText}>Cargando mapa...</Text>
+                </View>
+              )}
         </View>
       </Modal>
 
