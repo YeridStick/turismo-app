@@ -11,9 +11,6 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos la cámara para mostrar experiencias de realidad aumentada.",
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrarte sitios turísticos cercanos en el mapa."
-      },
-      "config": {
-        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
       }
     },
     "android": {
@@ -31,12 +28,7 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
-        }
-      }
+      ]
     },
     "web": {
       "output": "static",
