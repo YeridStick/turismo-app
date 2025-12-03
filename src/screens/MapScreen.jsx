@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { Platform, StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import * as Location from 'expo-location';
 import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 
 const MapScreen = ({ route }) => {
+    const [mapComponents, setMapComponents] = useState({
+        MapView: null,
+        Marker: null,
+        Circle: null,
+    });
     const [userLocation, setUserLocation] = useState(null);
     const [places, setPlaces] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -14,6 +18,24 @@ const MapScreen = ({ route }) => {
 
     // Parámetro opcional: sitio seleccionado desde otra pantalla
     const selectedPlaceId = route?.params?.placeId;
+
+    // Cargar componentes de mapa (solo en móvil)
+    useEffect(() => {
+        if (Platform.OS !== 'web') {
+            import('react-native-maps')
+                .then((mapsModule) => {
+                    setMapComponents({
+                        MapView: mapsModule.default,
+                        Marker: mapsModule.Marker,
+                        Circle: mapsModule.Circle,
+                    });
+                })
+                .catch(error => {
+                    console.error("Error loading map components", error);
+                    Alert.alert('Error', 'No se pudo cargar el mapa');
+                });
+        }
+    }, []);
 
     // Solicitar permisos de ubicación y obtener ubicación del usuario
     useEffect(() => {
@@ -38,6 +60,7 @@ const MapScreen = ({ route }) => {
             } catch (error) {
                 console.error('Error obteniendo ubicación:', error);
                 Alert.alert('Error', 'No se pudo obtener tu ubicación');
+                setLoading(false);
             }
         })();
     }, []);
@@ -123,166 +146,54 @@ const MapScreen = ({ route }) => {
         return distance.toFixed(1);
     };
 
-    // Generar HTML para el mapa con OpenStreetMap y Leaflet
-    const generateMapHTML = () => {
-        const validPlaces = places.filter(p => p.lat && p.lng);
-
-        // Calcular centro del mapa
-        let centerLat = 2.2;
-        let centerLng = -76.3;
-        let zoom = 8;
-
-        if (filterMode === 'selected' && validPlaces.length === 1) {
-            centerLat = validPlaces[0].lat;
-            centerLng = validPlaces[0].lng;
-            zoom = 13;
-        } else if (userLocation) {
-            centerLat = userLocation.latitude;
-            centerLng = userLocation.longitude;
-            zoom = 10;
-        }
-
-        // Crear marcadores JSON
-        const markersData = validPlaces.map(place => {
-            const distance = userLocation
-                ? calculateDistance(userLocation.latitude, userLocation.longitude, place.lat, place.lng)
-                : null;
-
-            return {
-                lat: place.lat,
-                lng: place.lng,
-                name: place.name || 'Sitio turístico',
-                distance: distance,
-                coords: `${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`
-            };
-        });
-
-        return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        #map {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 100%;
-        }
-        .info-box {
-            position: absolute;
-            bottom: 20px;
-            left: 10px;
-            right: 10px;
-            background: white;
-            padding: 12px 16px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            z-index: 1000;
-            font-size: 13px;
-        }
-        .info-title {
-            font-weight: 700;
-            color: #333;
-            margin-bottom: 4px;
-        }
-        .info-text {
-            color: #666;
-            margin: 2px 0;
-        }
-        .info-subtext {
-            color: #999;
-            font-size: 11px;
-            font-style: italic;
-            margin-top: 4px;
-        }
-    </style>
-</head>
-<body>
-    <div id="map"></div>
-    ${userLocation ? `
-    <div class="info-box">
-        <div class="info-title">Tu ubicación:</div>
-        <div class="info-text">📍 ${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}</div>
-        <div class="info-subtext">${validPlaces.length} sitio${validPlaces.length !== 1 ? 's' : ''} ${filterMode === 'nearby' ? 'cercano' : 'mostrado'}${validPlaces.length !== 1 ? 's' : ''}</div>
-    </div>
-    ` : ''}
-
-    <script>
-        // Crear mapa
-        var map = L.map('map').setView([${centerLat}, ${centerLng}], ${zoom});
-
-        // Agregar tiles de OpenStreetMap (gratuito, sin API key)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors',
-            maxZoom: 19
-        }).addTo(map);
-
-        // Marcador de usuario
-        ${userLocation ? `
-        var userIcon = L.divIcon({
-            className: 'user-marker',
-            html: '<div style="background: #5B3CF0; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-        });
-        L.marker([${userLocation.latitude}, ${userLocation.longitude}], {icon: userIcon})
-            .addTo(map)
-            .bindPopup('<b>📍 Tu ubicación</b><br>${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}');
-        ` : ''}
-
-        // Agregar marcadores de sitios
-        var markers = ${JSON.stringify(markersData)};
-        markers.forEach(function(marker) {
-            var popupContent = '<b>' + marker.name + '</b><br>' +
-                               '📍 ' + marker.coords;
-            if (marker.distance) {
-                popupContent += '<br>📏 ' + marker.distance + ' km de distancia';
-            }
-
-            var markerIcon = L.divIcon({
-                className: 'place-marker',
-                html: '<div style="background: ${filterMode === 'selected' ? 'red' : '#5B3CF0'}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>',
-                iconSize: [12, 12],
-                iconAnchor: [6, 6]
-            });
-
-            L.marker([marker.lat, marker.lng], {icon: markerIcon})
-                .addTo(map)
-                .bindPopup(popupContent);
-        });
-
-        // Círculo de 50km en modo cercanos
-        ${filterMode === 'nearby' && userLocation ? `
-        L.circle([${userLocation.latitude}, ${userLocation.longitude}], {
-            color: 'rgba(91, 60, 240, 0.5)',
-            fillColor: 'rgba(91, 60, 240, 0.1)',
-            fillOpacity: 0.3,
-            radius: 50000
-        }).addTo(map);
-        ` : ''}
-    </script>
-</body>
-</html>
-        `;
-    };
-
-    if (loading) {
+    if (Platform.OS === 'web') {
         return (
-            <View style={styles.loadingContainer}>
+            <View style={[styles.container, { padding: 24, justifyContent: 'center' }]}>
+                <Text style={{ fontWeight: '700', marginBottom: 8 }}>Mapa no disponible en web.</Text>
+                <Text>Usa la app móvil para ver el mapa interactivo.</Text>
+            </View>
+        );
+    }
+
+    const { MapView, Marker, Circle } = mapComponents;
+
+    if (!MapView || loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center' }]}>
                 <ActivityIndicator size="large" color="#5B3CF0" />
                 <Text style={styles.loadingText}>Cargando mapa...</Text>
             </View>
         );
     }
+
+    // Determinar la región inicial del mapa
+    const getInitialRegion = () => {
+        if (filterMode === 'selected' && places.length === 1) {
+            // Centrar en el sitio seleccionado
+            return {
+                latitude: places[0].lat || 2.2,
+                longitude: places[0].lng || -76.3,
+                latitudeDelta: 0.1,
+                longitudeDelta: 0.1,
+            };
+        } else if (userLocation) {
+            // Centrar en la ubicación del usuario
+            return {
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
+                latitudeDelta: 0.5,
+                longitudeDelta: 0.5,
+            };
+        } else {
+            // Vista general de la región
+            return {
+                latitude: 2.2,
+                longitude: -76.3,
+                latitudeDelta: 1.5,
+                longitudeDelta: 1.5,
+            };
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -318,31 +229,75 @@ const MapScreen = ({ route }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Mapa usando WebView con OpenStreetMap */}
-            <WebView
+            {/* Mapa nativo - iOS usa Apple Maps, Android usa mapa por defecto (sin API key) */}
+            <MapView
                 style={styles.map}
-                originWhitelist={['*']}
-                source={{ html: generateMapHTML() }}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                startInLoadingState={true}
-                renderLoading={() => (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#5B3CF0" />
-                    </View>
+                initialRegion={getInitialRegion()}
+                showsUserLocation={locationPermission}
+                showsMyLocationButton={locationPermission}
+                showsCompass={true}
+                showsScale={true}
+            >
+                {/* Marcadores de sitios turísticos */}
+                {places.map(place => {
+                    if (!place.lat || !place.lng) return null;
+
+                    const distance = userLocation
+                        ? calculateDistance(userLocation.latitude, userLocation.longitude, place.lat, place.lng)
+                        : null;
+
+                    return (
+                        <Marker
+                            key={place.id}
+                            coordinate={{
+                                latitude: place.lat,
+                                longitude: place.lng,
+                            }}
+                            title={place.name}
+                            description={
+                                distance
+                                    ? `📍 ${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}\n📏 ${distance} km de distancia`
+                                    : `📍 ${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`
+                            }
+                            pinColor={filterMode === 'selected' ? 'red' : '#5B3CF0'}
+                        />
+                    );
+                })}
+
+                {/* Círculo alrededor de la ubicación del usuario (solo en modo cercanos) */}
+                {userLocation && filterMode === 'nearby' && Circle && (
+                    <Circle
+                        center={userLocation}
+                        radius={50000} // 50km
+                        strokeColor="rgba(91, 60, 240, 0.5)"
+                        fillColor="rgba(91, 60, 240, 0.1)"
+                    />
                 )}
-            />
+            </MapView>
+
+            {/* Info de ubicación actual */}
+            {userLocation && (
+                <View style={styles.infoContainer}>
+                    <Text style={styles.infoTitle}>Tu ubicación:</Text>
+                    <Text style={styles.infoText}>
+                        📍 {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}
+                    </Text>
+                    <Text style={styles.infoSubtext}>
+                        {places.length} sitio{places.length !== 1 ? 's' : ''} {filterMode === 'nearby' ? 'cercano' : 'mostrado'}{places.length !== 1 ? 's' : ''}
+                    </Text>
+                </View>
+            )}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
+        ...StyleSheet.absoluteFillObject,
         flex: 1,
-        backgroundColor: '#F3F5FB',
     },
     map: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
     },
     filterContainer: {
         position: 'absolute',
@@ -351,7 +306,7 @@ const styles = StyleSheet.create({
         right: 10,
         flexDirection: 'row',
         justifyContent: 'space-around',
-        zIndex: 1000,
+        zIndex: 1,
         backgroundColor: 'transparent',
     },
     filterButton: {
@@ -389,6 +344,36 @@ const styles = StyleSheet.create({
         marginTop: 10,
         fontSize: 14,
         color: '#666',
+    },
+    infoContainer: {
+        position: 'absolute',
+        bottom: 20,
+        left: 10,
+        right: 10,
+        backgroundColor: 'white',
+        padding: 16,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    infoTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#333',
+        marginBottom: 4,
+    },
+    infoText: {
+        fontSize: 13,
+        color: '#666',
+        marginBottom: 2,
+    },
+    infoSubtext: {
+        fontSize: 12,
+        color: '#999',
+        fontStyle: 'italic',
     },
 });
 
