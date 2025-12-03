@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 const WebViewMap = ({
@@ -11,132 +11,11 @@ const WebViewMap = ({
     onMapReady = () => { }
 }) => {
     const webViewRef = useRef(null);
-
-    // Generate HTML for the map
-    const mapHTML = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>
-            body, html {
-                margin: 0;
-                padding: 0;
-                height: 100%;
-                width: 100%;
-            }
-            #map {
-                height: 100%;
-                width: 100%;
-            }
-        </style>
-    </head>
-    <body>
-        <div id="map"></div>
-        <script>
-            // Initialize the map
-            const map = L.map('map', {
-                zoomControl: true,
-                attributionControl: true
-            }).setView(
-                [${initialRegion.latitude}, ${initialRegion.longitude}], 
-                ${calculateZoomLevel(initialRegion.latitudeDelta)}
-            );
-
-            // Add OpenStreetMap tiles
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(map);
-
-            // Store markers and circles
-            let markersLayer = L.layerGroup().addTo(map);
-            let circleLayer = null;
-            let userMarker = null;
-
-            // Function to update markers
-            function updateMarkers(markersData) {
-                markersLayer.clearLayers();
-                
-                markersData.forEach(marker => {
-                    const m = L.marker([marker.latitude, marker.longitude])
-                        .bindPopup(\`
-                            <strong>\${marker.title}</strong><br>
-                            \${marker.description || ''}
-                        \`);
-                    markersLayer.addLayer(m);
-                });
-            }
-
-            // Function to update user location
-            function updateUserLocation(lat, lng) {
-                if (userMarker) {
-                    map.removeLayer(userMarker);
-                }
-                
-                const userIcon = L.divIcon({
-                    className: 'user-location-marker',
-                    html: '<div style="background: #4285F4; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>',
-                    iconSize: [22, 22],
-                    iconAnchor: [11, 11]
-                });
-                
-                userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
-            }
-
-            // Function to update circle
-            function updateCircle(lat, lng, radius, show) {
-                if (circleLayer) {
-                    map.removeLayer(circleLayer);
-                    circleLayer = null;
-                }
-                
-                if (show) {
-                    circleLayer = L.circle([lat, lng], {
-                        radius: radius,
-                        color: 'rgba(0, 122, 255, 0.5)',
-                        fillColor: 'rgba(0, 122, 255, 0.1)',
-                        fillOpacity: 0.2,
-                        weight: 2
-                    }).addTo(map);
-                }
-            }
-
-            // Listen for messages from React Native
-            window.addEventListener('message', function(event) {
-                const data = JSON.parse(event.data);
-                
-                if (data.type === 'UPDATE_MARKERS') {
-                    updateMarkers(data.markers);
-                }
-                
-                if (data.type === 'UPDATE_USER_LOCATION') {
-                    updateUserLocation(data.latitude, data.longitude);
-                }
-                
-                if (data.type === 'UPDATE_CIRCLE') {
-                    updateCircle(data.latitude, data.longitude, data.radius, data.show);
-                }
-                
-                if (data.type === 'FIT_BOUNDS') {
-                    const bounds = L.latLngBounds(data.bounds);
-                    map.fitBounds(bounds, { padding: [50, 50] });
-                }
-            });
-
-            // Notify React Native that map is ready
-            setTimeout(() => {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'MAP_READY' }));
-            }, 500);
-        </script>
-    </body>
-    </html>
-    `;
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     // Calculate zoom level from latitudeDelta
-    function calculateZoomLevel(latitudeDelta) {
+    const calculateZoomLevel = (latitudeDelta) => {
         if (latitudeDelta >= 10) return 6;
         if (latitudeDelta >= 5) return 7;
         if (latitudeDelta >= 2) return 8;
@@ -146,21 +25,280 @@ const WebViewMap = ({
         if (latitudeDelta >= 0.1) return 12;
         if (latitudeDelta >= 0.05) return 13;
         return 14;
-    }
+    };
+
+    // Generate HTML for the map with OpenStreetMap
+    const mapHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>OpenStreetMap</title>
+
+        <!-- Leaflet CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+              integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+              crossorigin="anonymous"/>
+
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body, html {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                width: 100%;
+                overflow: hidden;
+            }
+            #map {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100%;
+                height: 100%;
+                background-color: #E5E3DF;
+            }
+            #loading {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                font-family: Arial, sans-serif;
+                z-index: 9999;
+            }
+            .leaflet-tile {
+                image-rendering: -webkit-optimize-contrast;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="loading">Cargando mapa...</div>
+        <div id="map"></div>
+
+        <!-- Leaflet JS -->
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+                integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+                crossorigin="anonymous"></script>
+
+        <script>
+            // Console log wrapper for React Native
+            function log(message) {
+                console.log('[WebViewMap] ' + message);
+                try {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'LOG',
+                        message: message
+                    }));
+                } catch(e) {}
+            }
+
+            // Error handler
+            window.onerror = function(msg, url, line, col, error) {
+                const errorMsg = 'Error: ' + msg + ' at ' + url + ':' + line;
+                log(errorMsg);
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'ERROR',
+                    message: errorMsg
+                }));
+                return false;
+            };
+
+            log('Iniciando carga del mapa...');
+
+            // Wait for Leaflet to be loaded
+            function initMap() {
+                try {
+                    if (typeof L === 'undefined') {
+                        log('Leaflet no está cargado, reintentando...');
+                        setTimeout(initMap, 100);
+                        return;
+                    }
+
+                    log('Leaflet cargado, inicializando mapa...');
+
+                    // Hide loading indicator
+                    const loadingDiv = document.getElementById('loading');
+                    if (loadingDiv) loadingDiv.style.display = 'none';
+
+                    // Initialize the map
+                    const map = L.map('map', {
+                        zoomControl: true,
+                        attributionControl: true,
+                        preferCanvas: true
+                    }).setView(
+                        [${initialRegion.latitude}, ${initialRegion.longitude}],
+                        ${calculateZoomLevel(initialRegion.latitudeDelta)}
+                    );
+
+                    log('Mapa inicializado en [${initialRegion.latitude}, ${initialRegion.longitude}]');
+
+                    // Add OpenStreetMap tiles (NO GOOGLE MAPS)
+                    const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                        maxZoom: 19,
+                        minZoom: 3,
+                        errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+                    }).addTo(map);
+
+                    tileLayer.on('tileerror', function(error) {
+                        log('Error cargando tile: ' + error.tile.src);
+                    });
+
+                    tileLayer.on('tileload', function(e) {
+                        log('Tile cargado exitosamente');
+                    });
+
+                    log('Capa de tiles de OpenStreetMap agregada');
+
+                    // Store markers and circles
+                    window.mapInstance = map;
+                    window.markersLayer = L.layerGroup().addTo(map);
+                    window.circleLayer = null;
+                    window.userMarker = null;
+
+                    // Function to update markers
+                    window.updateMarkers = function(markersData) {
+                        try {
+                            log('Actualizando ' + markersData.length + ' marcadores...');
+                            window.markersLayer.clearLayers();
+
+                            markersData.forEach((marker, index) => {
+                                const m = L.marker([marker.latitude, marker.longitude])
+                                    .bindPopup(\`
+                                        <div style="font-family: Arial, sans-serif;">
+                                            <strong style="color: #333; font-size: 14px;">\${marker.title}</strong><br>
+                                            <span style="color: #666; font-size: 12px;">\${marker.description || ''}</span>
+                                        </div>
+                                    \`);
+                                window.markersLayer.addLayer(m);
+                            });
+                            log('Marcadores actualizados');
+                        } catch(e) {
+                            log('Error actualizando marcadores: ' + e.message);
+                        }
+                    };
+
+                    // Function to update user location
+                    window.updateUserLocation = function(lat, lng) {
+                        try {
+                            if (window.userMarker) {
+                                window.mapInstance.removeLayer(window.userMarker);
+                            }
+
+                            const userIcon = L.divIcon({
+                                className: 'user-location-marker',
+                                html: '<div style="background: #4285F4; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 6px rgba(0,0,0,0.4);"></div>',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 12]
+                            });
+
+                            window.userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(window.mapInstance);
+                            log('Ubicación del usuario actualizada: [' + lat + ', ' + lng + ']');
+                        } catch(e) {
+                            log('Error actualizando ubicación: ' + e.message);
+                        }
+                    };
+
+                    // Function to update circle
+                    window.updateCircle = function(lat, lng, radius, show) {
+                        try {
+                            if (window.circleLayer) {
+                                window.mapInstance.removeLayer(window.circleLayer);
+                                window.circleLayer = null;
+                            }
+
+                            if (show) {
+                                window.circleLayer = L.circle([lat, lng], {
+                                    radius: radius,
+                                    color: '#007AFF',
+                                    fillColor: '#007AFF',
+                                    fillOpacity: 0.1,
+                                    weight: 2,
+                                    opacity: 0.5
+                                }).addTo(window.mapInstance);
+                                log('Círculo de ' + (radius/1000) + 'km agregado');
+                            }
+                        } catch(e) {
+                            log('Error actualizando círculo: ' + e.message);
+                        }
+                    };
+
+                    // Listen for messages from React Native
+                    window.addEventListener('message', function(event) {
+                        try {
+                            const data = JSON.parse(event.data);
+
+                            if (data.type === 'UPDATE_MARKERS') {
+                                window.updateMarkers(data.markers);
+                            }
+
+                            if (data.type === 'UPDATE_USER_LOCATION') {
+                                window.updateUserLocation(data.latitude, data.longitude);
+                            }
+
+                            if (data.type === 'UPDATE_CIRCLE') {
+                                window.updateCircle(data.latitude, data.longitude, data.radius, data.show);
+                            }
+
+                            if (data.type === 'FIT_BOUNDS') {
+                                const bounds = L.latLngBounds(data.bounds);
+                                window.mapInstance.fitBounds(bounds, { padding: [50, 50] });
+                            }
+                        } catch(e) {
+                            log('Error procesando mensaje: ' + e.message);
+                        }
+                    });
+
+                    // Notify React Native that map is ready
+                    log('Mapa completamente cargado y listo');
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'MAP_READY',
+                        provider: 'OpenStreetMap'
+                    }));
+
+                } catch(e) {
+                    log('Error fatal inicializando mapa: ' + e.message);
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: 'ERROR',
+                        message: e.message
+                    }));
+                }
+            }
+
+            // Start initialization when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initMap);
+            } else {
+                initMap();
+            }
+        </script>
+    </body>
+    </html>
+    `;
 
     // Send updates to WebView when props change
     useEffect(() => {
-        if (webViewRef.current && markers.length > 0) {
+        if (webViewRef.current && markers.length > 0 && !isLoading) {
             const message = JSON.stringify({
                 type: 'UPDATE_MARKERS',
                 markers: markers
             });
             webViewRef.current.postMessage(message);
         }
-    }, [markers]);
+    }, [markers, isLoading]);
 
     useEffect(() => {
-        if (webViewRef.current && userLocation) {
+        if (webViewRef.current && userLocation && !isLoading) {
             const message = JSON.stringify({
                 type: 'UPDATE_USER_LOCATION',
                 latitude: userLocation.latitude,
@@ -168,10 +306,10 @@ const WebViewMap = ({
             });
             webViewRef.current.postMessage(message);
         }
-    }, [userLocation]);
+    }, [userLocation, isLoading]);
 
     useEffect(() => {
-        if (webViewRef.current && userLocation) {
+        if (webViewRef.current && userLocation && !isLoading) {
             const message = JSON.stringify({
                 type: 'UPDATE_CIRCLE',
                 latitude: userLocation.latitude,
@@ -181,17 +319,44 @@ const WebViewMap = ({
             });
             webViewRef.current.postMessage(message);
         }
-    }, [showCircle, circleRadius, userLocation]);
+    }, [showCircle, circleRadius, userLocation, isLoading]);
 
     const handleMessage = (event) => {
         try {
             const data = JSON.parse(event.nativeEvent.data);
+
             if (data.type === 'MAP_READY') {
+                console.log('✅ Mapa OpenStreetMap cargado exitosamente');
+                console.log('Provider:', data.provider);
+                setIsLoading(false);
+                setError(null);
                 onMapReady();
+            } else if (data.type === 'ERROR') {
+                console.error('❌ Error en WebView:', data.message);
+                setError(data.message);
+                setIsLoading(false);
+            } else if (data.type === 'LOG') {
+                console.log('📍 [WebView]:', data.message);
             }
         } catch (error) {
             console.error('Error parsing WebView message:', error);
         }
+    };
+
+    const handleError = (syntheticEvent) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('WebView error:', nativeEvent);
+        setError('Error cargando el mapa');
+        setIsLoading(false);
+    };
+
+    const handleLoadStart = () => {
+        console.log('🔄 Iniciando carga del WebView...');
+        setIsLoading(true);
+    };
+
+    const handleLoadEnd = () => {
+        console.log('✅ WebView cargado');
     };
 
     return (
@@ -201,14 +366,35 @@ const WebViewMap = ({
                 source={{ html: mapHTML }}
                 style={styles.webView}
                 onMessage={handleMessage}
+                onError={handleError}
+                onLoadStart={handleLoadStart}
+                onLoadEnd={handleLoadEnd}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
-                startInLoadingState={false}
+                cacheEnabled={false}
+                cacheMode="LOAD_NO_CACHE"
+                startInLoadingState={true}
+                renderLoading={() => (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#007AFF" />
+                        <Text style={styles.loadingText}>Cargando mapa OpenStreetMap...</Text>
+                    </View>
+                )}
                 scalesPageToFit={false}
                 scrollEnabled={true}
                 bounces={false}
                 overScrollMode="never"
+                mixedContentMode="always"
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                originWhitelist={['*']}
             />
+            {error && (
+                <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>⚠️ {error}</Text>
+                    <Text style={styles.errorHint}>Verifica tu conexión a Internet</Text>
+                </View>
+            )}
         </View>
     );
 };
@@ -220,6 +406,46 @@ const styles = StyleSheet.create({
     webView: {
         flex: 1,
         backgroundColor: '#E5E3DF',
+    },
+    loadingContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#E5E3DF',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
+    },
+    errorContainer: {
+        position: 'absolute',
+        bottom: 80,
+        left: 20,
+        right: 20,
+        backgroundColor: 'rgba(255, 59, 48, 0.95)',
+        padding: 16,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    errorText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#fff',
+        marginBottom: 4,
+    },
+    errorHint: {
+        fontSize: 12,
+        color: 'rgba(255, 255, 255, 0.9)',
     },
 });
 
