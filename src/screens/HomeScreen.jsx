@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 // Map components are now loaded dynamically.
 import { WebView } from 'react-native-webview';
+import PlaceMap from '../components/PlaceMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 import { getPlaceArConfig } from '../services/ar';
@@ -357,6 +358,7 @@ const HomeScreen = ({ navigation }) => {
   const [maxDistanceKm, setMaxDistanceKm] = useState(MAX_DISTANCE_KM);
   const [imageIndex, setImageIndex] = useState(0);
   const [arVisible, setArVisible] = useState(false);
+  const [mapInteractiveVisible, setMapInteractiveVisible] = useState(false); // Nuevo estado para mapa interactivo
   const [showDetailInfo, setShowDetailInfo] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const imageListRef = useRef(null);
@@ -1153,7 +1155,14 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.actionButtonText}>Abrir en Google Maps</Text>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity style={styles.actionButtonAlt} onPress={() => setDetailVisible(false)}>
+              <TouchableOpacity
+                style={styles.actionButtonAlt}
+                onPress={() => {
+                  if (selectedPlace?.lat && selectedPlace?.lng) {
+                    setMapInteractiveVisible(true);
+                  }
+                }}
+              >
                 <Text style={styles.actionButtonAltText}>Ver mapa interactivo</Text>
               </TouchableOpacity>
               {platformArUrl ? (
@@ -1265,6 +1274,22 @@ const HomeScreen = ({ navigation }) => {
       </Modal>
 
       {renderArWebView()}
+
+      {/* Mapa interactivo con OpenStreetMap */}
+      <PlaceMap
+        visible={mapInteractiveVisible}
+        onClose={() => setMapInteractiveVisible(false)}
+        place={
+          selectedPlace
+            ? {
+              name: selectedPlace.name,
+              lat: selectedPlace.lat,
+              lng: selectedPlace.lng,
+              address: selectedPlace.address,
+            }
+            : null
+        }
+      />
     </KeyboardAvoidingView>
   );
 };
