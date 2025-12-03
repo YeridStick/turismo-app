@@ -1282,6 +1282,7 @@ const HomeScreen = ({ navigation }) => {
         place={
           selectedPlace
             ? {
+              id: selectedPlace.id,
               name: selectedPlace.name,
               lat: selectedPlace.lat,
               lng: selectedPlace.lng,
