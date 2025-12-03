@@ -1,16 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Platform, StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { Platform, StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
+import ExpoMap, { Marker, Circle } from 'expo-maps';
 import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 
 const MapScreen = ({ route }) => {
-    const [mapComponents, setMapComponents] = useState({
-        MapView: null,
-        Marker: null,
-        PROVIDER_GOOGLE: null,
-        Circle: null,
-    });
     const [userLocation, setUserLocation] = useState(null);
     const [places, setPlaces] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -20,180 +15,211 @@ const MapScreen = ({ route }) => {
     // Parámetro opcional: sitio seleccionado desde otra pantalla
     const selectedPlaceId = route?.params?.placeId;
 
-    // Cargar componentes de mapa
-    useEffect(() => {
-        if (Platform.OS !== 'web') {
-            import('react-native-maps')
-                .then((mapsModule) => {
-                    setMapComponents({
-                        MapView: mapsModule.default,
-                        Marker: mapsModule.Marker,
-                        PROVIDER_GOOGLE: mapsModule.PROVIDER_GOOGLE,
-                        Circle: mapsModule.Circle,
-                    });
-                })
-                .catch(error => {
-                    console.error("Error loading map components", error);
-                    Alert.alert('Error', 'No se pudo cargar el mapa');
-                });
-        }
-    }, []);
-
     // Solicitar permisos de ubicación y obtener ubicación del usuario
     useEffect(() => {
         (async () => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
-                    Alert.alert('Permiso denegado', 'Necesitamos acceso a tu ubicación para mostrar sitios cercanos');
+                    Alert.alert(
+                        'Permisos necesarios',
+                        'Necesitamos acceso a tu ubicación para mostrar sitios cercanos.'
+                    );
                     setLocationPermission(false);
+                    setLoading(false);
                     return;
                 }
+
                 setLocationPermission(true);
 
+                // Obtener ubicación actual
                 const location = await Location.getCurrentPositionAsync({
-                    accuracy: Location.Accuracy.Balanced,
+                    accuracy: Location.Accuracy.High,
                 });
+
                 setUserLocation({
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude,
                 });
+
+                // Cargar sitios turísticos
+                await fetchPlaces();
             } catch (error) {
                 console.error('Error obteniendo ubicación:', error);
-                Alert.alert('Error', 'No se pudo obtener tu ubicación');
+                Alert.alert('Error', 'No se pudo obtener tu ubicación. Intenta nuevamente.');
+                setLoading(false);
             }
         })();
     }, []);
 
-    // Cargar todos los sitios por defecto
+    // Si hay un sitio seleccionado, cambiar modo al abrir
     useEffect(() => {
-        loadAllPlaces();
-    }, []);
+        if (selectedPlaceId && places.length > 0) {
+            setFilterMode('selected');
+        }
+    }, [selectedPlaceId, places]);
 
-    const loadAllPlaces = async () => {
+    const fetchPlaces = async () => {
         try {
-            setLoading(true);
-            const response = await api.get(ENDPOINTS.PLACES_ALL);
-            const placesData = response.data || [];
-            setPlaces(placesData);
-            setFilterMode('all');
+            const response = await api.get(ENDPOINTS.PLACES.LIST);
+            if (response.data?.data) {
+                const placesData = response.data.data.map(place => ({
+                    id: place.id,
+                    name: place.nombre || 'Sin nombre',
+                    latitude: parseFloat(place.latitud) || 0,
+                    longitude: parseFloat(place.longitud) || 0,
+                }));
+                setPlaces(placesData);
+            }
         } catch (error) {
             console.error('Error cargando sitios:', error);
-            Alert.alert('Error', 'No se pudieron cargar los sitios turísticos');
-            setPlaces([]);
+            Alert.alert('Error', 'No se pudieron cargar los sitios turísticos.');
         } finally {
             setLoading(false);
         }
     };
 
-    const loadNearbyPlaces = async () => {
-        if (!userLocation) {
-            Alert.alert('Ubicación no disponible', 'Necesitamos tu ubicación para mostrar sitios cercanos');
-            return;
-        }
-
-        try {
-            setLoading(true);
-            const response = await api.get(ENDPOINTS.PLACES_NEARBY, {
-                params: {
-                    latitude: userLocation.latitude,
-                    longitude: userLocation.longitude,
-                    radius: 50000, // 50km de radio
-                }
-            });
-            const placesData = response.data || [];
-            setPlaces(placesData);
-            setFilterMode('nearby');
-        } catch (error) {
-            console.error('Error cargando sitios cercanos:', error);
-            Alert.alert('Error', 'No se pudieron cargar los sitios cercanos');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const showSelectedPlace = async () => {
-        if (!selectedPlaceId) {
-            Alert.alert('No hay sitio seleccionado', 'Debes seleccionar un sitio desde la pantalla de inicio');
-            return;
-        }
-
-        try {
-            setLoading(true);
-            const response = await api.get(ENDPOINTS.PLACE_DETAIL(selectedPlaceId));
-            const placeData = response.data;
-            setPlaces([placeData]);
-            setFilterMode('selected');
-        } catch (error) {
-            console.error('Error cargando sitio seleccionado:', error);
-            Alert.alert('Error', 'No se pudo cargar el sitio seleccionado');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Calcular distancia entre dos coordenadas (fórmula de Haversine)
+    // Calcular distancia entre dos puntos (fórmula de Haversine)
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
         const R = 6371; // Radio de la Tierra en km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
         const a =
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const distance = R * c;
-        return distance.toFixed(1); // Retorna la distancia en km con 1 decimal
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distancia en km
     };
 
-    if (Platform.OS === 'web') {
-        return (
-            <View style={[styles.container, { padding: 24, justifyContent: 'center' }]}>
-                <Text style={{ fontWeight: '700', marginBottom: 8 }}>Mapa no disponible en web.</Text>
-                <Text>Usa la app móvil para ver el mapa interactivo.</Text>
-            </View>
-        );
-    }
+    // Filtrar sitios según el modo seleccionado
+    const getFilteredPlaces = () => {
+        if (!userLocation) return [];
 
-    const { MapView, Marker, PROVIDER_GOOGLE, Circle } = mapComponents;
+        switch (filterMode) {
+            case 'nearby':
+                return places.filter(place => {
+                    const distance = calculateDistance(
+                        userLocation.latitude,
+                        userLocation.longitude,
+                        place.latitude,
+                        place.longitude
+                    );
+                    return distance <= 50; // 50 km
+                });
+            case 'selected':
+                if (selectedPlaceId) {
+                    return places.filter(place => place.id === selectedPlaceId);
+                }
+                return places;
+            case 'all':
+            default:
+                return places;
+        }
+    };
 
-    if (!MapView) {
-        return (
-            <View style={[styles.container, { justifyContent: 'center' }]}>
-                <ActivityIndicator size="large" color="#5B3CF0" />
-                <Text style={styles.loadingText}>Cargando mapa...</Text>
-            </View>
-        );
-    }
+    // Calcular región del mapa basada en los sitios filtrados
+    const getMapRegion = () => {
+        const filteredPlaces = getFilteredPlaces();
 
-    // Determinar la región inicial del mapa
-    const getInitialRegion = () => {
-        if (filterMode === 'selected' && places.length === 1) {
-            // Centrar en el sitio seleccionado
+        if (!userLocation) {
             return {
-                latitude: places[0].lat || 2.2,
-                longitude: places[0].lng || -76.3,
-                latitudeDelta: 0.1,
-                longitudeDelta: 0.1,
+                latitude: 4.5709, // Centro de Colombia por defecto
+                longitude: -74.2973,
+                latitudeDelta: 10,
+                longitudeDelta: 10,
             };
-        } else if (userLocation) {
-            // Centrar en la ubicación del usuario
+        }
+
+        if (filteredPlaces.length === 0) {
             return {
                 latitude: userLocation.latitude,
                 longitude: userLocation.longitude,
                 latitudeDelta: 0.5,
                 longitudeDelta: 0.5,
             };
-        } else {
-            // Vista general de la región
+        }
+
+        // Si solo hay un sitio o modo seleccionado
+        if (filterMode === 'selected' && filteredPlaces.length === 1) {
             return {
-                latitude: 2.2,
-                longitude: -76.3,
-                latitudeDelta: 1.5,
-                longitudeDelta: 1.5,
+                latitude: filteredPlaces[0].latitude,
+                longitude: filteredPlaces[0].longitude,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
             };
         }
+
+        // Calcular bounds para múltiples sitios
+        let minLat = userLocation.latitude;
+        let maxLat = userLocation.latitude;
+        let minLon = userLocation.longitude;
+        let maxLon = userLocation.longitude;
+
+        filteredPlaces.forEach(place => {
+            minLat = Math.min(minLat, place.latitude);
+            maxLat = Math.max(maxLat, place.latitude);
+            minLon = Math.min(minLon, place.longitude);
+            maxLon = Math.max(maxLon, place.longitude);
+        });
+
+        const latDelta = (maxLat - minLat) * 1.5 || 0.5;
+        const lonDelta = (maxLon - minLon) * 1.5 || 0.5;
+
+        return {
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLon + maxLon) / 2,
+            latitudeDelta: Math.max(latDelta, 0.1),
+            longitudeDelta: Math.max(lonDelta, 0.1),
+        };
     };
+
+    const filteredPlaces = getFilteredPlaces();
+    const mapRegion = getMapRegion();
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Cargando mapa...</Text>
+            </View>
+        );
+    }
+
+    if (!locationPermission) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorTitle}>⚠️ Permisos necesarios</Text>
+                <Text style={styles.errorText}>
+                    Necesitamos acceso a tu ubicación para mostrarte los sitios cercanos en el mapa.
+                </Text>
+                <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => {
+                        setLoading(true);
+                        Location.requestForegroundPermissionsAsync().then(({ status }) => {
+                            if (status === 'granted') {
+                                setLocationPermission(true);
+                                Location.getCurrentPositionAsync().then(location => {
+                                    setUserLocation({
+                                        latitude: location.coords.latitude,
+                                        longitude: location.coords.longitude,
+                                    });
+                                    fetchPlaces();
+                                });
+                            } else {
+                                setLoading(false);
+                            }
+                        });
+                    }}
+                >
+                    <Text style={styles.retryButtonText}>Reintentar</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -201,27 +227,27 @@ const MapScreen = ({ route }) => {
             <View style={styles.filterContainer}>
                 <TouchableOpacity
                     style={[styles.filterButton, filterMode === 'nearby' && styles.filterButtonActive]}
-                    onPress={loadNearbyPlaces}
-                    disabled={!locationPermission}
+                    onPress={() => setFilterMode('nearby')}
                 >
                     <Text style={[styles.filterButtonText, filterMode === 'nearby' && styles.filterButtonTextActive]}>
                         📍 Cercanos
                     </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={[styles.filterButton, filterMode === 'selected' && styles.filterButtonActive]}
-                    onPress={showSelectedPlace}
-                    disabled={!selectedPlaceId}
-                >
-                    <Text style={[styles.filterButtonText, filterMode === 'selected' && styles.filterButtonTextActive]}>
-                        🎯 Seleccionado
-                    </Text>
-                </TouchableOpacity>
+                {selectedPlaceId && (
+                    <TouchableOpacity
+                        style={[styles.filterButton, filterMode === 'selected' && styles.filterButtonActive]}
+                        onPress={() => setFilterMode('selected')}
+                    >
+                        <Text style={[styles.filterButtonText, filterMode === 'selected' && styles.filterButtonTextActive]}>
+                            🎯 Seleccionado
+                        </Text>
+                    </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                     style={[styles.filterButton, filterMode === 'all' && styles.filterButtonActive]}
-                    onPress={loadAllPlaces}
+                    onPress={() => setFilterMode('all')}
                 >
                     <Text style={[styles.filterButtonText, filterMode === 'all' && styles.filterButtonTextActive]}>
                         🗺️ Todos
@@ -229,67 +255,62 @@ const MapScreen = ({ route }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Mapa */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#5B3CF0" />
-                    <Text style={styles.loadingText}>Cargando sitios...</Text>
-                </View>
-            ) : (
-                <MapView
-                    provider={PROVIDER_GOOGLE}
-                    style={styles.map}
-                    initialRegion={getInitialRegion()}
-                    showsUserLocation={locationPermission}
-                    showsMyLocationButton={locationPermission}
-                >
-                    {/* Marcadores de sitios turísticos */}
-                    {places.map(place => {
-                        if (!place.lat || !place.lng) return null;
+            {/* Mapa nativo con expo-maps */}
+            <ExpoMap
+                style={styles.map}
+                initialRegion={mapRegion}
+                showsUserLocation={true}
+                showsMyLocationButton={true}
+                showsCompass={true}
+                showsScale={true}
+            >
+                {/* Marcadores de sitios */}
+                {filteredPlaces.map(place => {
+                    const distance = userLocation
+                        ? calculateDistance(
+                            userLocation.latitude,
+                            userLocation.longitude,
+                            place.latitude,
+                            place.longitude
+                        )
+                        : 0;
 
-                        const distance = userLocation
-                            ? calculateDistance(userLocation.latitude, userLocation.longitude, place.lat, place.lng)
-                            : null;
-
-                        return (
-                            <Marker
-                                key={place.id}
-                                coordinate={{
-                                    latitude: place.lat,
-                                    longitude: place.lng,
-                                }}
-                                title={place.name}
-                                description={
-                                    distance
-                                        ? `📍 ${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}\n📏 ${distance} km de distancia`
-                                        : `📍 ${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`
-                                }
-                                pinColor={filterMode === 'selected' ? 'red' : '#5B3CF0'}
-                            />
-                        );
-                    })}
-
-                    {/* Círculo alrededor de la ubicación del usuario (solo en modo cercanos) */}
-                    {userLocation && filterMode === 'nearby' && Circle && (
-                        <Circle
-                            center={userLocation}
-                            radius={50000} // 50km
-                            strokeColor="rgba(91, 60, 240, 0.5)"
-                            fillColor="rgba(91, 60, 240, 0.1)"
+                    return (
+                        <Marker
+                            key={place.id}
+                            coordinate={{
+                                latitude: place.latitude,
+                                longitude: place.longitude,
+                            }}
+                            title={place.name}
+                            description={`${distance.toFixed(2)} km · (${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)})`}
                         />
-                    )}
-                </MapView>
-            )}
+                    );
+                })}
 
-            {/* Info de ubicación actual */}
+                {/* Círculo de 50km en modo cercanos */}
+                {filterMode === 'nearby' && userLocation && (
+                    <Circle
+                        center={{
+                            latitude: userLocation.latitude,
+                            longitude: userLocation.longitude,
+                        }}
+                        radius={50000} // 50 km en metros
+                        strokeColor="rgba(0, 122, 255, 0.5)"
+                        fillColor="rgba(0, 122, 255, 0.1)"
+                    />
+                )}
+            </ExpoMap>
+
+            {/* Panel informativo inferior */}
             {userLocation && (
-                <View style={styles.infoContainer}>
-                    <Text style={styles.infoTitle}>Tu ubicación:</Text>
-                    <Text style={styles.infoText}>
-                        📍 {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}
+                <View style={styles.infoPanel}>
+                    <Text style={styles.infoPanelTitle}>📍 Tu ubicación</Text>
+                    <Text style={styles.infoPanelText}>
+                        Lat: {userLocation.latitude.toFixed(6)} · Lon: {userLocation.longitude.toFixed(6)}
                     </Text>
-                    <Text style={styles.infoSubtext}>
-                        {places.length} sitio{places.length !== 1 ? 's' : ''} {filterMode === 'nearby' ? 'cercano' : 'mostrado'}{places.length !== 1 ? 's' : ''}
+                    <Text style={styles.infoPanelSubtext}>
+                        Mostrando {filteredPlaces.length} sitio{filteredPlaces.length !== 1 ? 's' : ''}
                     </Text>
                 </View>
             )}
@@ -299,38 +320,67 @@ const MapScreen = ({ route }) => {
 
 const styles = StyleSheet.create({
     container: {
-        ...StyleSheet.absoluteFillObject,
         flex: 1,
+        backgroundColor: '#fff',
     },
-    map: {
-        ...StyleSheet.absoluteFillObject,
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: '#666',
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#fff',
+    },
+    errorTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        color: '#333',
+    },
+    errorText: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 22,
+    },
+    retryButton: {
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+    },
+    retryButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
     filterContainer: {
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        right: 10,
         flexDirection: 'row',
+        padding: 12,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
         justifyContent: 'space-around',
-        zIndex: 1,
-        backgroundColor: 'transparent',
     },
     filterButton: {
-        backgroundColor: 'white',
-        paddingVertical: 10,
         paddingHorizontal: 16,
+        paddingVertical: 8,
         borderRadius: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
-        borderWidth: 2,
-        borderColor: 'transparent',
+        backgroundColor: '#f0f0f0',
     },
     filterButtonActive: {
-        backgroundColor: '#5B3CF0',
-        borderColor: '#5B3CF0',
+        backgroundColor: '#007AFF',
     },
     filterButtonText: {
         fontSize: 14,
@@ -338,48 +388,40 @@ const styles = StyleSheet.create({
         color: '#333',
     },
     filterButtonTextActive: {
-        color: 'white',
+        color: '#fff',
     },
-    loadingContainer: {
+    map: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#F3F5FB',
     },
-    loadingText: {
-        marginTop: 10,
-        fontSize: 14,
-        color: '#666',
-    },
-    infoContainer: {
+    infoPanel: {
         position: 'absolute',
         bottom: 20,
-        left: 10,
-        right: 10,
-        backgroundColor: 'white',
+        left: 20,
+        right: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
         padding: 16,
         borderRadius: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        shadowRadius: 8,
         elevation: 5,
     },
-    infoTitle: {
-        fontSize: 14,
-        fontWeight: '700',
+    infoPanelTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
         color: '#333',
         marginBottom: 4,
     },
-    infoText: {
-        fontSize: 13,
+    infoPanelText: {
+        fontSize: 14,
         color: '#666',
-        marginBottom: 2,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
-    infoSubtext: {
+    infoPanelSubtext: {
         fontSize: 12,
         color: '#999',
-        fontStyle: 'italic',
+        marginTop: 4,
     },
 });
 
