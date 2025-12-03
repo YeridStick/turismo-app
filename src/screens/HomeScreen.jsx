@@ -27,6 +27,7 @@ import {
 // Map components are now loaded dynamically.
 import { WebView } from 'react-native-webview';
 import PlaceMap from '../components/PlaceMap';
+import WebViewMap from '../components/WebViewMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 import { getPlaceArConfig } from '../services/ar';
@@ -318,20 +319,6 @@ const Footer = () => {
 
 const HomeScreen = ({ navigation }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [MapComponents, setMapComponents] = useState({ MapView: null, Marker: null, Circle: null });
-  const { MapView, Marker, Circle } = MapComponents;
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') {
-      import('react-native-maps').then((module) => {
-        setMapComponents({
-          MapView: module.default,
-          Marker: module.Marker,
-          Circle: module.Circle,
-        });
-      });
-    }
-  }, []);
   const isSmall = windowWidth < BREAKPOINTS.medium;
   const cardCompactWidth = Math.min(windowWidth - SPACING.lg * 1.5, isSmall ? windowWidth - SPACING.md * 2 : 420);
   const cardWideWidth = isSmall ? 280 : 340;
@@ -1199,77 +1186,50 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.mapCloseText}>×</Text>
             </TouchableOpacity>
           </View>
-          {Platform.OS === 'web'
-            ? <View style={styles.mapEmptyState}>
+          {Platform.OS === 'web' ? (
+            <View style={styles.mapEmptyState}>
               <Text style={styles.mapEmptyText}>El mapa no está disponible en la versión web.</Text>
             </View>
-            : (MapView && Marker && Circle) ? (() => {
-              const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
-                ? coords
-                : fallbackCenter;
-              const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
-              if (!hasCoords) {
-                return (
-                  <View style={styles.mapEmptyState}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                    <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
-                  </View>
-                );
-              }
-              const delta = Math.max(distanceKm / 111, 0.02);
+          ) : (() => {
+            const center = coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
+              ? coords
+              : fallbackCenter;
+            const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
+
+            if (!hasCoords) {
               return (
-                <MapView
-                  style={styles.map}
-                  initialRegion={{
-                    latitude: center.latitude,
-                    longitude: center.longitude,
-                    latitudeDelta: delta,
-                    longitudeDelta: delta,
-                  }}
-                  showsUserLocation
-                  showsMyLocationButton
-                >
-                  {Circle && coords &&
-                    Number.isFinite(coords.latitude) &&
-                    Number.isFinite(coords.longitude) && (
-                      <Circle
-                        center={coords}
-                        radius={distanceKm * 1000}
-                        strokeColor="rgba(123, 91, 255, 0.5)"
-                        fillColor="rgba(123, 91, 255, 0.1)"
-                        strokeWidth={2}
-                      />
-                    )}
-                  {Marker && filteredNearby
-                    .filter(
-                      (place) =>
-                        Number.isFinite(place?.lat) &&
-                        Number.isFinite(place?.lng)
-                    )
-                    .map((place) => (
-                      <Marker
-                        key={place.id}
-                        coordinate={{
-                          latitude: place.lat,
-                          longitude: place.lng,
-                        }}
-                        title={place.name}
-                        description={place.description}
-                        onCalloutPress={() => {
-                          setShowMap(false);
-                          openDetail(place);
-                        }}
-                      />
-                    ))}
-                </MapView>
-              );
-            })()
-              : (
                 <View style={styles.mapEmptyState}>
                   <ActivityIndicator size="large" color={COLORS.primary} />
-                  <Text style={styles.mapEmptyText}>Cargando mapa...</Text>
+                  <Text style={styles.mapEmptyText}>Cargando ubicación...</Text>
                 </View>
-              )}
+              );
+            }
+
+            const delta = Math.max(distanceKm / 111, 0.02);
+            const nearbyMarkers = filteredNearby
+              .filter((place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng))
+              .map((place) => ({
+                latitude: place.lat,
+                longitude: place.lng,
+                title: place.name,
+                description: place.description || `${formatDistance(place.distance)}`
+              }));
+
+            return (
+              <WebViewMap
+                initialRegion={{
+                  latitude: center.latitude,
+                  longitude: center.longitude,
+                  latitudeDelta: delta,
+                  longitudeDelta: delta,
+                }}
+                markers={nearbyMarkers}
+                userLocation={coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude) ? coords : null}
+                showCircle={true}
+                circleRadius={distanceKm * 1000}
+              />
+            );
+          })()}
         </View>
       </Modal>
 

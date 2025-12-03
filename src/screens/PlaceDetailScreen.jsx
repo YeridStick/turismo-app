@@ -9,10 +9,10 @@ import {
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
+import WebViewMap from '../components/WebViewMap';
 
 const { width } = Dimensions.get('window');
 
@@ -118,21 +118,15 @@ const PlaceDetailScreen = ({ route, navigation }) => {
           <View style={styles.mapSection}>
             <Text style={styles.sectionTitle}>Ubicación</Text>
             <View style={[styles.mapContainer, { height: mapHeight }]}>
-              <MapView
-                style={styles.map}
+              <WebViewMap
                 initialRegion={coordinates}
-                scrollEnabled={true}
-                zoomEnabled={true}
-              >
-                <Marker
-                  coordinate={{
-                    latitude: coordinates.latitude,
-                    longitude: coordinates.longitude,
-                  }}
-                  title={place.name}
-                  description={place.address}
-                />
-              </MapView>
+                markers={[{
+                  latitude: coordinates.latitude,
+                  longitude: coordinates.longitude,
+                  title: place.name,
+                  description: place.address
+                }]}
+              />
             </View>
           </View>
 
