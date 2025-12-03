@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Platform, StyleSheet, Text, View, ActivityIndicator, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
-import ExpoMap, { Marker, Circle } from 'expo-maps';
-import api from '../services/api';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import WebViewMap from '../components/WebViewMap';
 import { ENDPOINTS } from '../config/api.config';
+import api from '../services/api';
 
 const MapScreen = ({ route }) => {
     const [userLocation, setUserLocation] = useState(null);
@@ -255,17 +255,10 @@ const MapScreen = ({ route }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Mapa nativo con expo-maps */}
-            <ExpoMap
-                style={styles.map}
+            {/* Mapa con OpenStreetMap usando WebView */}
+            <WebViewMap
                 initialRegion={mapRegion}
-                showsUserLocation={true}
-                showsMyLocationButton={true}
-                showsCompass={true}
-                showsScale={true}
-            >
-                {/* Marcadores de sitios */}
-                {filteredPlaces.map(place => {
+                markers={filteredPlaces.map(place => {
                     const distance = userLocation
                         ? calculateDistance(
                             userLocation.latitude,
@@ -275,32 +268,17 @@ const MapScreen = ({ route }) => {
                         )
                         : 0;
 
-                    return (
-                        <Marker
-                            key={place.id}
-                            coordinate={{
-                                latitude: place.latitude,
-                                longitude: place.longitude,
-                            }}
-                            title={place.name}
-                            description={`${distance.toFixed(2)} km · (${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)})`}
-                        />
-                    );
+                    return {
+                        latitude: place.latitude,
+                        longitude: place.longitude,
+                        title: place.name,
+                        description: `${distance.toFixed(2)} km · (${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)})`
+                    };
                 })}
-
-                {/* Círculo de 50km en modo cercanos */}
-                {filterMode === 'nearby' && userLocation && (
-                    <Circle
-                        center={{
-                            latitude: userLocation.latitude,
-                            longitude: userLocation.longitude,
-                        }}
-                        radius={50000} // 50 km en metros
-                        strokeColor="rgba(0, 122, 255, 0.5)"
-                        fillColor="rgba(0, 122, 255, 0.1)"
-                    />
-                )}
-            </ExpoMap>
+                userLocation={userLocation}
+                showCircle={filterMode === 'nearby'}
+                circleRadius={50000}
+            />
 
             {/* Panel informativo inferior */}
             {userLocation && (
