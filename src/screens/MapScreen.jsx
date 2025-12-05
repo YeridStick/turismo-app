@@ -1,7 +1,8 @@
 import * as Location from 'expo-location';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import WebViewMap from '../components/WebViewMap';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getDistance } from 'geolib';
+import NativeMap from '../components/NativeMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 
@@ -79,19 +80,13 @@ const MapScreen = ({ route }) => {
         }
     };
 
-    // Calcular distancia entre dos puntos (fórmula de Haversine)
+    // Calcular distancia entre dos puntos usando geolib
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
-        const R = 6371; // Radio de la Tierra en km
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLon = ((lon2 - lon1) * Math.PI) / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((lat1 * Math.PI) / 180) *
-            Math.cos((lat2 * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; // Distancia en km
+        const distanceInMeters = getDistance(
+            { latitude: lat1, longitude: lon1 },
+            { latitude: lat2, longitude: lon2 }
+        );
+        return distanceInMeters / 1000; // Convertir a km
     };
 
     // Filtrar sitios según el modo seleccionado
@@ -255,8 +250,8 @@ const MapScreen = ({ route }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Mapa con OpenStreetMap usando WebView */}
-            <WebViewMap
+            {/* Mapa nativo con react-native-maps */}
+            <NativeMap
                 initialRegion={mapRegion}
                 markers={filteredPlaces.map(place => {
                     const distance = userLocation
@@ -269,15 +264,18 @@ const MapScreen = ({ route }) => {
                         : 0;
 
                     return {
+                        id: place.id,
                         latitude: place.latitude,
                         longitude: place.longitude,
                         title: place.name,
-                        description: `${distance.toFixed(2)} km · (${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)})`
+                        description: `${distance.toFixed(2)} km de distancia`,
+                        pinColor: filterMode === 'selected' && place.id === selectedPlaceId ? 'green' : 'red'
                     };
                 })}
                 userLocation={userLocation}
                 showCircle={filterMode === 'nearby'}
                 circleRadius={50000}
+                showUserLocation={true}
             />
 
             {/* Panel informativo inferior */}
