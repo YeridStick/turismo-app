@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
-import WebViewMap from '../components/WebViewMap';
+import NativeMap from '../components/NativeMap';
 
 const { width } = Dimensions.get('window');
 
@@ -118,14 +118,17 @@ const PlaceDetailScreen = ({ route, navigation }) => {
           <View style={styles.mapSection}>
             <Text style={styles.sectionTitle}>Ubicación</Text>
             <View style={[styles.mapContainer, { height: mapHeight }]}>
-              <WebViewMap
+              <NativeMap
                 initialRegion={coordinates}
                 markers={[{
+                  id: place.id,
                   latitude: coordinates.latitude,
                   longitude: coordinates.longitude,
                   title: place.name,
-                  description: place.address
+                  description: place.address,
+                  pinColor: 'red'
                 }]}
+                showUserLocation={false}
               />
             </View>
           </View>
