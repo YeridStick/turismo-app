@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 const WebViewMap = ({
@@ -287,37 +287,50 @@ const WebViewMap = ({
     `;
 
     // Send updates to WebView when props change
+    // Usar setTimeout para asegurar que el WebView está listo en APK
     useEffect(() => {
         if (webViewRef.current && markers.length > 0 && !isLoading) {
-            const message = JSON.stringify({
-                type: 'UPDATE_MARKERS',
-                markers: markers
-            });
-            webViewRef.current.postMessage(message);
+            setTimeout(() => {
+                if (webViewRef.current) {
+                    const message = JSON.stringify({
+                        type: 'UPDATE_MARKERS',
+                        markers: markers
+                    });
+                    webViewRef.current.postMessage(message);
+                }
+            }, 500); // Delay para asegurar que el WebView esté listo
         }
     }, [markers, isLoading]);
 
     useEffect(() => {
         if (webViewRef.current && userLocation && !isLoading) {
-            const message = JSON.stringify({
-                type: 'UPDATE_USER_LOCATION',
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude
-            });
-            webViewRef.current.postMessage(message);
+            setTimeout(() => {
+                if (webViewRef.current) {
+                    const message = JSON.stringify({
+                        type: 'UPDATE_USER_LOCATION',
+                        latitude: userLocation.latitude,
+                        longitude: userLocation.longitude
+                    });
+                    webViewRef.current.postMessage(message);
+                }
+            }, 500);
         }
     }, [userLocation, isLoading]);
 
     useEffect(() => {
         if (webViewRef.current && userLocation && !isLoading) {
-            const message = JSON.stringify({
-                type: 'UPDATE_CIRCLE',
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude,
-                radius: circleRadius,
-                show: showCircle
-            });
-            webViewRef.current.postMessage(message);
+            setTimeout(() => {
+                if (webViewRef.current) {
+                    const message = JSON.stringify({
+                        type: 'UPDATE_CIRCLE',
+                        latitude: userLocation.latitude,
+                        longitude: userLocation.longitude,
+                        radius: circleRadius,
+                        show: showCircle
+                    });
+                    webViewRef.current.postMessage(message);
+                }
+            }, 500);
         }
     }, [showCircle, circleRadius, userLocation, isLoading]);
 
@@ -330,6 +343,34 @@ const WebViewMap = ({
                 console.log('Provider:', data.provider);
                 setIsLoading(false);
                 setError(null);
+
+                // Enviar datos inmediatamente después de que el mapa esté listo
+                setTimeout(() => {
+                    if (webViewRef.current) {
+                        if (markers.length > 0) {
+                            webViewRef.current.postMessage(JSON.stringify({
+                                type: 'UPDATE_MARKERS',
+                                markers: markers
+                            }));
+                        }
+                        if (userLocation) {
+                            webViewRef.current.postMessage(JSON.stringify({
+                                type: 'UPDATE_USER_LOCATION',
+                                latitude: userLocation.latitude,
+                                longitude: userLocation.longitude
+                            }));
+                            if (showCircle) {
+                                webViewRef.current.postMessage(JSON.stringify({
+                                    type: 'UPDATE_CIRCLE',
+                                    latitude: userLocation.latitude,
+                                    longitude: userLocation.longitude,
+                                    radius: circleRadius,
+                                    show: showCircle
+                                }));
+                            }
+                        }
+                    }
+                }, 1000); // Dar 1 segundo para que el mapa se inicialice completamente
                 onMapReady();
             } else if (data.type === 'ERROR') {
                 console.error('❌ Error en WebView:', data.message);

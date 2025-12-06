@@ -1,8 +1,8 @@
 import * as Location from 'expo-location';
+import { getDistance } from 'geolib';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { getDistance } from 'geolib';
-import NativeMap from '../components/NativeMap';
+import WebViewMap from '../components/WebViewMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 
@@ -62,7 +62,7 @@ const MapScreen = ({ route }) => {
 
     const fetchPlaces = async () => {
         try {
-            const response = await api.get(ENDPOINTS.PLACES.LIST);
+            const response = await api.get(ENDPOINTS.PLACES_ALL);
             if (response.data?.data) {
                 const placesData = response.data.data.map(place => ({
                     id: place.id,
@@ -251,7 +251,7 @@ const MapScreen = ({ route }) => {
             </View>
 
             {/* Mapa nativo con react-native-maps */}
-            <NativeMap
+            <WebViewMap
                 initialRegion={mapRegion}
                 markers={filteredPlaces.map(place => {
                     const distance = userLocation
