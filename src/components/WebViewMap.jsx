@@ -234,19 +234,23 @@ const WebViewMap = ({
                     };
 
                     // Listen for messages from React Native
-                    window.addEventListener('message', function(event) {
+                    const handleIncomingMessage = function(event) {
                         try {
                             const data = JSON.parse(event.data);
+                            log('Mensaje recibido: ' + data.type);
 
                             if (data.type === 'UPDATE_MARKERS') {
+                                log('Recibidos ' + data.markers.length + ' marcadores');
                                 window.updateMarkers(data.markers);
                             }
 
                             if (data.type === 'UPDATE_USER_LOCATION') {
+                                log('Recibida ubicación: ' + data.latitude + ', ' + data.longitude);
                                 window.updateUserLocation(data.latitude, data.longitude);
                             }
 
                             if (data.type === 'UPDATE_CIRCLE') {
+                                log('Recibido círculo: radio ' + data.radius);
                                 window.updateCircle(data.latitude, data.longitude, data.radius, data.show);
                             }
 
@@ -257,7 +261,11 @@ const WebViewMap = ({
                         } catch(e) {
                             log('Error procesando mensaje: ' + e.message);
                         }
-                    });
+                    };
+
+                    // Compatibilidad iOS/Android: ambos eventos pueden dispararse
+                    window.addEventListener('message', handleIncomingMessage);
+                    document.addEventListener('message', handleIncomingMessage);
 
                     // Notify React Native that map is ready
                     log('Mapa completamente cargado y listo');
