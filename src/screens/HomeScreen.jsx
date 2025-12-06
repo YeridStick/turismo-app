@@ -41,6 +41,8 @@ const IMAGE_PLACEHOLDER =
 const MAX_DISTANCE_KM = 100; // Fácil de subir si se requiere más radio máximo
 const distanceOptions = [1, 2, 5, 10, 20, 50, MAX_DISTANCE_KM];
 const fallbackCenter = { latitude: 2.9386, longitude: -75.2811 }; // Centro de respaldo para evitar coords vacías
+const HERO_IMAGE =
+  'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1600&q=80';
 
 const isSameCoords = (a, b, tolerance = 0.000001) => {
   if (!a || !b) return false;
@@ -320,7 +322,7 @@ const Footer = () => {
 const HomeScreen = ({ navigation }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
-  const cardCompactWidth = Math.min(windowWidth - SPACING.lg * 1.5, isSmall ? windowWidth - SPACING.md * 2 : 420);
+  const cardCompactWidth = Math.max(Math.min(windowWidth * 0.55, 280), 190);
   const cardWideWidth = isSmall ? 280 : 340;
   const detailImageHeight = windowHeight * 0.65;
 
@@ -554,6 +556,111 @@ const HomeScreen = ({ navigation }) => {
     return recommended.filter((item) => Number(item.categoryId) === Number(selectedCategory));
   }, [recommended, selectedCategory]);
 
+  const renderNearbyMapBlock = () => {
+    const center =
+      coords && Number.isFinite(coords.latitude) && Number.isFinite(coords.longitude)
+        ? coords
+        : fallbackCenter;
+    const hasCoords = Number.isFinite(center.latitude) && Number.isFinite(center.longitude);
+    const delta = Math.max(distanceKm / 111, 0.06);
+    const nearbyMarkers = filteredNearby
+      .filter((place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng))
+      .map((place) => ({
+        latitude: place.lat,
+        longitude: place.lng,
+        title: place.name,
+        description: place.description || `${formatDistance(place.distanceMeters)}`,
+      }));
+
+    if (!hasCoords) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.emptyText}>Cargando ubicación...</Text>
+        </View>
+      );
+    }
+
+    if (Platform.OS === 'web') {
+      return (
+        <View style={styles.paddingLeft}>
+          <FlatList
+            horizontal
+            data={filteredNearby}
+            keyExtractor={(item, idx) => `${item.id || idx}-nearby-web`}
+            renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalList}
+            snapToInterval={cardCompactWidth + SPACING.md}
+            decelerationRate="fast"
+            snapToAlignment="start"
+            getItemLayout={(_, index) => ({
+              length: cardCompactWidth + SPACING.md,
+              offset: (cardCompactWidth + SPACING.md) * index,
+              index,
+            })}
+            windowSize={5}
+            maxToRenderPerBatch={5}
+            initialNumToRender={6}
+            removeClippedSubviews
+          />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.mapCard}>
+        <WebViewMap
+          initialRegion={{
+            latitude: center.latitude,
+            longitude: center.longitude,
+            latitudeDelta: delta,
+            longitudeDelta: delta,
+          }}
+          markers={nearbyMarkers}
+          userLocation={center}
+          showCircle={true}
+          circleRadius={distanceKm * 1000}
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.65)']}
+          style={styles.mapCardGradient}
+          pointerEvents="none"
+        />
+        <View style={styles.mapCardOverlay}>
+          <Text style={styles.mapCardTitle}>Lugares en mapa ({filteredNearby.length})</Text>
+          <FlatList
+            horizontal
+            data={filteredNearby}
+            keyExtractor={(item, idx) => `${item.id || idx}-nearby-map`}
+            renderItem={({ item }) =>
+              renderPlace({
+                item,
+                variant: 'compact',
+                cardWidth: cardCompactWidth,
+                imageHeight: 160,
+              })
+            }
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.mapOverlayList}
+            snapToInterval={cardCompactWidth + SPACING.md}
+            decelerationRate="fast"
+            snapToAlignment="start"
+            getItemLayout={(_, index) => ({
+              length: cardCompactWidth + SPACING.md,
+              offset: (cardCompactWidth + SPACING.md) * index,
+              index,
+            })}
+            windowSize={5}
+            maxToRenderPerBatch={5}
+            initialNumToRender={6}
+            removeClippedSubviews
+          />
+        </View>
+      </View>
+    );
+  };
+
   const openDetail = useCallback(async (item) => {
     setDetailVisible(true);
     setDetailLoading(true);
@@ -574,7 +681,7 @@ const HomeScreen = ({ navigation }) => {
   }, []);
 
   const renderPlace = useCallback(
-    ({ item, variant = 'full' }) => {
+    ({ item, variant = 'full', cardWidth: overrideWidth, imageHeight: overrideHeight }) => {
       const image =
         Array.isArray(item.imageUrls) && item.imageUrls.length ? item.imageUrls[0] : null;
 
@@ -593,9 +700,10 @@ const HomeScreen = ({ navigation }) => {
           rating={item.rating || item.score || '4.5'}
           distance={distanceText}
           cardWidth={
-            variant === 'compact' ? cardCompactWidth : variant === 'wide' ? cardWideWidth : undefined
+            overrideWidth ??
+            (variant === 'compact' ? cardCompactWidth : variant === 'wide' ? cardWideWidth : undefined)
           }
-          imageHeight={variant === 'compact' ? 200 : 240}
+          imageHeight={overrideHeight ?? (variant === 'compact' ? 200 : 240)}
         />
       );
     },
@@ -828,21 +936,90 @@ const HomeScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.pageHeader}>
-          <View style={styles.topBar}>
-            <View>
-              <Text style={styles.locationLabel}>Explora</Text>
-              <Text style={styles.locationValue}>Cerca de ti</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.loginButton}
-              onPress={() => {/* TODO: Navigate to login */ }}
+          <ImageBackground
+            source={{ uri: HERO_IMAGE }}
+            style={styles.heroBackground}
+            imageStyle={styles.heroImage}
+          >
+            <LinearGradient
+              colors={['rgba(46, 24, 103, 0.75)', 'rgba(23, 102, 172, 0.55)', 'rgba(17, 49, 93, 0.8)']}
+              style={styles.heroOverlay}
             >
-              <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
-            </TouchableOpacity>
-          </View>
+              <View style={styles.topBar}>
+                <View>
+                  <Text style={styles.locationLabel}>Explora</Text>
+                  <Text style={styles.locationValue}>Cerca de ti</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.loginButton}
+                  onPress={() => {/* TODO: Navigate to login */ }}
+                >
+                  <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+                </TouchableOpacity>
+              </View>
 
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>⚡ Más de 10,000 viajeros felices</Text>
+              </View>
 
+              <Text style={styles.heroTitle}>Descubre la magia del Huila</Text>
+              <Text style={styles.heroSubtitle}>
+                Explora paisajes únicos, cultura ancestral y experiencias inolvidables en el corazón de Colombia.
+              </Text>
 
+              <View style={styles.searchCard}>
+                <View style={styles.searchRow}>
+                  <View style={styles.searchInputWrapper}>
+                    <FontAwesome name="map-marker" size={18} color="#7B5BFF" />
+                    <TextInput
+                      placeholder="¿A dónde quieres ir?"
+                      placeholderTextColor="#8C8FA5"
+                      value={query}
+                      onChangeText={setQuery}
+                      onSubmitEditing={performSearch}
+                      style={styles.searchInput}
+                      returnKeyType="search"
+                    />
+                  </View>
+                  <TouchableOpacity style={styles.searchIconButton} onPress={performSearch}>
+                    <FontAwesome name="search" size={16} color="#fff" />
+                    <Text style={styles.searchIconLabel}>Explorar Destinos</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.searchActions}>
+                  <TouchableOpacity style={styles.filterButton} onPress={() => setFiltersVisible(true)}>
+                    <Text style={styles.filterButtonText}>Filtros</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.searchButton} onPress={performSearch}>
+                    <Text style={styles.searchButtonText}>Descubrir</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.heroStats}>
+                <View style={styles.stat}>
+                  <Text style={styles.statNumber}>200+</Text>
+                  <Text style={styles.statLabel}>Destinos</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statNumber}>500+</Text>
+                  <Text style={styles.statLabel}>Experiencias</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statNumber}>50K+</Text>
+                  <Text style={styles.statLabel}>Visitantes</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statNumber}>4.9★</Text>
+                  <Text style={styles.statLabel}>Satisfacción</Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </ImageBackground>
+        </View>
+
+        <View style={styles.categoriesSection}>
+          <Text style={styles.categoriesLabel}>Categorías</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -866,117 +1043,38 @@ const HomeScreen = ({ navigation }) => {
               </TouchableOpacity>
             ))}
           </ScrollView>
-
-          <View style={styles.searchCard}>
-            <Text style={styles.heroTitle}>Descubre lugares increíbles</Text>
-            <Text style={styles.heroSubtitle}>
-              Ajusta filtros y desliza para ver los sitios destacados.
-            </Text>
-            <View style={styles.searchRow}>
-              <TextInput
-                placeholder="¿A dónde quieres ir?"
-                placeholderTextColor={COLORS.textLight}
-                value={query}
-                onChangeText={setQuery}
-                onSubmitEditing={performSearch}
-                style={styles.searchInput}
-                returnKeyType="search"
-              />
-              <TouchableOpacity style={styles.searchIconButton} onPress={performSearch}>
-                <Text style={styles.searchIcon}>IR</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.searchActions}>
-              <TouchableOpacity style={styles.filterButton} onPress={() => setFiltersVisible(true)}>
-                <Text style={styles.filterButtonText}>Filtros</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.searchButton} onPress={performSearch}>
-                <Text style={styles.searchButtonText}>Explorar</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.heroStats}>
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>200+</Text>
-                <Text style={styles.statLabel}>Destinos</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>500+</Text>
-                <Text style={styles.statLabel}>Experiencias</Text>
-              </View>
-              <View style={styles.stat}>
-                <Text style={styles.statNumber}>50K+</Text>
-                <Text style={styles.statLabel}>Visitantes</Text>
-              </View>
-            </View>
-          </View>
         </View>
 
         <View style={styles.section}>
-          <View style={[styles.sectionHeader, styles.sectionText]}>
-            <View>
-              <Text style={styles.sectionTag}>Destinos Populares</Text>
-              <Text style={styles.sectionTitle}>
-                Lugares cercanos ({distanceKm.toFixed(1)} km)
+          <View style={styles.sectionIntro}>
+            <Text style={styles.sectionPill}>Destinos Populares</Text>
+            <Text style={styles.sectionHeroTitle}>Explora Lugares Increíbles</Text>
+            <Text style={styles.sectionDescription}>
+              Descubre los destinos más fascinantes del Huila, desde maravillas naturales hasta tesoros culturales.
+              Cuando estés listo, activa "Lugares cerca de mí", comparte tu ubicación y ajusta el radio para filtrar por proximidad.
+            </Text>
+          </View>
+
+          {loadingNearby ? (
+            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
+          ) : filteredNearby.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                No hay lugares cercanos en este radio. Prueba aumentar la distancia.
               </Text>
             </View>
-            {Platform.OS !== 'web' && (
-              <TouchableOpacity
-                onPress={async () => {
-                  // Asegura coords antes de abrir el mapa; si falla, usa fallback
-                  if (!coords) {
-                    const loc = await ensureLocation();
-                    if (loc) {
-                      setCoords(loc);
-                    } else {
-                      setCoords(fallbackCenter);
-                    }
-                  }
-                  setShowMap(true);
-                }}
-              >
-                <Text style={styles.sectionLink}>Ver mapa</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.paddingLeft}>
-            {loadingNearby ? (
-              <ActivityIndicator color={COLORS.primary} style={styles.loader} />
-            ) : filteredNearby.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>
-                  No hay lugares cercanos en este radio. Prueba aumentar la distancia.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                horizontal
-                data={filteredNearby}
-                keyExtractor={(item, idx) => `${item.id || idx}-nearby`}
-                renderItem={({ item }) => renderPlace({ item, variant: 'compact' })}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalList}
-                snapToInterval={cardCompactWidth + SPACING.md}
-                decelerationRate="fast"
-                snapToAlignment="start"
-                getItemLayout={(_, index) => ({
-                  length: cardCompactWidth + SPACING.md,
-                  offset: (cardCompactWidth + SPACING.md) * index,
-                  index,
-                })}
-                windowSize={5}
-                maxToRenderPerBatch={5}
-                initialNumToRender={6}
-                removeClippedSubviews
-              />
-            )}
-          </View>
+          ) : (
+            renderNearbyMapBlock()
+          )}
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionText}>
-            <Text style={styles.sectionTag}>Catálogo</Text>
-            <Text style={styles.sectionTitle}>Todos los lugares</Text>
+          <View style={styles.sectionAllIntro}>
+            <Text style={styles.sectionPillSecondary}>Exploración</Text>
+            <Text style={styles.sectionHeroTitle}>Encuentra Tu Próxima Aventura</Text>
+            <Text style={styles.sectionDescription}>
+              Personaliza tu búsqueda con filtros interactivos y cambia de lugar en el mapa con un solo clic.
+            </Text>
           </View>
 
           {loadingAll ? (
@@ -988,15 +1086,22 @@ const HomeScreen = ({ navigation }) => {
                 horizontal
                 data={places}
                 keyExtractor={(item, idx) => `${item.id || idx}-all`}
-                renderItem={({ item }) => renderPlace({ item, variant: 'wide' })}
+                renderItem={({ item }) =>
+                  renderPlace({
+                    item,
+                    variant: 'compact',
+                    cardWidth: cardCompactWidth,
+                    imageHeight: 180,
+                  })
+                }
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.horizontalList}
-                snapToInterval={cardWideWidth + SPACING.md}
+                snapToInterval={cardCompactWidth + SPACING.md}
                 decelerationRate="fast"
                 snapToAlignment="start"
                 getItemLayout={(_, index) => ({
-                  length: cardWideWidth + SPACING.md,
-                  offset: (cardWideWidth + SPACING.md) * index,
+                  length: cardCompactWidth + SPACING.md,
+                  offset: (cardCompactWidth + SPACING.md) * index,
                   index,
                 })}
                 windowSize={5}
@@ -1261,13 +1366,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F5FB',
   },
   pageHeader: {
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
-    paddingHorizontal: SPACING.lg,
-    backgroundColor: '#E9EDFF',
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#0f1c3a',
+  },
+  heroBackground: {
+    width: '100%',
+  },
+  heroImage: {
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    transform: [{ scale: 1.02 }],
+  },
+  heroOverlay: {
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
+  },
+  heroBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: FONT_SIZES.sm,
   },
   topBar: {
     flexDirection: 'row',
@@ -1275,24 +1405,26 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   locationLabel: {
-    color: COLORS.textLight,
+    color: 'rgba(255,255,255,0.7)',
     fontSize: FONT_SIZES.sm,
   },
   locationValue: {
     fontSize: FONT_SIZES.lg,
     fontWeight: '700',
-    color: COLORS.text,
+    color: COLORS.white,
   },
   loginButton: {
-    backgroundColor: '#5B3CF0',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 20,
-    shadowColor: '#5B3CF0',
-    shadowOpacity: 0.3,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
   },
   loginButtonText: {
     color: COLORS.white,
@@ -1336,6 +1468,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#5B3CF0',
     borderRadius: 12,
   },
+  categoriesSection: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    backgroundColor: '#F3F5FB',
+  },
+  categoriesLabel: {
+    color: COLORS.text,
+    fontWeight: '700',
+    marginBottom: SPACING.xs,
+  },
   categoryTabs: {
     paddingVertical: SPACING.sm,
     gap: SPACING.sm,
@@ -1347,11 +1490,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'transparent',
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.85)',
     marginRight: SPACING.sm,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   categoryTabActive: {
-    borderColor: '#5B3CF0',
+    borderColor: '#7B5BFF',
     backgroundColor: '#F2EEFF',
   },
   categoryTabText: {
@@ -1370,49 +1518,65 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   heroTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: FONT_SIZES.xl + 4,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: COLORS.white,
+    textAlign: 'center',
+    lineHeight: 34,
   },
   heroSubtitle: {
-    color: COLORS.textLight,
+    color: 'rgba(255,255,255,0.9)',
     fontSize: FONT_SIZES.sm,
     marginBottom: SPACING.sm,
     lineHeight: 22,
+    textAlign: 'center',
   },
   searchCard: {
-    padding: 0,
-    borderRadius: 0,
+    padding: SPACING.sm,
+    borderRadius: 18,
     gap: SPACING.sm,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  searchInput: {
+  searchInputWrapper: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F8FD',
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 14,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+  },
+  searchInput: {
+    flex: 1,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
     fontSize: FONT_SIZES.md,
-    backgroundColor: '#F7F8FD',
     minHeight: 48,
   },
   searchIconButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: '#5B3CF0',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: '#5B3CF0',
   },
-  searchIcon: {
-    color: COLORS.white,
+  searchIconLabel: {
+    color: '#fff',
     fontWeight: '700',
+    fontSize: FONT_SIZES.sm,
   },
   searchActions: {
     flexDirection: 'row',
@@ -1421,11 +1585,12 @@ const styles = StyleSheet.create({
   filterButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E5E8F0',
     paddingVertical: SPACING.sm,
     minHeight: 46,
     borderRadius: 12,
     alignItems: 'center',
+    backgroundColor: '#fff',
   },
   filterButtonText: {
     color: COLORS.text,
@@ -1448,16 +1613,25 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
     justifyContent: 'space-between',
     marginTop: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    flexWrap: 'wrap',
   },
   stat: {
     flex: 1,
-    backgroundColor: '#F7F8FD',
-    padding: SPACING.sm,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingVertical: SPACING.sm,
+    borderRadius: 14,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   statLabel: {
-    color: COLORS.textLight,
+    color: 'rgba(255,255,255,0.75)',
     fontSize: FONT_SIZES.sm,
   },
   primaryButton: {
@@ -1478,7 +1652,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   statNumber: {
-    color: COLORS.text,
+    color: COLORS.white,
     fontWeight: '700',
     fontSize: FONT_SIZES.md,
   },
@@ -1509,6 +1683,82 @@ const styles = StyleSheet.create({
   sectionLink: {
     color: '#5B3CF0',
     fontWeight: '600',
+  },
+  sectionIntro: {
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  sectionPill: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: '#EEF0FF',
+    color: '#5B3CF0',
+    fontWeight: '700',
+    borderRadius: 999,
+    fontSize: FONT_SIZES.xs,
+  },
+  sectionPillSecondary: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: '#F2E9FF',
+    color: '#7B5BFF',
+    fontWeight: '700',
+    borderRadius: 999,
+    fontSize: FONT_SIZES.xs,
+  },
+  sectionHeroTitle: {
+    fontSize: FONT_SIZES.lg + 4,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  sectionDescription: {
+    color: COLORS.textLight,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginHorizontal: SPACING.lg,
+  },
+  sectionAllIntro: {
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    paddingTop: SPACING.sm,
+  },
+  mapCard: {
+    width: '100%',
+    height: 620,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#E5E8F0',
+    marginTop: SPACING.md,
+  },
+  mapCardGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 200,
+  },
+  mapCardOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+    paddingTop: SPACING.sm,
+  },
+  mapCardTitle: {
+    color: '#fff',
+    fontWeight: '700',
+    marginBottom: SPACING.xs,
+  },
+  mapOverlayList: {
+    gap: SPACING.md,
+    paddingRight: SPACING.lg,
   },
   sectionSubtitle: {
     color: COLORS.textLight,
@@ -1655,7 +1905,7 @@ const styles = StyleSheet.create({
   popularCard: {
     borderRadius: 24,
     overflow: 'hidden',
-    height: 360,
+    height: 280,
     backgroundColor: COLORS.border,
   },
   popularImage: {
@@ -1695,13 +1945,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: SPACING.lg,
+    bottom: SPACING.md,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.xs,
   },
   popularTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md + 2,
     fontWeight: '800',
   },
   popularMetaRow: {
