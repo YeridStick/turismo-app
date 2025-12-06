@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Circle, Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from 'react-native-maps';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MapView, { Circle, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 const NativeMap = ({
     initialRegion,
@@ -15,27 +15,59 @@ const NativeMap = ({
 }) => {
     const mapRef = useRef(null);
     const [mapReady, setMapReady] = useState(false);
-    const [region, setRegion] = useState(initialRegion);
+
+    // Región por defecto en caso de que initialRegion sea null/undefined
+    const defaultRegion = {
+        latitude: 4.5709,
+        longitude: -74.2973,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+    };
+
+    const [region, setRegion] = useState(initialRegion || defaultRegion);
 
     // Ajustar la región cuando cambien las props
     useEffect(() => {
         if (mapRef.current && mapReady && initialRegion) {
-            mapRef.current.animateToRegion(initialRegion, 1000);
+            try {
+                mapRef.current.animateToRegion(initialRegion, 1000);
+            } catch (error) {
+                console.error('Error animating to region:', error);
+            }
         }
     }, [initialRegion, mapReady]);
 
     // Ajustar vista para mostrar todos los marcadores
     useEffect(() => {
         if (mapRef.current && mapReady && markers.length > 0) {
-            setTimeout(() => {
-                mapRef.current.fitToCoordinates(
-                    markers.map(m => ({ latitude: m.latitude, longitude: m.longitude })),
-                    {
-                        edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
-                        animated: true,
-                    }
+            try {
+                const validMarkers = markers.filter(m =>
+                    m &&
+                    typeof m.latitude === 'number' &&
+                    typeof m.longitude === 'number' &&
+                    !isNaN(m.latitude) &&
+                    !isNaN(m.longitude)
                 );
-            }, 500);
+
+                if (validMarkers.length > 0) {
+                    setTimeout(() => {
+                        if (mapRef.current) {
+                            mapRef.current.fitToCoordinates(
+                                validMarkers.map(m => ({
+                                    latitude: m.latitude,
+                                    longitude: m.longitude
+                                })),
+                                {
+                                    edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+                                    animated: true,
+                                }
+                            );
+                        }
+                    }, 500);
+                }
+            } catch (error) {
+                console.error('Error fitting to coordinates:', error);
+            }
         }
     }, [markers, mapReady]);
 
@@ -46,44 +78,55 @@ const NativeMap = ({
     };
 
     const handleMarkerPress = (marker) => {
-        if (onMarkerPress) {
-            onMarkerPress(marker);
-        }
+        try {
+            if (onMarkerPress) {
+                onMarkerPress(marker);
+            }
 
-        // Centrar en el marcador seleccionado
-        if (mapRef.current) {
-            mapRef.current.animateToRegion({
-                latitude: marker.latitude,
-                longitude: marker.longitude,
-                latitudeDelta: 0.05,
-                longitudeDelta: 0.05,
-            }, 1000);
+            // Centrar en el marcador seleccionado
+            if (mapRef.current && marker.latitude && marker.longitude) {
+                mapRef.current.animateToRegion({
+                    latitude: marker.latitude,
+                    longitude: marker.longitude,
+                    latitudeDelta: 0.05,
+                    longitudeDelta: 0.05,
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('Error handling marker press:', error);
         }
     };
 
     // Función para centrar en la ubicación del usuario
     const centerOnUser = () => {
-        if (mapRef.current && userLocation) {
-            mapRef.current.animateToRegion({
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-            }, 1000);
+        try {
+            if (mapRef.current && userLocation && userLocation.latitude && userLocation.longitude) {
+                mapRef.current.animateToRegion({
+                    latitude: userLocation.latitude,
+                    longitude: userLocation.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                }, 1000);
+            }
+        } catch (error) {
+            console.error('Error centering on user:', error);
         }
     };
+
+    // Validar que tenemos una región válida
+    const validRegion = region || initialRegion || defaultRegion;
 
     return (
         <View style={[styles.container, style]}>
             <MapView
                 ref={mapRef}
                 style={styles.map}
-                initialRegion={region || initialRegion}
-                provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+                initialRegion={validRegion}
+                provider={PROVIDER_DEFAULT}
                 showsUserLocation={showUserLocation}
                 showsMyLocationButton={false}
                 showsCompass={true}
-                showsScale={true}
+                showsScale={false}
                 onMapReady={handleMapReady}
                 onRegionChangeComplete={setRegion}
                 loadingEnabled={true}
@@ -92,22 +135,29 @@ const NativeMap = ({
                 moveOnMarkerPress={false}
             >
                 {/* Marcadores de sitios turísticos */}
-                {markers.map((marker, index) => (
-                    <Marker
-                        key={marker.id || `marker-${index}`}
-                        coordinate={{
-                            latitude: marker.latitude,
-                            longitude: marker.longitude,
-                        }}
-                        title={marker.title}
-                        description={marker.description}
-                        pinColor={marker.pinColor || 'red'}
-                        onPress={() => handleMarkerPress(marker)}
-                    />
-                ))}
+                {markers && markers.length > 0 && markers.map((marker, index) => {
+                    // Validar que el marcador tiene coordenadas válidas
+                    if (!marker || typeof marker.latitude !== 'number' || typeof marker.longitude !== 'number') {
+                        return null;
+                    }
+
+                    return (
+                        <Marker
+                            key={marker.id || `marker-${index}`}
+                            coordinate={{
+                                latitude: marker.latitude,
+                                longitude: marker.longitude,
+                            }}
+                            title={marker.title || 'Marcador'}
+                            description={marker.description || ''}
+                            pinColor={marker.pinColor || 'red'}
+                            onPress={() => handleMarkerPress(marker)}
+                        />
+                    );
+                })}
 
                 {/* Círculo de radio si está habilitado */}
-                {showCircle && userLocation && (
+                {showCircle && userLocation && userLocation.latitude && userLocation.longitude && (
                     <Circle
                         center={{
                             latitude: userLocation.latitude,
