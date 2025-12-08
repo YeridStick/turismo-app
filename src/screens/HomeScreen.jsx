@@ -353,9 +353,7 @@ const HomeScreen = ({ navigation }) => {
   const isSmall = windowWidth < BREAKPOINTS.medium;
   const cardCompactWidth = Math.max(Math.min(windowWidth * 0.55, 280), 190);
   const cardWideWidth = isSmall ? 280 : 340;
-  const statusBarHeight = StatusBar.currentHeight || 0;
-  const reservedTop = statusBarHeight + SPACING.lg * 2; // header + chips
-  const detailImageHeight = Math.max(windowHeight - reservedTop, windowHeight * 0.9);
+  const detailImageHeight = windowHeight;
 
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
@@ -843,72 +841,133 @@ const HomeScreen = ({ navigation }) => {
         { icon: "phone", label: "Contacto", value: "+57 310 123 4567" },
       ];
 
+      const arPreviewHtml = arUrl
+        ? `
+        <!doctype html>
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+            <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+            <style>
+              html,body { margin:0; padding:0; width:100%; height:100%; background:#0b1021;}
+              model-viewer { width:100%; height:100%; background: radial-gradient(circle at 20% 20%, #1c2746, #0b1021); }
+            </style>
+          </head>
+          <body>
+            <model-viewer src="${arConfig?.modelUrl || arUrl}" ios-src="${arConfig?.iosModelUrl || ""}"
+              camera-controls auto-rotate shadow-intensity="1" exposure="1" ar-modes="webxr scene-viewer quick-look">
+            </model-viewer>
+          </body>
+        </html>
+        `
+        : null;
+
       const renderInfoSlide = () => (
         <View style={[styles.infoSlide, { width: windowWidth, height: detailImageHeight }]}>
-          <View style={styles.infoSlideHeader}>
-            <View style={styles.infoSlideTags}>
-              <View style={styles.infoSlideTagPrimary}>
-                <FontAwesome name="star" size={12} color="#5B3CF0" />
-                <Text style={styles.infoSlideTagText}>
-                  {selectedPlace?.rating || "4.8"}
+          <ScrollView
+            contentContainerStyle={[styles.infoSlideScroll, { paddingBottom: SPACING.xl * 2 }]}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
+            <View style={styles.infoSlideHeader}>
+              <View style={styles.infoSlideTags}>
+                <View style={styles.infoSlideTagPrimary}>
+                  <FontAwesome name="star" size={12} color="#5B3CF0" />
+                  <Text style={styles.infoSlideTagText}>
+                    {selectedPlace?.rating || "4.8"}
+                  </Text>
+                </View>
+                {selectedPlace?.categoryName ? (
+                  <View style={styles.infoSlideTagSecondary}>
+                    <FontAwesome name="tag" size={12} color="#0E9F6E" />
+                    <Text style={styles.infoSlideTagText}>
+                      {selectedPlace.categoryName}
+                    </Text>
+                  </View>
+                ) : null}
+                {selectedPlace?.distanceMeters ? (
+                  <View style={styles.infoSlideTagMuted}>
+                    <FontAwesome name="location-arrow" size={12} color="#111827" />
+                    <Text style={styles.infoSlideTagMutedText}>
+                      {formatDistance(selectedPlace.distanceMeters)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.infoSlideTitle}>{selectedPlace?.name || "Lugar destacado"}</Text>
+              <Text style={styles.infoSlideSubtitle}>
+                {selectedPlace?.address || "Ubicación por confirmar"}
+              </Text>
+              <Text style={styles.infoSlideDescription}>
+                {selectedPlace?.description ||
+                  "Sendero tranquilo junto al río, ideal para caminatas cortas y fotografía de naturaleza."}
+              </Text>
+            </View>
+
+            <View style={styles.infoSlideGrid}>
+              {infoDetails.map((item, idx) => (
+                <View key={`${item.label}-${idx}`} style={styles.infoSlideCard}>
+                  <FontAwesome name={item.icon} size={16} color="#5B3CF0" />
+                  <Text style={styles.infoSlideCardLabel}>{item.label}</Text>
+                  <Text style={styles.infoSlideCardValue}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+
+            {arPreviewHtml ? (
+              <View style={styles.arPreviewCard}>
+                <View style={styles.arPreviewHeader}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.xs }}>
+                    <FontAwesome name="cube" size={14} color="#5B3CF0" />
+                    <Text style={styles.arPreviewTitle}>Vista previa 3D</Text>
+                  </View>
+                  <View style={styles.arPreviewBadge}>
+                    <Text style={styles.arPreviewBadgeText}>AR Ready</Text>
+                  </View>
+                </View>
+                <View style={styles.arPreviewFrame}>
+                  <WebView
+                    originWhitelist={["*"]}
+                    source={{ html: arPreviewHtml }}
+                    style={{ flex: 1, borderRadius: 14 }}
+                    javaScriptEnabled
+                    automaticallyAdjustContentInsets={false}
+                    scrollEnabled={false}
+                  />
+                </View>
+                <Text style={styles.arPreviewHint}>
+                  Mueve el modelo con un dedo y acércalo con gesto de pinza antes de ir a AR.
                 </Text>
               </View>
-              {selectedPlace?.categoryName ? (
-                <View style={styles.infoSlideTagSecondary}>
-                  <FontAwesome name="tag" size={12} color="#0E9F6E" />
-                  <Text style={styles.infoSlideTagText}>
-                    {selectedPlace.categoryName}
-                  </Text>
-                </View>
-              ) : null}
-              {selectedPlace?.distanceMeters ? (
-                <View style={styles.infoSlideTagMuted}>
-                  <FontAwesome name="location-arrow" size={12} color="#111827" />
-                  <Text style={styles.infoSlideTagMutedText}>
-                    {formatDistance(selectedPlace.distanceMeters)}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.infoSlideTitle}>{selectedPlace?.name || "Lugar destacado"}</Text>
-            <Text style={styles.infoSlideSubtitle} numberOfLines={2}>
-              {selectedPlace?.address || "Ubicación por confirmar"}
-            </Text>
-            <Text style={styles.infoSlideDescription} numberOfLines={3}>
-              {selectedPlace?.description ||
-                "Sendero tranquilo junto al río, ideal para caminatas cortas y fotografía de naturaleza."}
-            </Text>
-          </View>
+            ) : null}
 
-          <View style={styles.infoSlideGrid}>
-            {infoDetails.map((item, idx) => (
-              <View key={`${item.label}-${idx}`} style={styles.infoSlideCard}>
-                <FontAwesome name={item.icon} size={16} color="#5B3CF0" />
-                <Text style={styles.infoSlideCardLabel}>{item.label}</Text>
-                <Text style={styles.infoSlideCardValue}>{item.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.infoSlideActions}>
-            <TouchableOpacity
-              style={[styles.actionButtonRow, styles.actionButtonPrimary]}
-              onPress={openDirectionsFromCurrent}
-              disabled={!selectedPlace?.lat || !selectedPlace?.lng}
-            >
-              <FontAwesome name="location-arrow" size={14} color={COLORS.white} />
-              <Text style={styles.actionButtonPrimaryText}>Cómo llegar</Text>
-            </TouchableOpacity>
+            <View style={styles.infoSlideActions}>
+              <TouchableOpacity
+                style={[styles.actionButtonRow, styles.actionButtonPrimary]}
+                onPress={openDirectionsFromCurrent}
+                disabled={!selectedPlace?.lat || !selectedPlace?.lng}
+              >
+                <FontAwesome name="location-arrow" size={14} color={COLORS.white} />
+                <Text style={styles.actionButtonPrimaryText}>Cómo llegar</Text>
+              </TouchableOpacity>
             {platformArUrl ? (
               <TouchableOpacity
                 style={[styles.actionButtonRow, styles.actionButtonSecondary]}
                 onPress={openNativeAR}
               >
                 <FontAwesome name="cube" size={14} color="#111827" />
-                <Text style={styles.actionButtonSecondaryText}>RA</Text>
+                <Text style={styles.actionButtonSecondaryText}>Abrir AR</Text>
               </TouchableOpacity>
             ) : null}
           </View>
+
+          {platformArUrl ? (
+            <TouchableOpacity onPress={openNativeAR} style={styles.arNativeLink}>
+              <FontAwesome name="rocket" size={12} color="#5B3CF0" />
+              <Text style={styles.arNativeLinkText}>Abrir en AR nativa</Text>
+            </TouchableOpacity>
+          ) : null}
+          </ScrollView>
         </View>
       );
 
@@ -932,10 +991,6 @@ const HomeScreen = ({ navigation }) => {
                   {selectedPlace?.categoryName || "Destino"}
                 </Text>
               </View>
-              <Text style={styles.imageCounter}>
-                {Math.min(Math.max(imageIndex, 1), Math.max(totalSlides - 1, 1))}
-                /{Math.max(totalSlides - 1, 1)}
-              </Text>
             </View>
             <TouchableOpacity
               style={styles.moreInfoButton}
@@ -979,46 +1034,7 @@ const HomeScreen = ({ navigation }) => {
               setImageIndex(idx);
             }}
           />
-          {totalSlides > 1 ? (
-            <View style={styles.sliderDots}>
-              {sliderData.map((_, idx) => (
-                <View
-                  key={idx}
-                  style={[styles.dot, imageIndex === idx && styles.dotActive]}
-                />
-              ))}
-            </View>
-          ) : null}
-          {totalSlides > 1 ? (
-            <View style={styles.sliderButtons}>
-              <TouchableOpacity
-                style={styles.sliderNav}
-                onPress={() => {
-                  const next = Math.max(imageIndex - 1, 0);
-                  setImageIndex(next);
-                  imageListRef.current?.scrollToIndex({
-                    index: next,
-                    animated: true,
-                  });
-                }}
-              >
-                <Text style={styles.sliderNavText}>‹</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.sliderNav}
-                onPress={() => {
-                  const next = Math.min(imageIndex + 1, totalSlides - 1);
-                  setImageIndex(next);
-                  imageListRef.current?.scrollToIndex({
-                    index: next,
-                    animated: true,
-                  });
-                }}
-              >
-                <Text style={styles.sliderNavText}>›</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
+          {/* Paginación oculta para maximizar altura */}
 
           {/* Panel de información detallada deslizable */}
           {showDetailInfo ? (
@@ -1500,45 +1516,37 @@ const HomeScreen = ({ navigation }) => {
       </Modal>
 
       {/* Modal detalle */}
-      <Modal visible={detailVisible} animationType="slide">
-        <ScrollView
-          style={styles.detailContainer}
-          contentContainerStyle={[styles.detailContent, { flexGrow: 1 }]}
-        >
-          <View style={styles.detailHero}>
-            <View style={styles.detailHeader}>
-              <Text style={styles.detailTag}>Selección activa</Text>
-              {selectedPlace?.categoryName ? (
-                <Text style={styles.detailTagSecondary}>
-                  {selectedPlace.categoryName}
-                </Text>
-              ) : null}
-              {selectedPlace?.distanceMeters ? (
-                <Text style={styles.detailTagMuted}>
-                  {formatDistance(selectedPlace.distanceMeters)}
-                </Text>
-              ) : null}
-              <Pressable
-                style={styles.closeButton}
-                onPress={() => setDetailVisible(false)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </Pressable>
-            </View>
+      <Modal visible={detailVisible} animationType="slide" transparent>
+        <View style={styles.detailOverlay}>
+          <Pressable style={styles.detailDismissArea} onPress={() => setDetailVisible(false)} />
+          <View style={styles.detailSheet}>
+            <TouchableOpacity
+              style={styles.detailCloseFloat}
+              onPress={() => setDetailVisible(false)}
+            >
+              <Text style={styles.detailCloseFloatText}>×</Text>
+            </TouchableOpacity>
 
-      {detailLoading ? (
-        <ActivityIndicator
-          color={COLORS.primary}
-          style={{ marginTop: SPACING.md }}
-        />
-      ) : null}
+            <ScrollView
+              style={styles.detailContainer}
+              contentContainerStyle={[styles.detailContent, { flexGrow: 1 }]}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              {detailLoading ? (
+                <ActivityIndicator
+                  color={COLORS.primary}
+                  style={{ marginTop: SPACING.md }}
+                />
+              ) : null}
+              {renderImages(
+                Array.isArray(selectedPlace?.imageUrls)
+                  ? selectedPlace.imageUrls
+                  : []
+              )}
+            </ScrollView>
           </View>
-          {renderImages(
-            Array.isArray(selectedPlace?.imageUrls)
-              ? selectedPlace.imageUrls
-              : []
-          )}
-        </ScrollView>
+        </View>
       </Modal>
 
       {/* Modal mapa de lugares cercanos */}
@@ -2501,69 +2509,49 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: "bold",
   },
-  detailContainer: {
+  detailOverlay: {
     flex: 1,
-    backgroundColor: "#EEF1F7",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
   },
-  detailContent: {
-    paddingHorizontal: SPACING.sm,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.sm,
-    gap: SPACING.md,
-    minHeight: "100%",
+  detailDismissArea: {
+    height: StatusBar.currentHeight || 0,
   },
-  detailHero: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: SPACING.md,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+  detailSheet: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
   },
-  detailHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  detailTag: {
-    backgroundColor: "rgba(91, 60, 240, 0.12)",
-    color: "#5B3CF0",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 16,
-    fontWeight: "700",
-  },
-  detailTagSecondary: {
-    backgroundColor: "rgba(21, 155, 98, 0.12)",
-    color: "#159B62",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 16,
-    fontWeight: "700",
-  },
-  detailTagMuted: {
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-    color: "#111827",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 16,
-    fontWeight: "600",
-  },
-  closeButton: {
-    marginLeft: "auto",
-    backgroundColor: COLORS.border,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  detailCloseFloat: {
+    position: "absolute",
+    top: SPACING.md,
+    right: SPACING.md,
+    zIndex: 2,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
-  closeButtonText: {
-    fontSize: 18,
+  detailCloseFloatText: {
+    fontSize: 20,
     color: COLORS.text,
+  },
+  detailContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  detailContent: {
+    paddingHorizontal: SPACING.sm,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xl * 2,
+    gap: SPACING.md,
+    minHeight: "100%",
   },
   detailCard: {
     backgroundColor: COLORS.white,
@@ -2704,8 +2692,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 20,
     padding: SPACING.lg,
-    justifyContent: "space-between",
+    flex: 1,
+  },
+  infoSlideScroll: {
     gap: SPACING.md,
+    paddingBottom: SPACING.xl,
   },
   infoSlideHeader: {
     gap: SPACING.xs,
@@ -2790,6 +2781,58 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     flexWrap: "wrap",
   },
+  arPreviewCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.04)",
+    padding: SPACING.md,
+    gap: SPACING.sm,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  arPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  arPreviewTitle: {
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  arPreviewBadge: {
+    backgroundColor: "rgba(91,60,240,0.12)",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 12,
+  },
+  arPreviewBadgeText: {
+    color: "#5B3CF0",
+    fontWeight: "700",
+  },
+  arPreviewFrame: {
+    height: 240,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#0b1021",
+  },
+  arPreviewHint: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  arNativeLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  arNativeLinkText: {
+    color: "#5B3CF0",
+    fontWeight: "700",
+  },
   detailImage: {
     width: "100%",
     height: "100%",
@@ -2837,7 +2880,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     padding: SPACING.lg,
   },
   imageInfoTop: {
@@ -2856,15 +2899,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: "700",
-  },
-  imageCounter: {
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 20,
-    color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
   },
   moreInfoButton: {
     backgroundColor: "rgba(255, 255, 255, 0.95)",
