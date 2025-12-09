@@ -13,8 +13,8 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [modelLoaded, setModelLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | null>(null);
-    const [showControls, setShowControls] = useState(false);
+    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | null>('scale');
+    const [showControls, setShowControls] = useState(true);
     const [showHelpHint, setShowHelpHint] = useState(true);
 
     // Referencia para controlar el visor AR
@@ -69,13 +69,6 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
             viewerRef.current.resetPosition();
             setActiveControl(null);
             console.log('↻ Posición reseteada');
-        }
-    };
-
-    const toggleControls = () => {
-        setShowControls(!showControls);
-        if (!showControls) {
-            setActiveControl(null);
         }
     };
 
@@ -155,152 +148,102 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
             {/* Controls - Solo mostrar cuando modelo está cargado */}
             {!isLoading && !error && modelLoaded && (
                 <>
-                    {/* Botón Reset Posición */}
-                    <TouchableOpacity
-                        style={styles.resetButton}
-                        onPress={handleResetPosition}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="locate" size={24} color="#fff" />
-                        <Text style={styles.resetText}>Centrar</Text>
-                    </TouchableOpacity>
+                    {/* Cabecera mínima: centrar y salir */}
+                    <View style={styles.headerRow}>
+                        <TouchableOpacity
+                            style={styles.resetButton}
+                            onPress={handleResetPosition}
+                            activeOpacity={0.85}
+                        >
+                            <Ionicons name="locate" size={20} color="#fff" />
+                            <Text style={styles.resetText}>Centrar</Text>
+                        </TouchableOpacity>
+                        <View style={styles.headerRight}>
+                            <TouchableOpacity
+                                style={styles.toggleVisibility}
+                                onPress={() => {
+                                    setShowControls((prev) => {
+                                        const next = !prev;
+                                        if (next) {
+                                            setActiveControl('scale');
+                                        }
+                                        return next;
+                                    });
+                                }}
+                                activeOpacity={0.85}
+                            >
+                                <Ionicons
+                                    name={showControls ? "eye-off" : "eye"}
+                                    size={16}
+                                    color="#0f172a"
+                                />
+                                <Text style={styles.toggleVisibilityText}>
+                                    {showControls ? "Ocultar" : "Mostrar"}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.closeChip}
+                                onPress={() => navigation?.goBack?.()}
+                                activeOpacity={0.85}
+                            >
+                                <Ionicons name="close" size={16} color="#0f172a" />
+                                <Text style={styles.closeChipText}>Salir</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
-                    {/* Botón Toggle Controles */}
-                    <TouchableOpacity
-                        style={[styles.toggleControlsButton, showControls && styles.toggleControlsButtonActive]}
-                        onPress={toggleControls}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons
-                            name={showControls ? "close-circle" : "options"}
-                            size={28}
-                            color="#fff"
-                        />
-                    </TouchableOpacity>
-
-                    {/* Controles - Solo mostrar si showControls es true */}
+                    {/* Panel compacto con visibilidad controlable */}
                     {showControls && (
-                        <>
-                            {/* Panel de Control - Escala */}
-                            {activeControl === 'scale' && (
-                                <View style={styles.controlPanel}>
-                                    <Text style={styles.controlTitle}>Ajustar Escala</Text>
-                                    <View style={styles.controlButtons}>
-                                        <TouchableOpacity
-                                            style={styles.controlButton}
-                                            onPress={handleDecreaseScale}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Ionicons name="remove-circle" size={28} color="#fff" />
-                                            <Text style={styles.controlButtonText}>Reducir</Text>
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity
-                                            style={styles.controlButton}
-                                            onPress={handleIncreaseScale}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Ionicons name="add-circle" size={28} color="#fff" />
-                                            <Text style={styles.controlButtonText}>Aumentar</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* Panel de Control - Rotación */}
-                            {activeControl === 'rotate' && (
-                                <View style={styles.controlPanel}>
-                                    <Text style={styles.controlTitle}>Rotar Modelo</Text>
-                                    <View style={styles.controlButtons}>
-                                        <TouchableOpacity
-                                            style={styles.controlButton}
-                                            onPressIn={startRotateLeft}
-                                            onPressOut={stopRotation}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Ionicons name="arrow-back-circle" size={28} color="#fff" />
-                                            <Text style={styles.controlButtonText}>Izquierda</Text>
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity
-                                            style={styles.controlButton}
-                                            onPressIn={startRotateRight}
-                                            onPressOut={stopRotation}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Ionicons name="arrow-forward-circle" size={28} color="#fff" />
-                                            <Text style={styles.controlButtonText}>Derecha</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* Selector de Controles */}
-                            <View style={styles.controlSelector}>
+                        <View style={styles.miniPanel}>
+                            <View style={styles.miniRow}>
                                 <TouchableOpacity
-                                    style={[
-                                        styles.selectorButton,
-                                        activeControl === 'scale' && styles.selectorButtonActive,
-                                    ]}
-                                    onPress={() => setActiveControl(activeControl === 'scale' ? null : 'scale')}
-                                    activeOpacity={0.8}
+                                    style={styles.miniAction}
+                                    onPress={handleDecreaseScale}
+                                    activeOpacity={0.9}
                                 >
-                                    <Ionicons
-                                        name="expand"
-                                        size={24}
-                                        color={activeControl === 'scale' ? '#fff' : '#5B3CF0'}
-                                    />
-                                    <Text style={[
-                                        styles.selectorButtonText,
-                                        activeControl === 'scale' && styles.selectorButtonTextActive,
-                                    ]}>
-                                        Escalar
-                                    </Text>
+                                    <Ionicons name="remove" size={18} color="#fff" />
+                                    <Text style={styles.miniActionText}>Reducir</Text>
                                 </TouchableOpacity>
-
                                 <TouchableOpacity
-                                    style={[
-                                        styles.selectorButton,
-                                        activeControl === 'rotate' && styles.selectorButtonActive,
-                                    ]}
-                                    onPress={() => setActiveControl(activeControl === 'rotate' ? null : 'rotate')}
-                                    activeOpacity={0.8}
+                                    style={styles.miniAction}
+                                    onPress={handleIncreaseScale}
+                                    activeOpacity={0.9}
                                 >
-                                    <Ionicons
-                                        name="sync"
-                                        size={24}
-                                        color={activeControl === 'rotate' ? '#fff' : '#5B3CF0'}
-                                    />
-                                    <Text style={[
-                                        styles.selectorButtonText,
-                                        activeControl === 'rotate' && styles.selectorButtonTextActive,
-                                    ]}>
-                                        Rotar
-                                    </Text>
+                                    <Ionicons name="add" size={18} color="#fff" />
+                                    <Text style={styles.miniActionText}>Aumentar</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.miniAction}
+                                    onPressIn={startRotateLeft}
+                                    onPressOut={stopRotation}
+                                    activeOpacity={0.9}
+                                >
+                                    <Ionicons name="refresh" size={18} color="#fff" />
+                                    <Text style={styles.miniActionText}>Rotar izq.</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.miniAction}
+                                    onPressIn={startRotateRight}
+                                    onPressOut={stopRotation}
+                                    activeOpacity={0.9}
+                                >
+                                    <Ionicons name="refresh-outline" size={18} color="#fff" />
+                                    <Text style={styles.miniActionText}>Rotar der.</Text>
                                 </TouchableOpacity>
                             </View>
-                        </>
+                        </View>
                     )}
 
-                    {/* Hint de ayuda con auto-hide */}
-                    {showHelpHint && (
-                        <Animated.View style={[styles.gestureHint, { opacity: hintOpacity }]}>
-                            <Text style={styles.gestureHintText}>
-                                ✋ Desliza | 🤏 Pellizca | 🔄 Dos dedos para rotar
-                            </Text>
-                        </Animated.View>
-                    )}
-                </>
+            {/* Hint de ayuda con auto-hide */}
+            {showHelpHint && (
+                <Animated.View style={[styles.gestureHint, { opacity: hintOpacity }]}>
+                    <Text style={styles.gestureHintText}>
+                        ✋ Desliza | 🤏 Pellizca | 🔄 Dos dedos para rotar
+                    </Text>
+                </Animated.View>
             )}
-
-            {/* Botón Cerrar */}
-            <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => navigation?.goBack?.()}
-                activeOpacity={0.8}
-            >
-                <Text style={styles.closeText}>✕</Text>
-            </TouchableOpacity>
+        </>
+    )}
         </View>
     );
 };
@@ -359,20 +302,17 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     resetButton: {
-        position: 'absolute',
-        top: 80,
-        alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#5B3CF0',
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 28,
-        elevation: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 18,
+        elevation: 4,
         shadowColor: '#5B3CF0',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
     },
     resetText: {
         color: '#fff',
@@ -380,120 +320,84 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         fontSize: 14,
     },
-    toggleControlsButton: {
-        position: 'absolute',
-        bottom: 40,
-        right: 20,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: 'rgba(91, 60, 240, 0.9)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 8,
-        shadowColor: '#5B3CF0',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
-    },
-    toggleControlsButtonActive: {
-        backgroundColor: '#FF4444',
-    },
-    // Panel de control
-    controlPanel: {
-        position: 'absolute',
-        top: 140,
-        left: 20,
-        right: 20,
-        backgroundColor: 'rgba(30, 30, 30, 0.95)',
-        borderRadius: 16,
-        padding: 16,
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-    },
-    controlTitle: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 12,
-        textAlign: 'center',
-    },
-    controlButtons: {
+    headerRight: {
         flexDirection: 'row',
-        gap: 12,
-        justifyContent: 'space-around',
+        alignItems: 'center',
+        gap: 8,
     },
-    controlButton: {
-        flex: 1,
-        backgroundColor: 'rgba(91, 60, 240, 0.8)',
-        borderRadius: 12,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
+    toggleVisibility: {
+        flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        elevation: 4,
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 18,
+        elevation: 3,
     },
-    controlButtonText: {
-        color: '#fff',
+    toggleVisibilityText: {
+        color: '#0f172a',
+        fontWeight: '700',
         fontSize: 12,
-        fontWeight: '600',
-        textAlign: 'center',
     },
-    // Selector de controles
-    controlSelector: {
+    // Cabecera y mini panel
+    headerRow: {
         position: 'absolute',
-        bottom: 40,
+        top: 50,
         left: 20,
-        right: 90,
+        right: 20,
         flexDirection: 'row',
-        gap: 10,
-        justifyContent: 'center',
-    },
-    selectorButton: {
-        flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 2,
-        borderColor: '#5B3CF0',
-        borderRadius: 14,
-        paddingVertical: 12,
-        paddingHorizontal: 8,
+        justifyContent: 'space-between',
         alignItems: 'center',
-        justifyContent: 'center',
+        zIndex: 12,
+    },
+    closeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
         gap: 6,
-        elevation: 4,
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 18,
+        elevation: 3,
     },
-    selectorButtonActive: {
-        backgroundColor: '#5B3CF0',
-        borderColor: '#fff',
+    closeChipText: {
+        color: '#0f172a',
+        fontWeight: '700',
+        fontSize: 12,
     },
-    selectorButtonText: {
-        color: '#5B3CF0',
-        fontSize: 11,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    selectorButtonTextActive: {
-        color: '#fff',
-    },
-    // Hint de gestos
-    gestureHint: {
+    miniPanel: {
         position: 'absolute',
-        bottom: 110,
-        alignSelf: 'center',
+        bottom: 32,
+        left: 16,
+        right: 16,
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        borderRadius: 16,
+        padding: 12,
+        gap: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    miniRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        justifyContent: 'space-between',
+    },
+    miniAction: {
+        flexBasis: '48%',
         backgroundColor: 'rgba(91, 60, 240, 0.85)',
         borderRadius: 12,
         paddingVertical: 10,
-        paddingHorizontal: 20,
-        maxWidth: '85%',
-        elevation: 4,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+        gap: 6,
+        elevation: 3,
     },
-    gestureHintText: {
+    miniActionText: {
         color: '#fff',
+        fontWeight: '700',
         fontSize: 12,
-        fontWeight: '500',
         textAlign: 'center',
     },
     closeButton: {
