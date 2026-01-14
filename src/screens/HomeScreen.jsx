@@ -12,6 +12,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -33,11 +34,11 @@ import {
 } from "react-native";
 // Map components are now loaded dynamically.
 import { WebView } from "react-native-webview";
+import AuthModal from "../components/AuthModal";
 import PlaceMap from "../components/PlaceMap";
 import WebViewMap from "../components/WebViewMap";
-import AuthModal from "../components/AuthModal";
-import { useAuth } from "../context/AuthContext";
 import { ENDPOINTS } from "../config/api.config";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import { getPlaceArConfig } from "../services/ar";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
@@ -52,14 +53,71 @@ const distanceOptions = [1, 2, 5, 10, 20, 50, MAX_DISTANCE_KM];
 const fallbackCenter = { latitude: 2.9386, longitude: -75.2811 }; // Centro de respaldo para evitar coords vacías
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1600&q=80";
+const MAX_AR_MODEL_BYTES = 25 * 1024 * 1024;
 
 const getModelType = (url) => {
   if (typeof url !== "string") return null;
-  const cleanUrl = url.split("?")[0].toLowerCase();
+  const cleanUrl = url.trim().split("?")[0].toLowerCase();
   if (cleanUrl.endsWith(".usdz")) return "usdz";
   if (cleanUrl.endsWith(".glb")) return "glb";
   if (cleanUrl.endsWith(".gltf")) return "gltf";
   return null;
+};
+
+const parseUrlList = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  return value
+    .replace(/^\{|\}$/g, "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const fetchModelSize = async (url) => {
+  if (!url) return null;
+  try {
+    const response = await fetch(url, { method: "HEAD" });
+    const length = response.headers.get("content-length");
+    const size = length ? Number(length) : null;
+    return Number.isFinite(size) ? size : null;
+  } catch (err) {
+    return null;
+  }
+};
+
+const normalizePlace = (place) => {
+  if (!place || typeof place !== "object") return place;
+  const normalized = { ...place };
+  if (normalized.model_3d_urls && !normalized.model3dUrls) {
+    normalized.model3dUrls = parseUrlList(normalized.model_3d_urls);
+  }
+  if (normalized.model3dUrls && !Array.isArray(normalized.model3dUrls)) {
+    normalized.model3dUrls = parseUrlList(normalized.model3dUrls);
+  }
+  if (normalized.image_urls && !normalized.imageUrls) {
+    normalized.imageUrls = parseUrlList(normalized.image_urls);
+  }
+  if (normalized.imageUrls && !Array.isArray(normalized.imageUrls)) {
+    normalized.imageUrls = parseUrlList(normalized.imageUrls);
+  }
+  if (normalized.owner_user_id && !normalized.ownerUserId) {
+    normalized.ownerUserId = normalized.owner_user_id;
+  }
+  if (normalized.category_id && !normalized.categoryId) {
+    normalized.categoryId = normalized.category_id;
+  }
+  if (normalized.is_verified != null && normalized.isVerified == null) {
+    normalized.isVerified = normalized.is_verified;
+  }
+  if (normalized.is_active != null && normalized.isActive == null) {
+    normalized.isActive = normalized.is_active;
+  }
+  if (normalized.created_at && !normalized.createdAt) {
+    normalized.createdAt = normalized.created_at;
+  }
+  return normalized;
 };
 
 const isSameCoords = (a, b, tolerance = 0.000001) => {
@@ -386,6 +444,7 @@ const HomeScreen = ({ navigation }) => {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [selectedModelUrl, setSelectedModelUrl] = useState(null);
   const [coords, setCoords] = useState(null);
+  const [showAllNearby, setShowAllNearby] = useState(false);
   const [nearbyCache, setNearbyCache] = useState({
     radiusKm: 0,
     coords: null,
@@ -440,10 +499,10 @@ const HomeScreen = ({ navigation }) => {
 
   // Load nearby places when distance or category changes
   useEffect(() => {
-    if (coords) {
+    if (coords && !showAllNearby) {
       loadNearby();
     }
-  }, [distanceKm, selectedCategory]);
+  }, [distanceKm, selectedCategory, showAllNearby]);
 
   const handleMapTouchStart = useCallback(
     () => setIsInteractingWithMap(true),
@@ -463,10 +522,13 @@ const HomeScreen = ({ navigation }) => {
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
-      setPlaces(data);
-      setRecommended(data.slice(6, 20)); // Show items 7-20 in recommended
+      const normalized = data.map(normalizePlace);
+      setPlaces(normalized);
+      setRecommended(normalized.slice(6, 20)); // Show items 7-20 in recommended
+      return normalized;
     } catch (err) {
       setError("No se pudo cargar el catálogo.");
+      return [];
     } finally {
       setLoadingAll(false);
     }
@@ -490,7 +552,7 @@ const HomeScreen = ({ navigation }) => {
             const data = Array.isArray(response.data)
               ? response.data
               : response.data?.data || [];
-            setPopular(data.slice(0, 10));
+            setPopular(data.map(normalizePlace).slice(0, 10));
             return;
           }
         } else {
@@ -499,7 +561,7 @@ const HomeScreen = ({ navigation }) => {
           const data = Array.isArray(response.data)
             ? response.data
             : response.data?.data || [];
-          setPopular(data.slice(0, 10));
+          setPopular(data.map(normalizePlace).slice(0, 10));
           return;
         }
       }
@@ -517,7 +579,7 @@ const HomeScreen = ({ navigation }) => {
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
-      setNearby(data); // Save to nearby instead of popular
+      setNearby(data.map(normalizePlace)); // Save to nearby instead of popular
     } catch (err) {
       setError("No se pudo cargar lugares populares.");
     }
@@ -536,6 +598,7 @@ const HomeScreen = ({ navigation }) => {
   const performSearch = async () => {
     setLoadingAll(true);
     setError("");
+    setShowAllNearby(false);
     try {
       let coordsData = coords;
       if (!coordsData && distanceKm > 0) {
@@ -555,7 +618,7 @@ const HomeScreen = ({ navigation }) => {
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
-      setSearchResults(data); // Save search results separately
+      setSearchResults(data.map(normalizePlace)); // Save search results separately
       // Also refresh nearby places with current distance
       if (coordsData) {
         loadNearby();
@@ -566,6 +629,17 @@ const HomeScreen = ({ navigation }) => {
       setLoadingAll(false);
       setFiltersVisible(false);
     }
+  };
+
+  const showAllPlaces = async () => {
+    setQuery("");
+    setSelectedCategory("todos");
+    setShowAllNearby(true);
+    const data = await loadAll();
+    if (Array.isArray(data) && data.length) {
+      setNearby(data);
+    }
+    setFiltersVisible(false);
   };
 
   const loadNearby = async () => {
@@ -635,11 +709,11 @@ const HomeScreen = ({ navigation }) => {
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
-      setNearby(data);
+      setNearby(data.map(normalizePlace));
       setNearbyCache({
         radiusKm: distanceKm,
         coords: coordsData,
-        data,
+        data: data.map(normalizePlace),
         categoryId,
       });
     } catch (err) {
@@ -659,6 +733,19 @@ const HomeScreen = ({ navigation }) => {
       (item) => Number(item.categoryId) === Number(selectedCategory)
     );
   }, [nearby, selectedCategory]);
+
+  const filteredPlaces = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return places;
+    return places.filter((item) =>
+      (item?.name || "").toLowerCase().includes(term)
+    );
+  }, [places, query]);
+
+  const searchSuggestions = useMemo(() => {
+    if (!query.trim()) return [];
+    return filteredPlaces.slice(0, 6);
+  }, [filteredPlaces, query]);
 
   const filteredRecommended = useMemo(() => {
     if (selectedCategory === "todos") return recommended;
@@ -795,31 +882,46 @@ const HomeScreen = ({ navigation }) => {
       if (item?.id) {
         const response = await api.get(ENDPOINTS.PLACE_DETAIL(item.id));
         const data = response.data?.data || response.data || item;
-        setSelectedPlace(data);
+        const normalizedItem = normalizePlace(item);
+        const normalizedData = normalizePlace(data);
+        const merged = {
+          ...normalizedItem,
+          ...normalizedData,
+        };
+        if (
+          (!merged.model3dUrls || merged.model3dUrls.length === 0) &&
+          Array.isArray(normalizedItem?.model3dUrls) &&
+          normalizedItem.model3dUrls.length
+        ) {
+          merged.model3dUrls = normalizedItem.model3dUrls;
+        }
+        setSelectedPlace(merged);
       } else {
-        setSelectedPlace(item);
+        setSelectedPlace(normalizePlace(item));
       }
     } catch (err) {
-      setSelectedPlace(item);
+      setSelectedPlace(normalizePlace(item));
     } finally {
       setDetailLoading(false);
     }
   }, []);
 
   const model3dOptions = useMemo(() => {
+    const platformType = Platform.OS === "ios" ? "usdz" : "glb";
     const urls = [
-      ...(Array.isArray(selectedPlace?.model3dUrls)
-        ? selectedPlace.model3dUrls
-        : []),
+      ...parseUrlList(selectedPlace?.model3dUrls),
       ...(typeof selectedPlace?.model3dUrl === "string"
         ? [selectedPlace.model3dUrl]
         : []),
     ];
     return urls
-      .filter((url) => typeof url === "string" && url.startsWith("http"))
+      .filter((url) => typeof url === "string" && url.trim().startsWith("http"))
       .map((url) => {
         const type = getModelType(url);
         if (!type) return null;
+        if (type !== platformType && !(platformType === "glb" && type === "gltf")) {
+          return null;
+        }
         const label = url.split("/").pop()?.split("?")[0] || url;
         return { url, type, label };
       })
@@ -1053,9 +1155,16 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const emptyState = useMemo(() => {
-    if (loadingAll || places.length > 0) return null;
+    if (loadingAll || filteredPlaces.length > 0) return null;
+    if (query.trim()) {
+      return (
+        <Text style={styles.empty}>
+          No hay lugares que coincidan con tu búsqueda.
+        </Text>
+      );
+    }
     return <Text style={styles.empty}>No hay lugares aún.</Text>;
-  }, [loadingAll, places]);
+  }, [loadingAll, filteredPlaces, query]);
 
   const toggleDetailInfo = () => {
     const toValue = showDetailInfo ? 0 : 1;
@@ -1091,7 +1200,15 @@ const HomeScreen = ({ navigation }) => {
         { icon: "phone", label: "Contacto", value: "+57 310 123 4567" },
       ];
 
-      const arPreviewHtml = arUrl
+      const fallbackPreview =
+        model3dOptions[0]?.url ||
+        parseUrlList(selectedPlace?.model3dUrls).find((url) =>
+          String(url || "").trim().startsWith("http")
+        ) ||
+        null;
+      const previewModelUrl =
+        arConfig?.modelUrl || arConfig?.iosModelUrl || fallbackPreview;
+      const arPreviewHtml = previewModelUrl
         ? `
         <!doctype html>
         <html>
@@ -1104,7 +1221,7 @@ const HomeScreen = ({ navigation }) => {
             </style>
           </head>
           <body>
-            <model-viewer src="${arConfig?.modelUrl || arUrl}" ios-src="${arConfig?.iosModelUrl || ""}"
+            <model-viewer src="${previewModelUrl}" ios-src="${arConfig?.iosModelUrl || ""}"
               camera-controls auto-rotate shadow-intensity="1" exposure="1" ar-modes="webxr scene-viewer quick-look">
             </model-viewer>
           </body>
@@ -1482,6 +1599,48 @@ const HomeScreen = ({ navigation }) => {
       Platform.OS === "ios"
         ? arConfig?.iosModelUrl || arConfig?.modelUrl || platformArUrl
         : arConfig?.modelUrl || arConfig?.iosModelUrl || platformArUrl;
+    if (!arLaunchUrl) {
+      Alert.alert(
+        "Modelo no disponible",
+        "No hay un modelo compatible para abrir en AR.",
+        [{ text: "Aceptar" }]
+      );
+      return;
+    }
+    const size = await fetchModelSize(arLaunchUrl);
+    if (size && size > MAX_AR_MODEL_BYTES) {
+      const sizeMb = (size / (1024 * 1024)).toFixed(1);
+      Alert.alert(
+        "Modelo muy pesado",
+        `Este modelo pesa ${sizeMb} MB y puede cerrar la app en AR nativa. Te recomendamos usar AR web.`,
+        [
+          { text: "Cancelar", style: "cancel" },
+          platformArUrl
+            ? {
+                text: "Abrir AR web",
+                onPress: () => Linking.openURL(platformArUrl),
+              }
+            : null,
+        ]
+      );
+      return;
+    }
+    if (!size) {
+      Alert.alert(
+        "Tamaño desconocido",
+        "No se pudo verificar el tamaño del modelo. Te recomendamos abrirlo en AR web.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          platformArUrl
+            ? {
+                text: "Abrir AR web",
+                onPress: () => Linking.openURL(platformArUrl),
+              }
+            : null,
+        ]
+      );
+      return;
+    }
     if (navigation?.navigate) {
       navigation.navigate("ARView", {
         modelUrl: arLaunchUrl,
@@ -1762,15 +1921,6 @@ const HomeScreen = ({ navigation }) => {
                       returnKeyType="search"
                     />
                   </View>
-                  <TouchableOpacity
-                    style={styles.searchIconButton}
-                    onPress={performSearch}
-                  >
-                    <FontAwesome name="search" size={16} color="#fff" />
-                    <Text style={styles.searchIconLabel}>
-                      Explorar Destinos
-                    </Text>
-                  </TouchableOpacity>
                 </View>
                 <View style={styles.searchActions}>
                   <TouchableOpacity
@@ -1786,6 +1936,39 @@ const HomeScreen = ({ navigation }) => {
                     <Text style={styles.searchButtonText}>Descubrir</Text>
                   </TouchableOpacity>
                 </View>
+                {searchSuggestions.length ? (
+                  <View style={styles.searchSuggestions}>
+                    {searchSuggestions.map((item, idx) => (
+                      <TouchableOpacity
+                        key={`${item.id || item.name || idx}-suggestion`}
+                        style={styles.searchSuggestionItem}
+                        onPress={() => {
+                          setQuery(item.name || "");
+                          openDetail(item);
+                        }}
+                      >
+                        <View style={styles.searchSuggestionRow}>
+                          <FontAwesome
+                            name="map-marker"
+                            size={14}
+                            color="#5B3CF0"
+                          />
+                          <Text
+                            style={styles.searchSuggestionText}
+                            numberOfLines={1}
+                          >
+                            {item.name || "Lugar sin nombre"}
+                          </Text>
+                        </View>
+                        <FontAwesome
+                          name="chevron-right"
+                          size={12}
+                          color="#94a3b8"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
               </View>
 
               <View style={styles.heroStats}>
@@ -1836,7 +2019,10 @@ const HomeScreen = ({ navigation }) => {
                     styles.categoryTab,
                     selectedCategory === chip.id && styles.categoryTabActive,
                   ]}
-                  onPress={() => setSelectedCategory(chip.id)}
+                  onPress={() => {
+                    setShowAllNearby(false);
+                    setSelectedCategory(chip.id);
+                  }}
                 >
                   <Text
                     style={[
@@ -1888,7 +2074,7 @@ const HomeScreen = ({ navigation }) => {
               {emptyState}
               <FlatList
                 horizontal
-                data={places}
+                data={filteredPlaces}
                 keyExtractor={(item, idx) => `${item.id || idx}-all`}
                 renderItem={({ item }) =>
                   renderPlace({
@@ -2112,7 +2298,10 @@ const HomeScreen = ({ navigation }) => {
                       styles.quickChip,
                       distanceKm === km && styles.quickChipActive,
                     ]}
-                    onPress={() => setDistanceKm(km)}
+                    onPress={() => {
+                      setShowAllNearby(false);
+                      setDistanceKm(km);
+                    }}
                   >
                     <Text
                       style={[
@@ -2135,7 +2324,10 @@ const HomeScreen = ({ navigation }) => {
                 maximumTrackTintColor={COLORS.border}
                 thumbTintColor="#7B5BFF"
                 value={distanceKm}
-                onValueChange={setDistanceKm}
+                onValueChange={(value) => {
+                  setShowAllNearby(false);
+                  setDistanceKm(value);
+                }}
               />
               <Text style={styles.sliderValue}>
                 Radio personalizado: {distanceKm.toFixed(1)} km (máx{" "}
@@ -2146,6 +2338,15 @@ const HomeScreen = ({ navigation }) => {
                 Ajusta la distancia para refinar lugares cercanos. Las
                 categorías se seleccionan arriba.
               </Text>
+
+              <TouchableOpacity
+                style={styles.modalAllButton}
+                onPress={showAllPlaces}
+              >
+                <Text style={styles.modalAllButtonText}>
+                  Ver todos los sitios
+                </Text>
+              </TouchableOpacity>
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
@@ -2683,6 +2884,32 @@ const styles = StyleSheet.create({
   searchActions: {
     flexDirection: "row",
     gap: SPACING.sm,
+  },
+  searchSuggestions: {
+    borderTopWidth: 1,
+    borderTopColor: "#E7EAF3",
+    paddingTop: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  searchSuggestionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: 12,
+    backgroundColor: "#F7F8FD",
+  },
+  searchSuggestionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    flex: 1,
+  },
+  searchSuggestionText: {
+    color: COLORS.text,
+    fontWeight: "600",
+    flex: 1,
   },
   filterButton: {
     flex: 1,
@@ -3272,6 +3499,19 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: FONT_SIZES.sm,
     marginTop: SPACING.xs,
+  },
+  modalAllButton: {
+    marginTop: SPACING.xs,
+    borderRadius: 12,
+    paddingVertical: SPACING.sm,
+    alignItems: "center",
+    backgroundColor: "#F3F4FF",
+    borderWidth: 1,
+    borderColor: "#E0E7FF",
+  },
+  modalAllButtonText: {
+    color: "#4338CA",
+    fontWeight: "700",
   },
   modalTitle: {
     fontSize: FONT_SIZES.xl,

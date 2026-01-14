@@ -35,7 +35,8 @@ const normalizeUrls = (value) => {
 };
 
 const isHttpUrl = (url) => typeof url === 'string' && url.startsWith('http');
-const matchExt = (ext) => (url) => new RegExp(`\.(?:${ext})(?:\?|$)`, 'i').test(url);
+const matchExt = (ext) =>
+  (url) => new RegExp(`\\.(?:${ext})(?:\\?|$)`, 'i').test(url);
 
 export const getPlaceArConfig = (place) => {
   if (!place) return null;
