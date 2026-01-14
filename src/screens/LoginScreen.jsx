@@ -15,18 +15,18 @@ import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
+    if (!email || !totpCode) {
+      Alert.alert('Error', 'Por favor ingresa correo y código TOTP');
       return;
     }
 
     setLoading(true);
-    const result = await login(email, password);
+    const result = await login(email, totpCode);
     setLoading(false);
 
     if (!result.success) {
@@ -55,10 +55,11 @@ const LoginScreen = () => {
 
         <TextInput
           style={styles.input}
-          placeholder="Contraseña"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
+          placeholder="Código TOTP"
+          value={totpCode}
+          onChangeText={setTotpCode}
+          keyboardType="number-pad"
+          maxLength={6}
           editable={!loading}
         />
 

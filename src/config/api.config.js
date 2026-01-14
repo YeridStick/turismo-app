@@ -26,4 +26,8 @@ export const ENDPOINTS = {
   PLACE_RATING: (id) => `/api/pruebas/places/${id}/rating`,
   PLACE_REVIEWS: (id) => `/api/pruebas/places/${id}/reviews`,
   PLACE_FEEDBACK: (id) => `/api/pruebas/places/${id}/feedback`,
+
+  // Packages / Agencies
+  PACKAGES: "/api/packages",
+  AGENCIES: "/api/agencies",
 };

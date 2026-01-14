@@ -2,6 +2,13 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
+import {
+  confirmTotp as confirmTotpService,
+  loginTotp,
+  registerUser,
+  setupTotp as setupTotpService,
+  totpStatus as totpStatusService,
+} from '../services/auth';
 
 export const AuthContext = createContext();
 
@@ -28,33 +35,41 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password) => {
+  const fetchUserInfo = async (email) => {
     try {
-      const response = await api.post(ENDPOINTS.LOGIN, { email, password });
+      const response = await api.get('/api/info/user', { params: { userEmail: email } });
+      return response.data?.data || response.data || null;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const login = async (email, totpCode) => {
+    try {
+      const response = await loginTotp({ email, totpCode });
       const payload = response.data?.data || response.data;
       const token = payload?.token;
-      const userData = payload?.user || null;
 
       if (token) {
         await AsyncStorage.setItem('token', token);
       }
+      const userData = await fetchUserInfo(email);
       if (userData) {
         await AsyncStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
       }
-
-      setUser(userData);
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Error al iniciar sesión',
+        error: error.response?.data?.message || 'Error al iniciar sesión con TOTP',
       };
     }
   };
 
   const register = async (userData) => {
     try {
-      const response = await api.post(ENDPOINTS.REGISTER, userData);
+      const response = await registerUser(userData);
       return { success: true, data: response.data };
     } catch (error) {
       return {
@@ -77,7 +92,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        setupTotp: setupTotpService,
+        confirmTotp: confirmTotpService,
+        totpStatus: totpStatusService,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

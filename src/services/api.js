@@ -10,13 +10,27 @@ const api = axios.create({
   },
 });
 
+const PROTECTED_PREFIXES = [
+  '/api/auth/refresh',
+  '/api/info/user',
+  '/api/users/me',
+  '/api/places/mine',
+  '/admin',
+  '/api/pruebas/places/', // feedback/checkin/reviews si están protegidos
+];
+
+const needsAuth = (url = '') =>
+  PROTECTED_PREFIXES.some((p) => url.startsWith(p));
+
 // Interceptor para agregar el token a cada request
 api.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (token) {
+      if (token && needsAuth(config.url)) {
         config.headers.Authorization = `Bearer ${token}`;
+      } else {
+        delete config.headers.Authorization;
       }
     } catch (error) {
       console.error('Error getting token:', error);

@@ -35,6 +35,8 @@ import {
 import { WebView } from "react-native-webview";
 import PlaceMap from "../components/PlaceMap";
 import WebViewMap from "../components/WebViewMap";
+import AuthModal from "../components/AuthModal";
+import { useAuth } from "../context/AuthContext";
 import { ENDPOINTS } from "../config/api.config";
 import api from "../services/api";
 import { getPlaceArConfig } from "../services/ar";
@@ -50,6 +52,15 @@ const distanceOptions = [1, 2, 5, 10, 20, 50, MAX_DISTANCE_KM];
 const fallbackCenter = { latitude: 2.9386, longitude: -75.2811 }; // Centro de respaldo para evitar coords vacías
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1600&q=80";
+
+const getModelType = (url) => {
+  if (typeof url !== "string") return null;
+  const cleanUrl = url.split("?")[0].toLowerCase();
+  if (cleanUrl.endsWith(".usdz")) return "usdz";
+  if (cleanUrl.endsWith(".glb")) return "glb";
+  if (cleanUrl.endsWith(".gltf")) return "gltf";
+  return null;
+};
 
 const isSameCoords = (a, b, tolerance = 0.000001) => {
   if (!a || !b) return false;
@@ -353,7 +364,9 @@ const HomeScreen = ({ navigation }) => {
   const isSmall = windowWidth < BREAKPOINTS.medium;
   const cardCompactWidth = Math.max(Math.min(windowWidth * 0.55, 280), 190);
   const cardWideWidth = isSmall ? 280 : 340;
+  const packageCardWidth = isSmall ? windowWidth - SPACING.lg * 2 : 340;
   const detailImageHeight = windowHeight;
+  const { user, logout } = useAuth();
 
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
@@ -371,6 +384,7 @@ const HomeScreen = ({ navigation }) => {
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [selectedModelUrl, setSelectedModelUrl] = useState(null);
   const [coords, setCoords] = useState(null);
   const [nearbyCache, setNearbyCache] = useState({
     radiusKm: 0,
@@ -387,11 +401,42 @@ const HomeScreen = ({ navigation }) => {
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
   const imageListRef = useRef(null);
   const slideUpAnim = useRef(new Animated.Value(0)).current;
+  const [authVisible, setAuthVisible] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
+  const [paymentVisible, setPaymentVisible] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [paymentForm, setPaymentForm] = useState({
+    email: "",
+    cardNumber: "",
+    cardName: "",
+    expiry: "",
+    cvv: "",
+  });
+  const [packages, setPackages] = useState([]);
+  const [loadingPackages, setLoadingPackages] = useState(false);
+  const [packagesError, setPackagesError] = useState("");
+  const [agencies, setAgencies] = useState([]);
+  const [loadingAgencies, setLoadingAgencies] = useState(false);
+  const [agenciesError, setAgenciesError] = useState("");
+  const [selectedAgency, setSelectedAgency] = useState(null);
+  const [agencyVisible, setAgencyVisible] = useState(false);
 
   useEffect(() => {
     loadAll();
     loadPopular();
+    loadPackages();
+    loadAgencies();
   }, []);
+
+  const packageGradients = useMemo(
+    () => [
+      ["#0f172a", "#6366f1"],
+      ["#0b3b3c", "#14b8a6"],
+      ["#1f2937", "#f97316"],
+      ["#2b1b4d", "#ec4899"],
+    ],
+    []
+  );
 
   // Load nearby places when distance or category changes
   useEffect(() => {
@@ -605,7 +650,7 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleRefresh = async () => {
-    await Promise.all([loadAll(), loadPopular()]);
+    await Promise.all([loadAll(), loadPopular(), loadPackages(), loadAgencies()]);
   };
 
   const filteredNearby = useMemo(() => {
@@ -761,6 +806,46 @@ const HomeScreen = ({ navigation }) => {
     }
   }, []);
 
+  const model3dOptions = useMemo(() => {
+    const urls = [
+      ...(Array.isArray(selectedPlace?.model3dUrls)
+        ? selectedPlace.model3dUrls
+        : []),
+      ...(typeof selectedPlace?.model3dUrl === "string"
+        ? [selectedPlace.model3dUrl]
+        : []),
+    ];
+    return urls
+      .filter((url) => typeof url === "string" && url.startsWith("http"))
+      .map((url) => {
+        const type = getModelType(url);
+        if (!type) return null;
+        const label = url.split("/").pop()?.split("?")[0] || url;
+        return { url, type, label };
+      })
+      .filter(Boolean);
+  }, [selectedPlace]);
+
+  useEffect(() => {
+    if (!selectedPlace) {
+      setSelectedModelUrl(null);
+      return;
+    }
+    const stillSelected = model3dOptions.some(
+      (model) => model.url === selectedModelUrl
+    );
+    if (stillSelected) return;
+
+    const preferred =
+      Platform.OS === "ios"
+        ? model3dOptions.find((model) => model.type === "usdz")
+        : model3dOptions.find((model) => model.type === "glb") ||
+          model3dOptions.find((model) => model.type === "gltf");
+
+    const fallback = preferred || model3dOptions[0] || null;
+    setSelectedModelUrl(fallback ? fallback.url : null);
+  }, [selectedPlace, model3dOptions, selectedModelUrl]);
+
   const renderPlace = useCallback(
     ({
       item,
@@ -802,10 +887,175 @@ const HomeScreen = ({ navigation }) => {
     [openDetail, cardCompactWidth, cardWideWidth]
   );
 
+  const getPackageImage = useCallback((pkg) => {
+    const direct = typeof pkg?.image === "string" ? pkg.image.trim() : "";
+    if (direct) return direct;
+    const fromPlaces = Array.isArray(pkg?.places)
+      ? pkg.places
+          .map((place) =>
+            Array.isArray(place?.imageUrls)
+              ? place.imageUrls.find((url) => url && url.trim())
+              : null
+          )
+          .find(Boolean)
+      : null;
+    return fromPlaces || null;
+  }, []);
+
+  const getPackageGradient = useCallback(
+    (pkg) => {
+      const seed = String(pkg?.id || pkg?.title || "0");
+      const hash = seed
+        .split("")
+        .reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+      return packageGradients[hash % packageGradients.length];
+    },
+    [packageGradients]
+  );
+
+  const openAgency = (agency) => {
+    setSelectedAgency(agency);
+    setAgencyVisible(true);
+  };
+
+  const renderPackageCard = (pkg) => {
+    const sanitizedIncludes = Array.isArray(pkg.includes)
+      ? pkg.includes.filter((item) => item && String(item).trim())
+      : [];
+    const includeList = sanitizedIncludes.slice(0, 3);
+    const remaining = Math.max(sanitizedIncludes.length - includeList.length, 0);
+    const cityTags = pkg.city ? pkg.city.split("/").map((c) => c.trim()) : [];
+    const packageImage = getPackageImage(pkg);
+    const hasImage = Boolean(packageImage);
+    const fallbackGradient = getPackageGradient(pkg);
+
+    return (
+      <View style={[styles.packageCard, { width: packageCardWidth }]}>
+        <View style={styles.packageImageWrapper}>
+          {hasImage ? (
+            <>
+              <Image
+                source={{ uri: packageImage }}
+                style={styles.packageImage}
+                contentFit="cover"
+                cachePolicy="disk"
+                placeholder={IMAGE_PLACEHOLDER}
+                transition={200}
+              />
+              <LinearGradient
+                colors={["rgba(0,0,0,0.05)", "rgba(0,0,0,0.7)"]}
+                style={styles.packageImageOverlay}
+              />
+            </>
+          ) : (
+            <LinearGradient
+              colors={fallbackGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.packageImage, styles.packageImageFallback]}
+            >
+              <FontAwesome name="suitcase" size={24} color="#fff" />
+              <Text style={styles.packageFallbackText}>
+                {pkg.agencyName || "Paquete turístico"}
+              </Text>
+            </LinearGradient>
+          )}
+          <View style={styles.packageBadgeRow}>
+            {pkg.discount ? (
+              <View style={styles.packageDiscount}>
+                <Text style={styles.packageDiscountText}>{pkg.discount}</Text>
+              </View>
+            ) : null}
+            {pkg.tag ? (
+              <View style={styles.packageTag}>
+                <Text style={styles.packageTagText}>{pkg.tag}</Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.packageLocationRow}>
+            {cityTags.map((tag, idx) => (
+              <View key={`${pkg.id}-city-${idx}`} style={styles.packageLocationChip}>
+                <FontAwesome name="map-marker" size={12} color="#fff" />
+                <Text style={styles.packageLocationText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.packageBody}>
+          <View style={styles.packageTitleRow}>
+            <Text style={styles.packageTitle}>{pkg.title}</Text>
+            <View style={styles.packageRating}>
+              <FontAwesome name="star" size={12} color="#f5b000" />
+              <Text style={styles.packageRatingText}>
+                {(pkg.rating ?? 4.5)} ({pkg.reviews ?? 0} reseñas)
+              </Text>
+            </View>
+          </View>
+          {pkg.agencyName ? (
+            <Text style={styles.packageAgency}>Publicado por {pkg.agencyName}</Text>
+          ) : null}
+          <Text style={styles.packageSubtitle}>{pkg.description}</Text>
+
+          <View style={styles.packageMetaRow}>
+            <View style={styles.packageMetaItem}>
+              <FontAwesome name="clock-o" size={12} color="#6b7280" />
+              <Text style={styles.packageMetaText}>
+                {pkg.days} días / {pkg.nights} noches
+              </Text>
+            </View>
+            <View style={styles.packageMetaItem}>
+              <FontAwesome name="users" size={12} color="#6b7280" />
+              <Text style={styles.packageMetaText}>{pkg.people}</Text>
+            </View>
+          </View>
+
+          <View style={styles.packageIncludes}>
+            <Text style={styles.packageIncludesTitle}>Incluye:</Text>
+            {includeList.map((item, idx) => (
+              <View key={`${pkg.id}-inc-${idx}`} style={styles.packageIncludeRow}>
+                <FontAwesome name="check" size={12} color="#10b981" />
+                <Text style={styles.packageIncludeText}>{item}</Text>
+              </View>
+            ))}
+            {!includeList.length ? (
+              <Text style={styles.packageIncludeEmpty}>
+                Incluye detalles por confirmar.
+              </Text>
+            ) : null}
+            {remaining > 0 ? (
+              <Text style={styles.packageIncludeMore}>+{remaining} más…</Text>
+            ) : null}
+          </View>
+
+          <View style={styles.packagePriceRow}>
+            <View>
+              <Text style={styles.packagePriceOriginal}>
+                {formatPrice(pkg.originalPrice)}
+              </Text>
+              <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
+              <Text style={styles.packagePriceNote}>por persona</Text>
+            </View>
+            <TouchableOpacity style={styles.packageButton} onPress={() => openPayment(pkg)}>
+              <LinearGradient
+                colors={["#7B5BFF", "#D66DFF"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.packageButtonGradient}
+              >
+                <Text style={styles.packageButtonText}>Reservar Ahora</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const emptyState = useMemo(() => {
-    if (loadingAll) return null;
+    if (loadingAll || places.length > 0) return null;
     return <Text style={styles.empty}>No hay lugares aún.</Text>;
-  }, [loadingAll]);
+  }, [loadingAll, places]);
 
   const toggleDetailInfo = () => {
     const toValue = showDetailInfo ? 0 : 1;
@@ -861,6 +1111,57 @@ const HomeScreen = ({ navigation }) => {
         </html>
         `
         : null;
+
+      const renderModelSelector = () =>
+        model3dOptions.length ? (
+          <View style={styles.arPreviewCard}>
+            <View style={styles.arPreviewHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.xs }}>
+                <FontAwesome name="cubes" size={14} color="#5B3CF0" />
+                <Text style={styles.arPreviewTitle}>Modelos 3D disponibles</Text>
+              </View>
+              <View style={styles.arPreviewBadge}>
+                <Text style={styles.arPreviewBadgeText}>
+                  {model3dOptions.length} modelo{model3dOptions.length > 1 ? "s" : ""}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.modelChipRow}>
+              {model3dOptions.map((model, idx) => {
+                const active = selectedModelUrl === model.url;
+                return (
+                  <TouchableOpacity
+                    key={`${model.url}-${idx}`}
+                    style={[
+                      styles.modelChip,
+                      active && styles.modelChipActive,
+                    ]}
+                    onPress={() => setSelectedModelUrl(model.url)}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome
+                      name="cube"
+                      size={12}
+                      color={active ? "#fff" : "#5B3CF0"}
+                    />
+                    <Text
+                      style={[
+                        styles.modelChipText,
+                        active && styles.modelChipTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {model.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.modelChipHint}>
+              La vista previa y AR usan el modelo seleccionado.
+            </Text>
+          </View>
+        ) : null;
 
       const renderInfoSlide = () => (
         <View style={[styles.infoSlide, { width: windowWidth, height: detailImageHeight }]}>
@@ -940,6 +1241,7 @@ const HomeScreen = ({ navigation }) => {
                 </Text>
               </View>
             ) : null}
+            {renderModelSelector()}
 
             <View style={styles.infoSlideActions}>
               <TouchableOpacity
@@ -1112,13 +1414,45 @@ const HomeScreen = ({ navigation }) => {
       showDetailInfo,
       slideUpAnim,
       selectedPlace,
+      selectedModelUrl,
+      arConfig,
       platformArUrl,
+      model3dOptions,
       openDirectionsFromCurrent,
       openNativeAR,
     ]
   );
 
-  const arConfig = getPlaceArConfig(selectedPlace);
+  const placeForAr = useMemo(() => {
+    if (!selectedPlace) return null;
+
+    const fallbackGlb =
+      model3dOptions.find((model) => model.type === "glb")?.url ||
+      model3dOptions.find((model) => model.type === "gltf")?.url ||
+      null;
+    const fallbackUsdz =
+      model3dOptions.find((model) => model.type === "usdz")?.url || null;
+
+    const selectedType = getModelType(selectedModelUrl);
+    const arModelUrl =
+      (selectedType === "glb" || selectedType === "gltf"
+        ? selectedModelUrl
+        : null) || fallbackGlb;
+    const arModelIosUrl =
+      (selectedType === "usdz" ? selectedModelUrl : null) || fallbackUsdz;
+
+    if (!arModelUrl && !arModelIosUrl) return selectedPlace;
+
+    return {
+      ...selectedPlace,
+      arModelUrl,
+      arModelIosUrl,
+      modelUrl: arModelUrl,
+      iosModelUrl: arModelIosUrl,
+    };
+  }, [selectedPlace, selectedModelUrl, model3dOptions]);
+
+  const arConfig = getPlaceArConfig(placeForAr);
   const arUrl = arConfig?.arUrl;
   const platformArUrl =
     Platform.OS === "ios"
@@ -1144,11 +1478,69 @@ const HomeScreen = ({ navigation }) => {
 
   const openNativeAR = async () => {
     // Navegar a la pantalla AR nativa usando ViroReact
+    const arLaunchUrl =
+      Platform.OS === "ios"
+        ? arConfig?.iosModelUrl || arConfig?.modelUrl || platformArUrl
+        : arConfig?.modelUrl || arConfig?.iosModelUrl || platformArUrl;
     if (navigation?.navigate) {
       navigation.navigate("ARView", {
-        modelUrl: arConfig?.modelUrl || arConfig?.iosModelUrl || platformArUrl,
+        modelUrl: arLaunchUrl,
       });
     }
+  };
+
+  const loadPackages = async () => {
+    setLoadingPackages(true);
+    setPackagesError("");
+    try {
+      const response = await api.get(ENDPOINTS.PACKAGES);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : response.data?.data || [];
+      setPackages(data);
+    } catch (err) {
+      setPackagesError("No se pudo cargar paquetes turísticos.");
+    } finally {
+      setLoadingPackages(false);
+    }
+  };
+
+  const loadAgencies = async () => {
+    setLoadingAgencies(true);
+    setAgenciesError("");
+    try {
+      const response = await api.get(ENDPOINTS.AGENCIES);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : response.data?.data || [];
+      setAgencies(data);
+    } catch (err) {
+      setAgenciesError("No se pudo cargar agencias.");
+    } finally {
+      setLoadingAgencies(false);
+    }
+  };
+
+  const formatPrice = (value) => {
+    if (!value) return "$0";
+    try {
+      return `$${Number(value).toLocaleString("es-CO")}`;
+    } catch {
+      return `$${value}`;
+    }
+  };
+
+  const handlePaymentChange = (field, value) => {
+    setPaymentForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const openPayment = (pkg) => {
+    setSelectedPackage(pkg);
+    setPaymentVisible(true);
+  };
+
+  const closePayment = () => {
+    setPaymentVisible(false);
   };
 
   const renderArWebView = () => {
@@ -1210,14 +1602,95 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  const ProfileModal = () => {
+    if (!user) return null;
+    const avatar =
+      user.urlAvatar ||
+      user.avatar ||
+      "https://api.dicebear.com/7.x/miniavs/svg?seed=turismo";
+
+    return (
+      <Modal
+        visible={profileVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setProfileVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.profileCard}>
+            <View style={styles.profileHeaderRow}>
+              <View style={styles.profileHeaderTitle}>
+                <FontAwesome name="user" size={18} color="#5B3CF0" />
+                <Text style={styles.profileTitleText}>Mi Perfil</Text>
+              </View>
+              <TouchableOpacity onPress={() => setProfileVisible(false)}>
+                <Text style={styles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.profileAvatarWrapper}>
+              <Image source={{ uri: avatar }} style={styles.profileAvatar} />
+              <Text style={styles.profileName}>
+                {user.fullName || "Visitante"}
+              </Text>
+              <Text style={styles.profileEmail}>{user.email}</Text>
+            </View>
+            <View style={styles.profileInfoGroup}>
+              <View style={styles.profileItem}>
+                <FontAwesome name="id-card" size={16} color="#5B3CF0" />
+                <Text style={styles.profileItemText}>
+                  {(user.identificationType || "Documento") +
+                    (user.identificationNumber
+                      ? ` ${user.identificationNumber}`
+                      : "")}
+                </Text>
+              </View>
+              <View style={styles.profileItem}>
+                <FontAwesome name="calendar" size={16} color="#5B3CF0" />
+                <Text style={styles.profileItemText}>
+                  Miembro desde{" "}
+                  {user.createdAt
+                    ? new Date(user.createdAt).toLocaleDateString()
+                    : "—"}
+                </Text>
+              </View>
+              <View style={styles.profileItem}>
+                <FontAwesome name="link" size={16} color="#5B3CF0" />
+                <Text style={styles.profileItemText} numberOfLines={1}>
+                  {avatar}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.profileActions}>
+              <TouchableOpacity
+                style={styles.modalSecondary}
+                onPress={() => setProfileVisible(false)}
+              >
+                <Text style={styles.modalSecondaryText}>Cerrar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalPrimary} onPress={logout}>
+                <Text style={styles.modalPrimaryText}>Cerrar Sesión</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
-    <KeyboardAvoidingView style={styles.container} behavior="height">
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0}
+    >
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={loadingAll} onRefresh={handleRefresh} />
         }
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isInteractingWithMap}
+        contentContainerStyle={{ paddingBottom: SPACING.lg }}
+        contentInsetAdjustmentBehavior="never"
       >
         <View style={styles.pageHeader}>
           <ImageBackground
@@ -1238,14 +1711,29 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.locationLabel}>Explora</Text>
                   <Text style={styles.locationValue}>Cerca de ti</Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.loginButton}
-                  onPress={() => {
-                    /* TODO: Navigate to login */
-                  }}
-                >
-                  <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
-                </TouchableOpacity>
+                {user ? (
+                  <TouchableOpacity
+                    style={styles.profileButton}
+                    onPress={() => setProfileVisible(true)}
+                  >
+                    <FontAwesome name="user" size={16} color="#fff" />
+                    <View>
+                      <Text style={styles.profileButtonLabel}>Hola,</Text>
+                      <Text style={styles.profileButtonName} numberOfLines={1}>
+                        {user.fullName || user.email}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.loginButton}
+                    onPress={() => {
+                      setAuthVisible(true);
+                    }}
+                  >
+                    <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <View style={styles.heroBadge}>
@@ -1429,9 +1917,172 @@ const HomeScreen = ({ navigation }) => {
           )}
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.sectionIntro}>
+            <Text style={styles.sectionPill}>Ofertas Especiales</Text>
+            <Text style={styles.sectionHeroTitle}>Paquetes Turísticos</Text>
+            <Text style={styles.sectionDescription}>
+              Descubre nuestras experiencias diseñadas para que vivas lo mejor del Huila. Incluyen alojamiento,
+              transporte, alimentación y guías especializados.
+            </Text>
+          </View>
+
+          {loadingPackages ? (
+            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
+          ) : packagesError ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{packagesError}</Text>
+            </View>
+          ) : packages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No hay paquetes publicados aún.</Text>
+            </View>
+          ) : (
+            <View style={styles.packageList}>
+              <FlatList
+                horizontal
+                data={packages}
+                keyExtractor={(item, index) => `${item.id || index}-package`}
+                renderItem={({ item }) => renderPackageCard(item)}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.packageListContent}
+                snapToInterval={packageCardWidth + SPACING.md}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                getItemLayout={(_, index) => ({
+                  length: packageCardWidth + SPACING.md,
+                  offset: (packageCardWidth + SPACING.md) * index,
+                  index,
+                })}
+                windowSize={4}
+                initialNumToRender={3}
+              />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionIntro}>
+            <Text style={styles.sectionPillSecondary}>Agencias</Text>
+            <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
+            <Text style={styles.sectionDescription}>
+              Encuentra agencias confiables y conoce su información antes de reservar.
+            </Text>
+          </View>
+
+          {loadingAgencies ? (
+            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
+          ) : agenciesError ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>{agenciesError}</Text>
+            </View>
+          ) : agencies.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No hay agencias registradas aún.</Text>
+            </View>
+          ) : (
+            <FlatList
+              horizontal
+              data={agencies}
+              keyExtractor={(item, index) => `${item.id || index}-agency`}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.agencyChip}
+                  onPress={() => openAgency(item)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.agencyChipText} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.agencyList}
+            />
+          )}
+        </View>
+
         <Footer />
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </ScrollView>
+
+      <AuthModal
+        visible={authVisible}
+        onClose={() => setAuthVisible(false)}
+      />
+      <ProfileModal />
+
+      <Modal
+        visible={agencyVisible}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setAgencyVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.agencyModalCard}>
+            <View style={styles.agencyModalHeader}>
+              <View style={styles.agencyHeaderLeft}>
+                <View style={styles.agencyIcon}>
+                  <FontAwesome name="building" size={14} color="#5B3CF0" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.agencyTitle}>
+                    {selectedAgency?.name || "Agencia"}
+                  </Text>
+                  <Text style={styles.agencySubtitle}>
+                    {selectedAgency?.email || "contacto@agencia.com"}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setAgencyVisible(false)}>
+                <Text style={styles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.agencyBody}
+              showsVerticalScrollIndicator={false}
+            >
+              {selectedAgency?.logoUrl ? (
+                <Image
+                  source={{ uri: selectedAgency.logoUrl }}
+                  style={styles.agencyLogo}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  placeholder={IMAGE_PLACEHOLDER}
+                  transition={200}
+                />
+              ) : null}
+
+              {selectedAgency?.description ? (
+                <Text style={styles.agencyDescription}>
+                  {selectedAgency.description}
+                </Text>
+              ) : null}
+
+              <View style={styles.agencyInfoRow}>
+                <FontAwesome name="phone" size={14} color="#5B3CF0" />
+                <Text style={styles.agencyInfoText}>
+                  {selectedAgency?.phone || "Teléfono no disponible"}
+                </Text>
+              </View>
+              <View style={styles.agencyInfoRow}>
+                <FontAwesome name="envelope" size={14} color="#5B3CF0" />
+                <Text style={styles.agencyInfoText}>
+                  {selectedAgency?.email || "Email no disponible"}
+                </Text>
+              </View>
+              <View style={styles.agencyInfoRow}>
+                <FontAwesome name="link" size={14} color="#5B3CF0" />
+                <Text style={styles.agencyInfoText}>
+                  {selectedAgency?.website || "Sitio web no disponible"}
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal filtros */}
       <Modal
@@ -1544,6 +2195,137 @@ const HomeScreen = ({ navigation }) => {
                   ? selectedPlace.imageUrls
                   : []
               )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal pasarela de pago */}
+      <Modal
+        visible={paymentVisible}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={closePayment}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.paymentCard}>
+            <LinearGradient
+              colors={["#f4f0ff", "#fdf4ff"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.paymentHeader}
+            >
+              <View style={styles.paymentHeaderLeft}>
+                <View style={styles.paymentIcon}>
+                  <FontAwesome name="credit-card" size={14} color="#5B3CF0" />
+                </View>
+                <View>
+                  <Text style={styles.paymentTitle}>Pasarela de Pago</Text>
+                  <Text style={styles.paymentSubtitle}>Reserva tu paquete turístico</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={closePayment}>
+                <Text style={styles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+
+            <ScrollView
+              contentContainerStyle={styles.paymentBody}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.paymentPackageRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.paymentPackageTitle}>
+                    {selectedPackage?.title || "Paquete seleccionado"}
+                  </Text>
+                  <Text style={styles.paymentPackageSubtitle}>
+                    {selectedPackage
+                      ? `${selectedPackage.days} días / ${selectedPackage.nights} noches`
+                      : "Duración flexible"}
+                  </Text>
+                </View>
+                <View style={styles.paymentPackagePrice}>
+                  <Text style={styles.paymentPackagePriceLabel}>Total</Text>
+                  <Text style={styles.paymentPackagePriceValue}>
+                    {formatPrice(selectedPackage?.price || 0)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Email</Text>
+                <TextInput
+                  style={styles.paymentInput}
+                  placeholder="tu@email.com"
+                  keyboardType="email-address"
+                  value={paymentForm.email}
+                  onChangeText={(text) => handlePaymentChange("email", text)}
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Número de Tarjeta</Text>
+                <TextInput
+                  style={styles.paymentInput}
+                  placeholder="1234 5678 9012 3456"
+                  keyboardType="number-pad"
+                  value={paymentForm.cardNumber}
+                  onChangeText={(text) => handlePaymentChange("cardNumber", text)}
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Nombre en la Tarjeta</Text>
+                <TextInput
+                  style={styles.paymentInput}
+                  placeholder="Juan Pérez"
+                  value={paymentForm.cardName}
+                  onChangeText={(text) => handlePaymentChange("cardName", text)}
+                />
+              </View>
+              <View style={styles.paymentRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Fecha de Vencimiento</Text>
+                  <TextInput
+                    style={styles.paymentInput}
+                    placeholder="MM/AA"
+                    value={paymentForm.expiry}
+                    onChangeText={(text) => handlePaymentChange("expiry", text)}
+                  />
+                </View>
+                <View style={{ width: 100 }}>
+                  <Text style={styles.inputLabel}>CVV</Text>
+                  <TextInput
+                    style={styles.paymentInput}
+                    placeholder="123"
+                    secureTextEntry
+                    value={paymentForm.cvv}
+                    onChangeText={(text) => handlePaymentChange("cvv", text)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.paymentSecureRow}>
+                <View style={styles.paymentSecureIcon}>
+                  <FontAwesome name="lock" size={12} color="#059669" />
+                </View>
+                <Text style={styles.paymentSecureText}>
+                  Pago seguro con encriptación SSL
+                </Text>
+              </View>
+
+              <TouchableOpacity style={styles.paymentConfirm} onPress={closePayment}>
+                <LinearGradient
+                  colors={["#7B5BFF", "#D66DFF"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.paymentConfirmGradient}
+                >
+                  <Text style={styles.paymentConfirmText}>
+                    Confirmar Pago - {formatPrice(selectedPackage?.price || 0)}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -1730,6 +2512,26 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: "700",
     fontSize: FONT_SIZES.sm,
+  },
+  profileButton: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  profileButtonLabel: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: FONT_SIZES.xs,
+  },
+  profileButtonName: {
+    color: COLORS.white,
+    fontWeight: "700",
+    maxWidth: 160,
   },
   tabBar: {
     flexDirection: "row",
@@ -2509,6 +3311,71 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: "bold",
   },
+  profileCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  profileHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  profileHeaderTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  profileTitleText: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  profileAvatarWrapper: {
+    alignItems: "center",
+    gap: SPACING.xs,
+  },
+  profileAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: "#eef2ff",
+  },
+  profileName: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  profileEmail: {
+    color: COLORS.textLight,
+  },
+  profileInfoGroup: {
+    gap: SPACING.sm,
+  },
+  profileItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    backgroundColor: "#f7f7fb",
+    padding: SPACING.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eceef5",
+  },
+  profileItemText: {
+    color: COLORS.text,
+    flex: 1,
+  },
+  profileActions: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
   detailOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
@@ -2823,6 +3690,40 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: FONT_SIZES.sm,
   },
+  modelChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.xs,
+  },
+  modelChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#F8F8FD",
+  },
+  modelChipActive: {
+    backgroundColor: "#5B3CF0",
+    borderColor: "#5B3CF0",
+  },
+  modelChipText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.sm,
+    maxWidth: 160,
+  },
+  modelChipTextActive: {
+    color: COLORS.white,
+    fontWeight: "700",
+  },
+  modelChipHint: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.xs,
+    marginTop: SPACING.xs,
+  },
   arNativeLink: {
     flexDirection: "row",
     alignItems: "center",
@@ -2993,6 +3894,443 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: "rgba(0,0,0,0.2)",
+  },
+  packageList: {
+    paddingHorizontal: SPACING.md,
+  },
+  packageListContent: {
+    gap: SPACING.md,
+    paddingRight: SPACING.lg,
+  },
+  packageCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  packageImageWrapper: {
+    height: 180,
+    position: "relative",
+  },
+  packageImage: {
+    width: "100%",
+    height: "100%",
+  },
+  packageImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+  },
+  packageFallbackText: {
+    color: COLORS.white,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  packageImageOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+  },
+  packageBadgeRow: {
+    position: "absolute",
+    top: SPACING.sm,
+    left: SPACING.sm,
+    right: SPACING.sm,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  packageDiscount: {
+    backgroundColor: "rgba(220, 38, 38, 0.9)",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  packageDiscountText: {
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: FONT_SIZES.sm,
+  },
+  packageTag: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  packageTagText: {
+    color: "#111827",
+    fontWeight: "700",
+    fontSize: FONT_SIZES.sm,
+  },
+  packageLocationRow: {
+    position: "absolute",
+    bottom: SPACING.sm,
+    left: SPACING.sm,
+    right: SPACING.sm,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.xs,
+  },
+  packageLocationChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  packageLocationText: {
+    color: COLORS.white,
+    fontWeight: "700",
+    fontSize: FONT_SIZES.sm,
+  },
+  packageBody: {
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  packageTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: SPACING.sm,
+    alignItems: "center",
+  },
+  packageTitle: {
+    flex: 1,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  packageRating: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  packageRatingText: {
+    color: COLORS.text,
+    fontWeight: "700",
+    fontSize: FONT_SIZES.sm,
+  },
+  packageAgency: {
+    color: "#5B3CF0",
+    fontWeight: "600",
+  },
+  packageSubtitle: {
+    color: COLORS.textLight,
+    lineHeight: 20,
+  },
+  packageMetaRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    flexWrap: "wrap",
+  },
+  packageMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F7F8FD",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: 12,
+  },
+  packageMetaText: {
+    color: COLORS.text,
+    fontWeight: "600",
+    fontSize: FONT_SIZES.sm,
+  },
+  packageIncludes: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: SPACING.sm,
+    gap: 4,
+    backgroundColor: "#FDFDFE",
+  },
+  packageIncludesTitle: {
+    color: COLORS.text,
+    fontWeight: "700",
+  },
+  packageIncludeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  packageIncludeText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.sm,
+  },
+  packageIncludeEmpty: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  packageIncludeMore: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  packagePriceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: SPACING.xs,
+    gap: SPACING.md,
+  },
+  packagePriceOriginal: {
+    color: COLORS.textLight,
+    textDecorationLine: "line-through",
+    fontSize: FONT_SIZES.sm,
+  },
+  packagePrice: {
+    color: "#111827",
+    fontWeight: "800",
+    fontSize: FONT_SIZES.lg,
+  },
+  packagePriceNote: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  packageButton: {
+    flex: 1,
+  },
+  packageButtonGradient: {
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  packageButtonText: {
+    color: COLORS.white,
+    fontWeight: "800",
+  },
+  agencyList: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  agencyChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 16,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+    marginRight: SPACING.sm,
+  },
+  agencyChipText: {
+    color: COLORS.text,
+    fontWeight: "600",
+    maxWidth: 180,
+  },
+  agencyModalCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: "hidden",
+    width: "100%",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  agencyModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: "#F5F4FF",
+    gap: SPACING.sm,
+  },
+  agencyHeaderLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  agencyIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(123,91,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  agencyTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  agencySubtitle: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  agencyBody: {
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  agencyLogo: {
+    width: "100%",
+    height: 160,
+    borderRadius: 16,
+  },
+  agencyDescription: {
+    color: COLORS.text,
+    lineHeight: 20,
+  },
+  agencyInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: 12,
+    backgroundColor: "#F7F8FD",
+  },
+  agencyInfoText: {
+    color: COLORS.text,
+    flex: 1,
+  },
+  paymentCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: "hidden",
+    width: "100%",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  paymentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
+  paymentHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  paymentIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(123,91,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  paymentSubtitle: {
+    color: COLORS.textLight,
+  },
+  paymentBody: {
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  paymentPackageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: SPACING.md,
+    backgroundColor: "#F8F8FF",
+  },
+  paymentPackageTitle: {
+    fontWeight: "800",
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+  },
+  paymentPackageSubtitle: {
+    color: COLORS.textLight,
+  },
+  paymentPackagePrice: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  paymentPackagePriceLabel: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.xs,
+  },
+  paymentPackagePriceValue: {
+    fontWeight: "800",
+    color: COLORS.text,
+    fontSize: FONT_SIZES.lg,
+  },
+  inputGroup: {
+    gap: 4,
+  },
+  inputLabel: {
+    color: COLORS.text,
+    fontWeight: "700",
+    fontSize: FONT_SIZES.sm,
+  },
+  paymentInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: "#F9FAFB",
+  },
+  paymentRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    alignItems: "center",
+  },
+  paymentSecureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    borderRadius: 12,
+    backgroundColor: "#ECFDF3",
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: "rgba(5,150,105,0.2)",
+  },
+  paymentSecureIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: "rgba(5,150,105,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentSecureText: {
+    color: "#065f46",
+    fontWeight: "700",
+  },
+  paymentConfirm: {
+    marginTop: SPACING.sm,
+  },
+  paymentConfirmGradient: {
+    borderRadius: 14,
+    paddingVertical: SPACING.md,
+    alignItems: "center",
+  },
+  paymentConfirmText: {
+    color: COLORS.white,
+    fontWeight: "800",
+    fontSize: FONT_SIZES.md,
   },
   // Map modal styles
   mapContainer: {

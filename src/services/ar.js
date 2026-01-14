@@ -1,26 +1,4 @@
-import { Asset } from 'expo-asset';
-
-const DEFAULT_REMOTE_GLTF = 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-const DEFAULT_REMOTE_USDZ = 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz';
 const DEFAULT_AR_PAGE = 'https://modelviewer.dev/editor';
-
-let DEFAULT_AR_MODEL = DEFAULT_REMOTE_GLTF;
-let DEFAULT_AR_MODEL_IOS = DEFAULT_REMOTE_USDZ;
-
-// Intenta usar archivos locales empaquetados; si no existen, usa los remotos
-try {
-  const asset = Asset.fromModule(require('../../public/model.glb'));
-  if (asset?.uri) DEFAULT_AR_MODEL = asset.uri;
-} catch (err) {
-  // se mantiene el remoto
-}
-
-try {
-  const assetIos = Asset.fromModule(require('../../public/model.usdz'));
-  if (assetIos?.uri) DEFAULT_AR_MODEL_IOS = assetIos.uri;
-} catch (err) {
-  // se mantiene el remoto
-}
 
 const buildSceneViewerUrl = ({ modelUrl, title }) => {
   if (!modelUrl) return { intentUrl: null, httpsUrl: null };
@@ -36,9 +14,10 @@ const buildSceneViewerUrl = ({ modelUrl, title }) => {
 const buildQuickLookUrl = ({ iosModelUrl }) => iosModelUrl || null;
 
 export const buildArExperienceUrl = ({ modelUrl, iosModelUrl, title }) => {
+  if (!modelUrl) return null;
   const base = DEFAULT_AR_PAGE;
   const params = new URLSearchParams();
-  params.set('model', modelUrl || DEFAULT_AR_MODEL);
+  params.set('model', modelUrl);
   if (iosModelUrl) params.set('ios', iosModelUrl);
   if (title) params.set('title', title);
   params.set('ar', '1');
@@ -46,14 +25,37 @@ export const buildArExperienceUrl = ({ modelUrl, iosModelUrl, title }) => {
 };
 
 export const buildArQrUrl = (url) =>
-  `https://quickchart.io/qr?text=${encodeURIComponent(url)}&size=320&margin=2`;
+  url ? `https://quickchart.io/qr?text=${encodeURIComponent(url)}&size=320&margin=2` : null;
+
+const normalizeUrls = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter((item) => typeof item === 'string');
+  if (typeof value === 'string') return [value];
+  return [];
+};
+
+const isHttpUrl = (url) => typeof url === 'string' && url.startsWith('http');
+const matchExt = (ext) => (url) => new RegExp(`\.(?:${ext})(?:\?|$)`, 'i').test(url);
 
 export const getPlaceArConfig = (place) => {
   if (!place) return null;
-  const rawModel = place.arModelUrl || place.modelUrl || place.model3dUrl;
-  const rawIos = place.arModelIosUrl || place.iosModelUrl;
-  const modelUrl = typeof rawModel === 'string' && rawModel.startsWith('http') ? rawModel : DEFAULT_AR_MODEL;
-  const iosModelUrl = typeof rawIos === 'string' && rawIos.startsWith('http') ? rawIos : DEFAULT_AR_MODEL_IOS;
+
+  const modelCandidates = normalizeUrls(place.model3dUrls);
+  if (typeof place.model3dUrl === 'string') modelCandidates.push(place.model3dUrl);
+
+  const glbModel = modelCandidates.find((url) => isHttpUrl(url) && matchExt('glb|gltf')(url));
+  const usdzModel = modelCandidates.find((url) => isHttpUrl(url) && matchExt('usdz')(url));
+
+  const rawModel = place.arModelUrl || place.modelUrl || glbModel;
+  const rawIos = place.arModelIosUrl || place.iosModelUrl || usdzModel;
+
+  const modelUrl =
+    isHttpUrl(rawModel) && matchExt('glb|gltf')(rawModel) ? rawModel : null;
+  const iosModelUrl =
+    isHttpUrl(rawIos) && matchExt('usdz')(rawIos) ? rawIos : null;
+
+  if (!modelUrl && !iosModelUrl) return null;
+
   const title = place.name;
   const arUrl = buildArExperienceUrl({ modelUrl, iosModelUrl, title });
   const sceneViewerLinks = buildSceneViewerUrl({ modelUrl, title });
