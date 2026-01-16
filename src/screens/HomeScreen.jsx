@@ -159,6 +159,15 @@ const navTabs = [
   { id: 5, label: "Parque" },
 ];
 
+const getCategoryLabel = (place) => {
+  if (!place) return null;
+  if (place.categoryName) return place.categoryName;
+  if (place.category?.name) return place.category?.name;
+  const categoryId = place.categoryId ?? place.category_id;
+  const match = categoriesList.find((item) => String(item.id) === String(categoryId));
+  return match?.name || null;
+};
+
 const Card = React.memo(
   ({
     title,
@@ -424,7 +433,7 @@ const HomeScreen = ({ navigation }) => {
   const cardWideWidth = isSmall ? 280 : 340;
   const packageCardWidth = isSmall ? windowWidth - SPACING.lg * 2 : 340;
   const detailImageHeight = windowHeight;
-  const { user, logout } = useAuth();
+  const { user, roles, logout } = useAuth();
 
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
@@ -462,6 +471,7 @@ const HomeScreen = ({ navigation }) => {
   const slideUpAnim = useRef(new Animated.Value(0)).current;
   const [authVisible, setAuthVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const [paymentVisible, setPaymentVisible] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [paymentForm, setPaymentForm] = useState({
@@ -496,6 +506,38 @@ const HomeScreen = ({ navigation }) => {
     ],
     []
   );
+
+  const allowedRoutes = useMemo(() => {
+    const normalizedRoles = (roles || []).map((role) => role.toLowerCase());
+    const hasRole = (needed) =>
+      normalizedRoles.includes("admin") || needed.some((role) => normalizedRoles.includes(role));
+
+    const routes = [
+      {
+        id: "create-place",
+        label: "Crear lugar",
+        description: "Publica un nuevo sitio turistico",
+        route: "CreatePlace",
+        roles: ["owner"],
+      },
+      {
+        id: "agency-dashboard",
+        label: "Dashboard de agencia",
+        description: "Ventas, top paquetes y lugares",
+        route: "AgencyDashboard",
+        roles: ["agency"],
+      },
+      {
+        id: "create-package",
+        label: "Crear paquete",
+        description: "Nuevo paquete turistico",
+        route: "CreatePackage",
+        roles: ["agency"],
+      },
+    ];
+
+    return routes.filter((route) => hasRole(route.roles));
+  }, [roles]);
 
   // Load nearby places when distance or category changes
   useEffect(() => {
@@ -1295,11 +1337,11 @@ const HomeScreen = ({ navigation }) => {
                     {selectedPlace?.rating || "4.8"}
                   </Text>
                 </View>
-                {selectedPlace?.categoryName ? (
+                {getCategoryLabel(selectedPlace) ? (
                   <View style={styles.infoSlideTagSecondary}>
                     <FontAwesome name="tag" size={12} color="#0E9F6E" />
                     <Text style={styles.infoSlideTagText}>
-                      {selectedPlace.categoryName}
+                      {getCategoryLabel(selectedPlace)}
                     </Text>
                   </View>
                 ) : null}
@@ -1407,7 +1449,7 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.imageInfoTop}>
               <View style={styles.imageBadge}>
                 <Text style={styles.imageBadgeText}>
-                  {selectedPlace?.categoryName || "Destino"}
+                  {getCategoryLabel(selectedPlace) || "Destino"}
                 </Text>
               </View>
             </View>
@@ -1483,12 +1525,6 @@ const HomeScreen = ({ navigation }) => {
                 <Text style={styles.detailInfoTitle}>
                   {selectedPlace?.name}
                 </Text>
-                <TouchableOpacity
-                  onPress={toggleDetailInfo}
-                  style={styles.detailInfoClose}
-                >
-                  <Text style={styles.detailInfoCloseText}>×</Text>
-                </TouchableOpacity>
               </View>
               <Text style={styles.detailInfoDescription}>
                 {selectedPlace?.description || "Sin descripción disponible"}
@@ -1768,12 +1804,23 @@ const HomeScreen = ({ navigation }) => {
       user.avatar ||
       "https://api.dicebear.com/7.x/miniavs/svg?seed=turismo";
 
+    const handleRoutePress = (route) => {
+      setProfileVisible(false);
+      setProfileMenuVisible(false);
+      if (navigation?.navigate) {
+        navigation.navigate(route);
+      }
+    };
+
     return (
       <Modal
         visible={profileVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setProfileVisible(false)}
+        onRequestClose={() => {
+          setProfileVisible(false);
+          setProfileMenuVisible(false);
+        }}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.profileCard}>
@@ -1782,7 +1829,12 @@ const HomeScreen = ({ navigation }) => {
                 <FontAwesome name="user" size={18} color="#5B3CF0" />
                 <Text style={styles.profileTitleText}>Mi Perfil</Text>
               </View>
-              <TouchableOpacity onPress={() => setProfileVisible(false)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setProfileVisible(false);
+                  setProfileMenuVisible(false);
+                }}
+              >
                 <Text style={styles.closeText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -1819,10 +1871,49 @@ const HomeScreen = ({ navigation }) => {
                 </Text>
               </View>
             </View>
+            <View style={styles.profileMenuWrapper}>
+              <TouchableOpacity
+                style={styles.profileMenuToggle}
+                onPress={() => setProfileMenuVisible((prev) => !prev)}
+              >
+                <Text style={styles.profileMenuToggleText}>Rutas permitidas</Text>
+                <FontAwesome
+                  name={profileMenuVisible ? "chevron-up" : "chevron-down"}
+                  size={12}
+                  color="#5B3CF0"
+                />
+              </TouchableOpacity>
+              {profileMenuVisible ? (
+                <View style={styles.profileMenuList}>
+                  {allowedRoutes.length === 0 ? (
+                    <Text style={styles.profileMenuEmpty}>
+                      No tienes rutas adicionales habilitadas.
+                    </Text>
+                  ) : (
+                    allowedRoutes.map((route) => (
+                      <TouchableOpacity
+                        key={route.id}
+                        style={styles.profileMenuItem}
+                        onPress={() => handleRoutePress(route.route)}
+                      >
+                        <View>
+                          <Text style={styles.profileMenuItemTitle}>{route.label}</Text>
+                          <Text style={styles.profileMenuItemDesc}>{route.description}</Text>
+                        </View>
+                        <FontAwesome name="angle-right" size={14} color="#5B3CF0" />
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+              ) : null}
+            </View>
             <View style={styles.profileActions}>
               <TouchableOpacity
                 style={styles.modalSecondary}
-                onPress={() => setProfileVisible(false)}
+                onPress={() => {
+                  setProfileVisible(false);
+                  setProfileMenuVisible(false);
+                }}
               >
                 <Text style={styles.modalSecondaryText}>Cerrar</Text>
               </TouchableOpacity>
@@ -1873,7 +1964,10 @@ const HomeScreen = ({ navigation }) => {
                 {user ? (
                   <TouchableOpacity
                     style={styles.profileButton}
-                    onPress={() => setProfileVisible(true)}
+                    onPress={() => {
+                      setProfileMenuVisible(false);
+                      setProfileVisible(true);
+                    }}
                   >
                     <FontAwesome name="user" size={16} color="#fff" />
                     <View>
@@ -2372,13 +2466,6 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.detailOverlay}>
           <Pressable style={styles.detailDismissArea} onPress={() => setDetailVisible(false)} />
           <View style={styles.detailSheet}>
-            <TouchableOpacity
-              style={styles.detailCloseFloat}
-              onPress={() => setDetailVisible(false)}
-            >
-              <Text style={styles.detailCloseFloatText}>×</Text>
-            </TouchableOpacity>
-
             <ScrollView
               style={styles.detailContainer}
               contentContainerStyle={[styles.detailContent, { flexGrow: 1 }]}
@@ -3616,48 +3703,81 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: SPACING.sm,
   },
+  profileMenuWrapper: {
+    backgroundColor: "#f9f9fe",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e6e9f5",
+    padding: SPACING.sm,
+  },
+  profileMenuToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  profileMenuToggleText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: "#5B3CF0",
+  },
+  profileMenuList: {
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  profileMenuEmpty: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+    textAlign: "center",
+    paddingVertical: SPACING.sm,
+  },
+  profileMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "#eceef5",
+  },
+  profileMenuItemTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  profileMenuItemDesc: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    marginTop: 2,
+  },
   detailOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "flex-end",
   },
   detailDismissArea: {
-    height: StatusBar.currentHeight || 0,
+    height: 80,
   },
   detailSheet: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#000",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.05)",
   },
-  detailCloseFloat: {
-    position: "absolute",
-    top: SPACING.md,
-    right: SPACING.md,
-    zIndex: 2,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  detailCloseFloatText: {
-    fontSize: 20,
-    color: COLORS.text,
-  },
   detailContainer: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#000",
   },
   detailContent: {
-    paddingHorizontal: SPACING.sm,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xl * 2,
-    gap: SPACING.md,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    gap: 0,
     minHeight: "100%",
   },
   detailCard: {
@@ -3977,7 +4097,7 @@ const styles = StyleSheet.create({
   detailImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 16,
+    borderRadius: 0,
   },
   sliderDots: {
     flexDirection: "row",
@@ -4023,10 +4143,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "flex-end",
     padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    gap: SPACING.sm,
   },
   imageInfoTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
   },
   imageBadge: {
@@ -4047,6 +4169,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderRadius: 25,
     alignItems: "center",
+    alignSelf: "stretch",
     shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowRadius: 10,
@@ -4080,19 +4203,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: SPACING.sm,
-  },
-  detailInfoClose: {
-    marginLeft: "auto",
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  detailInfoCloseText: {
-    fontSize: 18,
-    color: COLORS.text,
   },
   detailInfoTitle: {
     fontSize: FONT_SIZES.xxl,

@@ -21,6 +21,7 @@ export const ENDPOINTS = {
   PLACES_NEARBY: '/api/places/nearby',
   PLACES_SEARCH: '/api/places/search',
   PLACE_DETAIL: (id) => `/api/places/${id}`,
+  PLACES_CREATE: '/api/places',
 
   // Feedback / Reviews
   PLACE_RATING: (id) => `/api/pruebas/places/${id}/rating`,
@@ -30,4 +31,8 @@ export const ENDPOINTS = {
   // Packages / Agencies
   PACKAGES: "/api/packages",
   AGENCIES: "/api/agencies",
+  AGENCY_BY_USER: "/api/agencies/by-user",
+  AGENCY_DASHBOARD: "/api/agencies/dashboard",
+  GEOCODE: "/api/tools/geocode",
+  CATEGORIES: "/api/categories",
 };

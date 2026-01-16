@@ -8,7 +8,8 @@ const WebViewMap = ({
     userLocation = null,
     showCircle = false,
     circleRadius = 50000,
-    onMapReady = () => { }
+    onMapReady = () => { },
+    onMapPress = null,
 }) => {
     const webViewRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -263,6 +264,17 @@ const WebViewMap = ({
                         }
                     };
 
+                    // Notify React Native when user taps the map
+                    map.on('click', function(e) {
+                        try {
+                            window.ReactNativeWebView.postMessage(JSON.stringify({
+                                type: 'MAP_CLICK',
+                                latitude: e.latlng.lat,
+                                longitude: e.latlng.lng
+                            }));
+                        } catch (err) {}
+                    });
+
                     // Compatibilidad iOS/Android: ambos eventos pueden dispararse
                     window.addEventListener('message', handleIncomingMessage);
                     document.addEventListener('message', handleIncomingMessage);
@@ -380,6 +392,13 @@ const WebViewMap = ({
                     }
                 }, 1000); // Dar 1 segundo para que el mapa se inicialice completamente
                 onMapReady();
+            } else if (data.type === 'MAP_CLICK') {
+                if (onMapPress) {
+                    onMapPress({
+                        latitude: data.latitude,
+                        longitude: data.longitude,
+                    });
+                }
             } else if (data.type === 'ERROR') {
                 console.error('❌ Error en WebView:', data.message);
                 setError(data.message);

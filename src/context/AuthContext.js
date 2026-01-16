@@ -12,8 +12,29 @@ import {
 
 export const AuthContext = createContext();
 
+const decodeJwtPayload = (token) => {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  const payload = parts[1];
+  const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  try {
+    if (typeof atob === 'function') {
+      return JSON.parse(atob(padded));
+    }
+    if (typeof Buffer !== 'undefined') {
+      return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+    }
+  } catch (err) {
+    return null;
+  }
+  return null;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,6 +48,8 @@ export const AuthProvider = ({ children }) => {
 
       if (token && userString) {
         setUser(JSON.parse(userString));
+        const payload = decodeJwtPayload(token);
+        setRoles(Array.isArray(payload?.roles) ? payload.roles : []);
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -52,6 +75,8 @@ export const AuthProvider = ({ children }) => {
 
       if (token) {
         await AsyncStorage.setItem('token', token);
+        const jwtPayload = decodeJwtPayload(token);
+        setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
       }
       const userData = await fetchUserInfo(email);
       if (userData) {
@@ -88,6 +113,7 @@ export const AuthProvider = ({ children }) => {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       setUser(null);
+      setRoles([]);
     }
   };
 
@@ -95,6 +121,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        roles,
         loading,
         login,
         register,

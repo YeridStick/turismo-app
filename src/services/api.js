@@ -15,19 +15,35 @@ const PROTECTED_PREFIXES = [
   '/api/info/user',
   '/api/users/me',
   '/api/places/mine',
+  '/api/agencies/by-user',
+  '/api/agencies/dashboard',
+  '/api/agencies/users',
+  '/api/tools/geocode',
+  '/api/categories',
   '/admin',
   '/api/pruebas/places/', // feedback/checkin/reviews si están protegidos
 ];
 
-const needsAuth = (url = '') =>
-  PROTECTED_PREFIXES.some((p) => url.startsWith(p));
+const WRITE_METHODS = ['post', 'patch', 'put', 'delete'];
+
+const needsAuth = (config = {}) => {
+  const url = config?.url || '';
+  const method = (config?.method || 'get').toLowerCase();
+  if (
+    WRITE_METHODS.includes(method) &&
+    (url.startsWith('/api/places') || url.startsWith('/api/packages'))
+  ) {
+    return true;
+  }
+  return PROTECTED_PREFIXES.some((p) => url.startsWith(p));
+};
 
 // Interceptor para agregar el token a cada request
 api.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (token && needsAuth(config.url)) {
+      if (token && needsAuth(config)) {
         config.headers.Authorization = `Bearer ${token}`;
       } else {
         delete config.headers.Authorization;
