@@ -2,6 +2,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import React, { useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import {
   ActivityIndicator,
   Alert,
@@ -66,7 +67,19 @@ const AuthModal = ({ visible, onClose }) => {
   const [manualCode, setManualCode] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
   const [fullName, setFullName] = useState('');
-  const [password, setPassword] = useState('');
+  const [identificationType, setIdentificationType] = useState('');
+  const [identificationNumber, setIdentificationNumber] = useState('');
+  const [urlAvatar, setUrlAvatar] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [docTypeOpen, setDocTypeOpen] = useState(false);
+
+  const docTypeOptions = [
+    { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
+    { value: 'TI', label: 'Tarjeta de identidad (TI)' },
+    { value: 'CE', label: 'Cédula de extranjería (CE)' },
+    { value: 'PA', label: 'Pasaporte (PA)' },
+    { value: 'NIT', label: 'NIT' },
+  ];
 
   const resetFlow = () => {
     setStep('login');
@@ -74,6 +87,7 @@ const AuthModal = ({ visible, onClose }) => {
     setManualCode('');
     setVerifyCode('');
     setTotpCode('');
+    setStatusMessage('');
   };
 
   const handleLogin = async () => {
@@ -92,23 +106,25 @@ const AuthModal = ({ visible, onClose }) => {
   };
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password) {
-      Alert.alert('Campos faltantes', 'Completa nombre, correo y contraseña.');
+    if (!fullName || !email) {
+      Alert.alert('Campos faltantes', 'Completa nombre y correo.');
       return;
     }
     setLoading(true);
     const result = await register({
       fullName: fullName.trim(),
       email: email.trim(),
-      password: password.trim(),
+      identificationType: identificationType.trim() || undefined,
+      identificationNumber: identificationNumber.trim() || undefined,
+      urlAvatar: urlAvatar.trim() || undefined,
     });
     setLoading(false);
     if (!result.success) {
       Alert.alert('No se pudo crear la cuenta', result.error || 'Intenta nuevamente.');
       return;
     }
-    Alert.alert('Cuenta creada', 'Ahora configura tu autenticación.', [
-      { text: 'Configurar TOTP', onPress: () => setStep('setup') },
+    Alert.alert('Cuenta creada', 'Ahora configura tu autenticación TOTP.', [
+      { text: 'Configurar TOTP', onPress: () => handleSetupTotp() },
     ]);
     setActiveTab('login');
     setStep('setup');
@@ -121,7 +137,13 @@ const AuthModal = ({ visible, onClose }) => {
     }
     setLoading(true);
     try {
-      await totpStatus(email.trim()).catch(() => null);
+      const statusRes = await totpStatus(email.trim()).catch(() => null);
+      const enabled = Boolean(statusRes?.data?.data?.enabled);
+      if (enabled) {
+        setStatusMessage('Tu cuenta ya tiene TOTP habilitado.');
+        setStep('success');
+        return;
+      }
       const res = await setupTotp(email.trim());
       const data = res.data?.data || res.data || {};
       setQrData(data.qrImage || data.qrImageUrl || data.qr);
@@ -150,6 +172,12 @@ const AuthModal = ({ visible, onClose }) => {
     }
   };
 
+  const handleCopyManualCode = async () => {
+    if (!manualCode) return;
+    await Clipboard.setStringAsync(manualCode);
+    Alert.alert('Copiado', 'Código manual copiado.');
+  };
+
   const renderTabs = () => (
     <View style={styles.tabs}>
       <TabButton label="Iniciar Sesión" active={activeTab === 'login'} onPress={() => { setActiveTab('login'); resetFlow(); }} />
@@ -169,6 +197,7 @@ const AuthModal = ({ visible, onClose }) => {
         keyboardType="email-address"
         autoCapitalize="none"
       />
+      {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
       {step === 'login' && (
         <>
           <Text style={styles.inputLabel}>Código TOTP</Text>
@@ -180,7 +209,7 @@ const AuthModal = ({ visible, onClose }) => {
             keyboardType="number-pad"
           />
           <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Iniciar Sesión</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Tengo TOTP</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleSetupTotp} disabled={loading}>
             <Text style={styles.secondaryText}>Configurar TOTP</Text>
@@ -195,7 +224,9 @@ const AuthModal = ({ visible, onClose }) => {
 
   const renderRegister = () => (
     <>
-      <Text style={styles.subtitle}>Crea tu cuenta y activa autenticación en dos pasos.</Text>
+      <Text style={styles.subtitle}>
+        Crea tu cuenta para administrar rutas y lugares. Luego podrás configurar autenticación TOTP.
+      </Text>
       <Text style={styles.inputLabel}>Nombre completo</Text>
       <InputWithIcon
         icon="user"
@@ -213,13 +244,65 @@ const AuthModal = ({ visible, onClose }) => {
         keyboardType="email-address"
         autoCapitalize="none"
       />
-      <Text style={styles.inputLabel}>Contraseña</Text>
+      <View style={styles.docRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.inputLabel}>Tipo de documento</Text>
+          <TouchableOpacity
+            style={styles.selectInput}
+            onPress={() => setDocTypeOpen((prev) => !prev)}
+            activeOpacity={0.9}
+          >
+            <Text style={identificationType ? styles.selectText : styles.selectPlaceholder}>
+              {identificationType
+                ? docTypeOptions.find((opt) => opt.value === identificationType)?.label
+                : 'Selecciona'}
+            </Text>
+            <FontAwesome
+              name={docTypeOpen ? 'chevron-up' : 'chevron-down'}
+              size={12}
+              color="#5B3CF0"
+            />
+          </TouchableOpacity>
+          {docTypeOpen ? (
+            <View style={styles.dropdown}>
+              <ScrollView
+                style={styles.dropdownScroll}
+                contentContainerStyle={styles.dropdownContent}
+              >
+                {docTypeOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setIdentificationType(opt.value);
+                      setDocTypeOpen(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownItemText}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.inputLabel}>Número</Text>
+          <InputWithIcon
+            icon="id-card"
+            placeholder="Número"
+            value={identificationNumber}
+            onChangeText={setIdentificationNumber}
+            autoCapitalize="none"
+          />
+        </View>
+      </View>
+      <Text style={styles.inputLabel}>URL del avatar (opcional)</Text>
       <InputWithIcon
-        icon="lock"
-        placeholder="Contraseña segura"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
+        icon="image"
+        placeholder="https://..."
+        value={urlAvatar}
+        onChangeText={setUrlAvatar}
+        autoCapitalize="none"
       />
       <TouchableOpacity style={styles.primaryButton} onPress={handleRegister} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Crear Cuenta</Text>}
@@ -231,6 +314,9 @@ const AuthModal = ({ visible, onClose }) => {
     <View style={styles.card}>
       <Text style={styles.stepLabel}>Paso 1 de 2</Text>
       <Text style={styles.cardTitle}>Escanea el código QR</Text>
+      <Text style={styles.infoText}>
+        Descarga Google Authenticator y agrega este código para validar tu cuenta.
+      </Text>
       {qrData ? (
         <Image source={{ uri: qrData }} style={styles.qrImage} contentFit="contain" />
       ) : (
@@ -240,6 +326,14 @@ const AuthModal = ({ visible, onClose }) => {
         <View style={styles.manualBox}>
           <Text style={styles.manualLabel}>Código manual</Text>
           <Text style={styles.manualCode}>{manualCode}</Text>
+          <TouchableOpacity
+            style={styles.copyButton}
+            onPress={handleCopyManualCode}
+            activeOpacity={0.9}
+          >
+            <FontAwesome name="copy" size={12} color="#5B3CF0" />
+            <Text style={styles.copyButtonText}>Copiar código</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
       <TouchableOpacity
@@ -275,7 +369,9 @@ const AuthModal = ({ visible, onClose }) => {
     <View style={styles.card}>
       <Text style={styles.successIcon}>✅</Text>
       <Text style={styles.cardTitle}>¡Autenticación configurada!</Text>
-      <Text style={styles.infoText}>Tu cuenta está protegida con autenticación de dos factores.</Text>
+      <Text style={styles.infoText}>
+        {statusMessage || 'Tu cuenta está protegida con autenticación de dos factores.'}
+      </Text>
       <TouchableOpacity
         style={styles.primaryButton}
         onPress={() => {
@@ -411,6 +507,61 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     fontSize: FONT_SIZES.md,
   },
+  docRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    alignItems: 'flex-start',
+    marginBottom: SPACING.sm,
+  },
+  selectInput: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  selectText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+    flex: 1,
+  },
+  selectPlaceholder: {
+    color: '#9ca3af',
+    fontSize: FONT_SIZES.md,
+    flex: 1,
+  },
+  dropdown: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginTop: 6,
+    maxHeight: 220,
+  },
+  dropdownScroll: {
+    maxHeight: 220,
+  },
+  dropdownContent: {
+    paddingVertical: 6,
+  },
+  dropdownItem: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  dropdownItemText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+  },
+  statusText: {
+    color: '#5B3CF0',
+    fontWeight: '600',
+    marginTop: SPACING.xs,
+  },
   primaryButton: {
     backgroundColor: '#5B3CF0',
     borderRadius: 12,
@@ -482,6 +633,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     color: COLORS.text,
+  },
+  copyButton: {
+    marginTop: SPACING.sm,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eef2ff',
+    borderRadius: 10,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  copyButtonText: {
+    color: '#5B3CF0',
+    fontWeight: '700',
   },
   successIcon: {
     fontSize: 32,

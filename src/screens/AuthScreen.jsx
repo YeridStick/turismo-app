@@ -41,7 +41,19 @@ const AuthScreen = () => {
   const [manualCode, setManualCode] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
   const [fullName, setFullName] = useState('');
-  const [password, setPassword] = useState('');
+  const [identificationType, setIdentificationType] = useState('');
+  const [identificationNumber, setIdentificationNumber] = useState('');
+  const [urlAvatar, setUrlAvatar] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [docTypeOpen, setDocTypeOpen] = useState(false);
+
+  const docTypeOptions = [
+    { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
+    { value: 'TI', label: 'Tarjeta de identidad (TI)' },
+    { value: 'CE', label: 'Cédula de extranjería (CE)' },
+    { value: 'PA', label: 'Pasaporte (PA)' },
+    { value: 'NIT', label: 'NIT' },
+  ];
 
   const resetFlow = () => {
     setStep('login');
@@ -49,6 +61,7 @@ const AuthScreen = () => {
     setManualCode('');
     setVerifyCode('');
     setTotpCode('');
+    setStatusMessage('');
   };
 
   const handleLogin = async () => {
@@ -69,23 +82,25 @@ const AuthScreen = () => {
   };
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password) {
-      Alert.alert('Campos faltantes', 'Completa nombre, correo y contraseña.');
+    if (!fullName || !email) {
+      Alert.alert('Campos faltantes', 'Completa nombre y correo.');
       return;
     }
     setLoading(true);
     const result = await register({
       fullName: fullName.trim(),
       email: email.trim(),
-      password: password.trim(),
+      identificationType: identificationType.trim() || undefined,
+      identificationNumber: identificationNumber.trim() || undefined,
+      urlAvatar: urlAvatar.trim() || undefined,
     });
     setLoading(false);
     if (!result.success) {
       Alert.alert('No se pudo crear la cuenta', result.error || 'Intenta nuevamente.');
       return;
     }
-    Alert.alert('Cuenta creada', 'Ahora configura tu autenticación.', [
-      { text: 'Configurar TOTP', onPress: () => setStep('setup') },
+    Alert.alert('Cuenta creada', 'Ahora configura tu autenticación TOTP.', [
+      { text: 'Configurar TOTP', onPress: () => handleSetupTotp() },
     ]);
     setActiveTab('login');
     setStep('setup');
@@ -98,7 +113,13 @@ const AuthScreen = () => {
     }
     setLoading(true);
     try {
-      await totpStatus(email.trim()).catch(() => null);
+      const statusRes = await totpStatus(email.trim()).catch(() => null);
+      const enabled = Boolean(statusRes?.data?.data?.enabled);
+      if (enabled) {
+        setStatusMessage('Tu cuenta ya tiene TOTP habilitado.');
+        setStep('success');
+        return;
+      }
       const res = await setupTotp(email.trim());
       const data = res.data?.data || res.data || {};
       setQrData(data.qrImage || data.qrImageUrl || data.qr);
@@ -145,6 +166,7 @@ const AuthScreen = () => {
         keyboardType="email-address"
         autoCapitalize="none"
       />
+      {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
       {step === 'login' && (
         <>
           <TextInput
@@ -156,7 +178,7 @@ const AuthScreen = () => {
             maxLength={6}
           />
           <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Iniciar Sesión</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Tengo TOTP</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleSetupTotp} disabled={loading}>
             <Text style={styles.secondaryText}>Configurar TOTP</Text>
@@ -171,7 +193,9 @@ const AuthScreen = () => {
 
   const renderRegister = () => (
     <>
-      <Text style={styles.subtitle}>Crea tu cuenta y activa autenticación en dos pasos.</Text>
+      <Text style={styles.subtitle}>
+        Crea tu cuenta para administrar rutas y lugares. Luego podrás configurar autenticación TOTP.
+      </Text>
       <TextInput
         style={styles.input}
         placeholder="Nombre completo"
@@ -186,12 +210,60 @@ const AuthScreen = () => {
         keyboardType="email-address"
         autoCapitalize="none"
       />
+      <View style={styles.inputRow}>
+        <View style={[styles.inputHalf, { zIndex: 2 }]}>
+          <TouchableOpacity
+            style={styles.selectInput}
+            onPress={() => setDocTypeOpen((prev) => !prev)}
+            activeOpacity={0.9}
+          >
+            <Text style={identificationType ? styles.selectText : styles.selectPlaceholder}>
+              {identificationType
+                ? docTypeOptions.find((opt) => opt.value === identificationType)?.label
+                : 'Tipo de documento'}
+            </Text>
+            <FontAwesome
+              name={docTypeOpen ? 'chevron-up' : 'chevron-down'}
+              size={12}
+              color="#5B3CF0"
+            />
+          </TouchableOpacity>
+          {docTypeOpen ? (
+            <View style={styles.dropdown}>
+              <ScrollView
+                style={styles.dropdownScroll}
+                contentContainerStyle={styles.dropdownContent}
+              >
+                {docTypeOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setIdentificationType(opt.value);
+                      setDocTypeOpen(false);
+                    }}
+                  >
+                    <Text style={styles.dropdownItemText}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+        </View>
+        <TextInput
+          style={[styles.input, styles.inputHalf]}
+          placeholder="Número"
+          value={identificationNumber}
+          onChangeText={setIdentificationNumber}
+          keyboardType="default"
+        />
+      </View>
       <TextInput
         style={styles.input}
-        placeholder="Contraseña"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
+        placeholder="URL del avatar (opcional)"
+        value={urlAvatar}
+        onChangeText={setUrlAvatar}
+        autoCapitalize="none"
       />
       <TouchableOpacity style={styles.primaryButton} onPress={handleRegister} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Crear Cuenta</Text>}
@@ -247,7 +319,9 @@ const AuthScreen = () => {
     <View style={styles.card}>
       <Text style={styles.successIcon}>✅</Text>
       <Text style={styles.cardTitle}>¡Autenticación configurada!</Text>
-      <Text style={styles.infoText}>Tu cuenta está protegida con autenticación de dos factores.</Text>
+      <Text style={styles.infoText}>
+        {statusMessage || 'Tu cuenta está protegida con autenticación de dos factores.'}
+      </Text>
       <TouchableOpacity
         style={styles.primaryButton}
         onPress={() => {
@@ -357,6 +431,63 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     marginBottom: SPACING.sm,
     fontSize: FONT_SIZES.md,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  inputHalf: {
+    flex: 1,
+  },
+  selectInput: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  selectText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+    flex: 1,
+  },
+  selectPlaceholder: {
+    color: '#9ca3af',
+    fontSize: FONT_SIZES.md,
+    flex: 1,
+  },
+  dropdown: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginTop: 6,
+    maxHeight: 200,
+  },
+  dropdownScroll: {
+    maxHeight: 200,
+  },
+  dropdownContent: {
+    paddingVertical: 6,
+  },
+  dropdownItem: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  dropdownItemText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+  },
+  statusText: {
+    color: '#5B3CF0',
+    fontWeight: '600',
+    marginBottom: SPACING.sm,
   },
   primaryButton: {
     backgroundColor: '#5B3CF0',
