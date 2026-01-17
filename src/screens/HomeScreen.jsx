@@ -452,6 +452,7 @@ const HomeScreen = ({ navigation }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [selectedModelUrl, setSelectedModelUrl] = useState(null);
+  const [detailSource, setDetailSource] = useState("all");
   const [coords, setCoords] = useState(null);
   const [showAllNearby, setShowAllNearby] = useState(false);
   const [nearbyCache, setNearbyCache] = useState({
@@ -468,6 +469,10 @@ const HomeScreen = ({ navigation }) => {
   const [showMap, setShowMap] = useState(false);
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
   const imageListRef = useRef(null);
+  const isAdvancingRef = useRef(false);
+  const pendingScrollPositionRef = useRef(null);
+  const pendingAdvanceRef = useRef(null);
+  const placeDetailCacheRef = useRef(new Map());
   const slideUpAnim = useRef(new Animated.Value(0)).current;
   const [authVisible, setAuthVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
@@ -784,6 +789,81 @@ const HomeScreen = ({ navigation }) => {
     );
   }, [places, query]);
 
+  const filteredNearbyPlaces = useMemo(
+    () => (filteredNearby.length ? filteredNearby : nearby),
+    [filteredNearby, nearby]
+  );
+
+  const getPlaceKey = useCallback((place) => {
+    if (!place) return "";
+    if (place.id != null) return `id:${place.id}`;
+    if (place.name) return `name:${place.name}`;
+    return "";
+  }, []);
+
+  const getSlideMetrics = useCallback((imageCount, hasNeighbors) => {
+    const infoIndex = hasNeighbors ? 1 : 0;
+    const firstImageIndex = infoIndex + 1;
+    const lastImageIndex = imageCount
+      ? firstImageIndex + imageCount - 1
+      : infoIndex;
+    const prevIndex = hasNeighbors ? 0 : null;
+    const nextIndex = hasNeighbors ? lastImageIndex + 1 : null;
+    const totalSlides = hasNeighbors ? imageCount + 3 : imageCount + 1;
+    return {
+      infoIndex,
+      firstImageIndex,
+      lastImageIndex,
+      prevIndex,
+      nextIndex,
+      totalSlides,
+    };
+  }, []);
+
+  const detailPlaces = useMemo(() => {
+    const baseList =
+      detailSource === "nearby" ? filteredNearbyPlaces : filteredPlaces;
+    const source = baseList.length ? baseList : places;
+    const unique = [];
+    const seen = new Set();
+    source.forEach((place) => {
+      const key = getPlaceKey(place);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      unique.push(place);
+    });
+    if (selectedPlace) {
+      const key = getPlaceKey(selectedPlace);
+      if (key && !seen.has(key)) {
+        unique.push(selectedPlace);
+      }
+    }
+    return unique;
+  }, [
+    filteredPlaces,
+    filteredNearbyPlaces,
+    places,
+    selectedPlace,
+    detailSource,
+    getPlaceKey,
+  ]);
+
+  const getAdjacentPlace = useCallback(
+    (direction) => {
+      if (detailPlaces.length <= 1) return null;
+      const currentKey = getPlaceKey(selectedPlace);
+      const currentIndex = detailPlaces.findIndex(
+        (place) => getPlaceKey(place) === currentKey
+      );
+      const startIndex = currentIndex === -1 ? 0 : currentIndex;
+      const delta = direction === "prev" ? -1 : 1;
+      const nextIndex =
+        (startIndex + delta + detailPlaces.length) % detailPlaces.length;
+      return detailPlaces[nextIndex] || null;
+    },
+    [detailPlaces, selectedPlace, getPlaceKey]
+  );
+
   const searchSuggestions = useMemo(() => {
     if (!query.trim()) return [];
     return filteredPlaces.slice(0, 6);
@@ -834,7 +914,9 @@ const HomeScreen = ({ navigation }) => {
             horizontal
             data={filteredNearby}
             keyExtractor={(item, idx) => `${item.id || idx}-nearby-web`}
-            renderItem={({ item }) => renderPlace({ item, variant: "compact" })}
+            renderItem={({ item }) =>
+              renderPlace({ item, variant: "compact", sourceKey: "nearby" })
+            }
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalList}
             snapToInterval={cardCompactWidth + SPACING.md}
@@ -894,6 +976,7 @@ const HomeScreen = ({ navigation }) => {
                 variant: "compact",
                 cardWidth: cardCompactWidth,
                 imageHeight: 160,
+                sourceKey: "nearby",
               })
             }
             showsHorizontalScrollIndicator={false}
@@ -916,37 +999,120 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  const openDetail = useCallback(async (item) => {
-    setDetailVisible(true);
-    setDetailLoading(true);
-    setImageIndex(0);
-    try {
-      if (item?.id) {
-        const response = await api.get(ENDPOINTS.PLACE_DETAIL(item.id));
-        const data = response.data?.data || response.data || item;
-        const normalizedItem = normalizePlace(item);
-        const normalizedData = normalizePlace(data);
-        const merged = {
-          ...normalizedItem,
-          ...normalizedData,
-        };
-        if (
-          (!merged.model3dUrls || merged.model3dUrls.length === 0) &&
-          Array.isArray(normalizedItem?.model3dUrls) &&
-          normalizedItem.model3dUrls.length
-        ) {
-          merged.model3dUrls = normalizedItem.model3dUrls;
-        }
-        setSelectedPlace(merged);
-      } else {
-        setSelectedPlace(normalizePlace(item));
+  const closeDetailInfo = useCallback(() => {
+    setShowDetailInfo(false);
+    slideUpAnim.setValue(0);
+  }, [slideUpAnim]);
+
+  const fetchPlaceDetail = useCallback(
+    async (item) => {
+      const normalizedItem = normalizePlace(item);
+      const key = getPlaceKey(normalizedItem);
+      if (key && placeDetailCacheRef.current.has(key)) {
+        return placeDetailCacheRef.current.get(key);
       }
-    } catch (err) {
-      setSelectedPlace(normalizePlace(item));
-    } finally {
+      let resolved = normalizedItem;
+      try {
+        if (normalizedItem?.id) {
+          const response = await api.get(ENDPOINTS.PLACE_DETAIL(normalizedItem.id));
+          const data = response.data?.data || response.data || normalizedItem;
+          const normalizedData = normalizePlace(data);
+          const merged = {
+            ...normalizedItem,
+            ...normalizedData,
+          };
+          if (
+            (!merged.model3dUrls || merged.model3dUrls.length === 0) &&
+            Array.isArray(normalizedItem?.model3dUrls) &&
+            normalizedItem.model3dUrls.length
+          ) {
+            merged.model3dUrls = normalizedItem.model3dUrls;
+          }
+          resolved = merged;
+        }
+      } catch (err) {
+        resolved = normalizedItem;
+      }
+      if (key) {
+        placeDetailCacheRef.current.set(key, resolved);
+      }
+      return resolved;
+    },
+    [getPlaceKey]
+  );
+
+  const loadPlaceDetail = useCallback(
+    async (item) => {
+      const key = getPlaceKey(item);
+      const cached =
+        key && placeDetailCacheRef.current.has(key)
+          ? placeDetailCacheRef.current.get(key)
+          : null;
+      setDetailLoading(!cached);
+      const resolved = cached || (await fetchPlaceDetail(item));
+      setSelectedPlace(resolved);
       setDetailLoading(false);
-    }
-  }, []);
+    },
+    [fetchPlaceDetail, getPlaceKey]
+  );
+
+  const [prefetchStatus, setPrefetchStatus] = useState({
+    next: { key: null, loading: false, ready: false },
+    prev: { key: null, loading: false, ready: false },
+  });
+
+  const preloadPlaceDetail = useCallback(
+    async (item, direction) => {
+      if (!item || !direction) return;
+      const key = getPlaceKey(item);
+      if (!key) return;
+      const cached = placeDetailCacheRef.current.has(key);
+      setPrefetchStatus((prev) => ({
+        ...prev,
+        [direction]: { key, loading: !cached, ready: cached },
+      }));
+      if (cached) return;
+      await fetchPlaceDetail(item);
+      setPrefetchStatus((prev) => ({
+        ...prev,
+        [direction]: { key, loading: false, ready: true },
+      }));
+    },
+    [fetchPlaceDetail, getPlaceKey]
+  );
+
+  const openDetail = useCallback(
+    async (item, sourceKey = "all") => {
+      setDetailVisible(true);
+      setImageIndex(0);
+      setDetailSource(sourceKey);
+      closeDetailInfo();
+      await loadPlaceDetail(item);
+    },
+    [closeDetailInfo, loadPlaceDetail]
+  );
+
+  const goToNextPlace = useCallback(() => {
+    const nextPlace = getAdjacentPlace("next");
+    if (!nextPlace) return;
+    isAdvancingRef.current = true;
+    pendingScrollPositionRef.current = "info";
+    pendingAdvanceRef.current = null;
+    setImageIndex(0);
+    closeDetailInfo();
+    loadPlaceDetail(nextPlace);
+  }, [getAdjacentPlace, closeDetailInfo, loadPlaceDetail]);
+
+  const goToPrevPlace = useCallback(() => {
+    const prevPlace = getAdjacentPlace("prev");
+    if (!prevPlace) return;
+    isAdvancingRef.current = true;
+    pendingScrollPositionRef.current = "lastImage";
+    pendingAdvanceRef.current = null;
+    setImageIndex(0);
+    closeDetailInfo();
+    loadPlaceDetail(prevPlace);
+  }, [getAdjacentPlace, closeDetailInfo, loadPlaceDetail]);
 
   const model3dOptions = useMemo(() => {
     const platformType = Platform.OS === "ios" ? "usdz" : "glb";
@@ -996,6 +1162,7 @@ const HomeScreen = ({ navigation }) => {
       variant = "full",
       cardWidth: overrideWidth,
       imageHeight: overrideHeight,
+      sourceKey = "all",
     }) => {
       const image =
         Array.isArray(item.imageUrls) && item.imageUrls.length
@@ -1011,7 +1178,7 @@ const HomeScreen = ({ navigation }) => {
           subtitle={item.description || "Sin descripción"}
           meta={item.address || item.city || "Ubicación no disponible"}
           image={image}
-          onPress={() => openDetail(item)}
+          onPress={() => openDetail(item, sourceKey)}
           variant={variant}
           badge={item.categoryName || "Popular"}
           rating={item.rating || item.score || "4.5"}
@@ -1219,13 +1386,97 @@ const HomeScreen = ({ navigation }) => {
     }).start();
   };
 
+  useEffect(() => {
+    isAdvancingRef.current = false;
+    pendingAdvanceRef.current = null;
+  }, [selectedPlace?.id, selectedPlace?.name]);
+
+  useEffect(() => {
+    if (!detailVisible) return;
+    const imageCount = Array.isArray(selectedPlace?.imageUrls)
+      ? selectedPlace.imageUrls.length
+      : 0;
+    const hasNeighbors = detailPlaces.length > 1;
+    const { infoIndex, lastImageIndex } = getSlideMetrics(
+      imageCount,
+      hasNeighbors
+    );
+    let targetIndex = infoIndex;
+    if (pendingScrollPositionRef.current === "lastImage") {
+      targetIndex = lastImageIndex;
+    }
+    pendingScrollPositionRef.current = null;
+    const timer = setTimeout(() => {
+      if (imageListRef.current?.scrollToIndex) {
+        imageListRef.current.scrollToIndex({
+          index: targetIndex,
+          animated: false,
+        });
+        setImageIndex(targetIndex);
+        return;
+      }
+      if (imageListRef.current?.scrollToOffset) {
+        imageListRef.current.scrollToOffset({
+          offset: windowWidth * targetIndex,
+          animated: false,
+        });
+        setImageIndex(targetIndex);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [
+    selectedPlace,
+    detailVisible,
+    detailPlaces.length,
+    getSlideMetrics,
+    windowWidth,
+  ]);
+
+  useEffect(() => {
+    if (detailPlaces.length <= 1) return;
+    const nextPlace = getAdjacentPlace("next");
+    const prevPlace = getAdjacentPlace("prev");
+    if (nextPlace) preloadPlaceDetail(nextPlace, "next");
+    if (prevPlace) preloadPlaceDetail(prevPlace, "prev");
+  }, [detailPlaces.length, getAdjacentPlace, preloadPlaceDetail]);
+
+  useEffect(() => {
+    const pending = pendingAdvanceRef.current;
+    if (!pending) return;
+    const status = prefetchStatus[pending];
+    if (status?.ready) {
+      if (pending === "next") {
+        goToNextPlace();
+      } else {
+        goToPrevPlace();
+      }
+    }
+  }, [prefetchStatus, goToNextPlace, goToPrevPlace]);
+
   const renderImages = useCallback(
     (images) => {
-      const sliderData = [
-        { type: "info" },
-        ...(Array.isArray(images) ? images.map((uri) => ({ type: "image", uri })) : []),
-      ];
-      const totalSlides = sliderData.length;
+      const imageList = Array.isArray(images) ? images : [];
+      const imageCount = imageList.length;
+      const hasNeighbors = detailPlaces.length > 1;
+      const {
+        infoIndex,
+        firstImageIndex,
+        lastImageIndex,
+        prevIndex,
+        nextIndex,
+        totalSlides,
+      } = getSlideMetrics(imageCount, hasNeighbors);
+      const sliderData = hasNeighbors
+        ? [
+            { type: "prev" },
+            { type: "info" },
+            ...imageList.map((uri) => ({ type: "image", uri })),
+            { type: "next" },
+          ]
+        : [
+            { type: "info" },
+            ...imageList.map((uri) => ({ type: "image", uri })),
+          ];
       if (!totalSlides) return null;
 
       const getItemLayout = (_, index) => ({
@@ -1322,8 +1573,28 @@ const HomeScreen = ({ navigation }) => {
           </View>
         ) : null;
 
-      const renderInfoSlide = () => (
-        <View style={[styles.infoSlide, { width: windowWidth, height: detailImageHeight }]}>
+      const renderInfoSlide = () => {
+        const infoSlideTheme =
+          detailSource === "nearby" ? styles.infoSlideNearby : styles.infoSlideAll;
+        const infoSlideGradient =
+          detailSource === "nearby"
+            ? ["#F5F9FF", "#E6F0FF"]
+            : ["#F0F6FF", "#DDEBFF"];
+        return (
+          <View
+            style={[
+              styles.infoSlide,
+              infoSlideTheme,
+              { width: windowWidth, height: detailImageHeight },
+            ]}
+          >
+          <LinearGradient
+            colors={infoSlideGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.infoSlideGradient}
+            pointerEvents="none"
+          />
           <ScrollView
             contentContainerStyle={[styles.infoSlideScroll, { paddingBottom: SPACING.xl * 2 }]}
             showsVerticalScrollIndicator={false}
@@ -1430,7 +1701,8 @@ const HomeScreen = ({ navigation }) => {
           ) : null}
           </ScrollView>
         </View>
-      );
+        );
+      };
 
       const renderImageSlide = (uri) => (
         <View style={{ width: windowWidth, height: detailImageHeight }}>
@@ -1465,6 +1737,23 @@ const HomeScreen = ({ navigation }) => {
         </View>
       );
 
+      const renderTransitionSlide = (direction) => {
+        const status = direction === "next" ? prefetchStatus.next : prefetchStatus.prev;
+        return (
+          <View
+            style={[
+              styles.transitionSlide,
+              { width: windowWidth, height: detailImageHeight },
+            ]}
+          >
+            <ActivityIndicator
+              color={COLORS.primary}
+              size={status?.ready ? "small" : "large"}
+            />
+          </View>
+        );
+      };
+
       return (
         <View
           style={[
@@ -1483,9 +1772,12 @@ const HomeScreen = ({ navigation }) => {
             showsHorizontalScrollIndicator={false}
             data={sliderData}
             keyExtractor={(item, idx) => `${item.type}-${item.uri || idx}`}
-            renderItem={({ item }) =>
-              item.type === "info" ? renderInfoSlide() : renderImageSlide(item.uri)
-            }
+            renderItem={({ item }) => {
+              if (item.type === "info") return renderInfoSlide();
+              if (item.type === "image") return renderImageSlide(item.uri);
+              if (item.type === "next") return renderTransitionSlide("next");
+              return renderTransitionSlide("prev");
+            }}
             getItemLayout={getItemLayout}
             windowSize={3}
             maxToRenderPerBatch={3}
@@ -1493,6 +1785,47 @@ const HomeScreen = ({ navigation }) => {
             onMomentumScrollEnd={(e) => {
               const idx = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
               setImageIndex(idx);
+              if (!hasNeighbors) return;
+              if (idx === nextIndex && !isAdvancingRef.current) {
+                const nextPlace = getAdjacentPlace("next");
+                if (!nextPlace) return;
+                const nextKey = getPlaceKey(nextPlace);
+                const ready =
+                  prefetchStatus.next?.key === nextKey &&
+                  prefetchStatus.next?.ready;
+                if (ready) {
+                  goToNextPlace();
+                } else {
+                  pendingAdvanceRef.current = "next";
+                  preloadPlaceDetail(nextPlace, "next");
+                }
+                return;
+              }
+              if (idx === prevIndex && !isAdvancingRef.current) {
+                const prevPlace = getAdjacentPlace("prev");
+                if (!prevPlace) return;
+                const prevKey = getPlaceKey(prevPlace);
+                const ready =
+                  prefetchStatus.prev?.key === prevKey &&
+                  prefetchStatus.prev?.ready;
+                if (ready) {
+                  goToPrevPlace();
+                } else {
+                  pendingAdvanceRef.current = "prev";
+                  preloadPlaceDetail(prevPlace, "prev");
+                }
+                return;
+              }
+              const shouldPreloadNext = idx >= Math.max(lastImageIndex - 1, infoIndex);
+              const shouldPreloadPrev = idx <= Math.min(firstImageIndex, infoIndex + 1);
+              if (shouldPreloadNext) {
+                const nextPlace = getAdjacentPlace("next");
+                if (nextPlace) preloadPlaceDetail(nextPlace, "next");
+              }
+              if (shouldPreloadPrev) {
+                const prevPlace = getAdjacentPlace("prev");
+                if (prevPlace) preloadPlaceDetail(prevPlace, "prev");
+              }
             }}
           />
           {/* Paginación oculta para maximizar altura */}
@@ -1573,6 +1906,16 @@ const HomeScreen = ({ navigation }) => {
       model3dOptions,
       openDirectionsFromCurrent,
       openNativeAR,
+      toggleDetailInfo,
+      detailSource,
+      detailPlaces,
+      getSlideMetrics,
+      prefetchStatus,
+      preloadPlaceDetail,
+      getAdjacentPlace,
+      getPlaceKey,
+      goToNextPlace,
+      goToPrevPlace,
     ]
   );
 
@@ -2038,7 +2381,7 @@ const HomeScreen = ({ navigation }) => {
                         style={styles.searchSuggestionItem}
                         onPress={() => {
                           setQuery(item.name || "");
-                          openDetail(item);
+                          openDetail(item, "all");
                         }}
                       >
                         <View style={styles.searchSuggestionRow}>
@@ -2176,6 +2519,7 @@ const HomeScreen = ({ navigation }) => {
                     variant: "compact",
                     cardWidth: cardCompactWidth,
                     imageHeight: 180,
+                    sourceKey: "all",
                   })
                 }
                 showsHorizontalScrollIndicator={false}
@@ -3916,10 +4260,31 @@ const styles = StyleSheet.create({
     marginVertical: 0,
   },
   infoSlide: {
-    backgroundColor: COLORS.white,
+    backgroundColor: "transparent",
     borderRadius: 20,
     padding: SPACING.lg,
     flex: 1,
+  },
+  transitionSlide: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    padding: SPACING.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoSlideNearby: {
+    backgroundColor: "transparent",
+    borderColor: "#BBD7FF",
+    borderWidth: 1,
+  },
+  infoSlideAll: {
+    backgroundColor: "transparent",
+    borderColor: "#A7C9FF",
+    borderWidth: 1,
+  },
+  infoSlideGradient: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
   },
   infoSlideScroll: {
     gap: SPACING.md,
