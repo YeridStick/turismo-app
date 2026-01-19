@@ -15,11 +15,13 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Easing,
   FlatList,
   ImageBackground,
   KeyboardAvoidingView,
   Linking,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   RefreshControl,
@@ -29,8 +31,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
   useWindowDimensions,
+  View,
 } from "react-native";
 // Map components are now loaded dynamically.
 import { WebView } from "react-native-webview";
@@ -164,7 +166,9 @@ const getCategoryLabel = (place) => {
   if (place.categoryName) return place.categoryName;
   if (place.category?.name) return place.category?.name;
   const categoryId = place.categoryId ?? place.category_id;
-  const match = categoriesList.find((item) => String(item.id) === String(categoryId));
+  const match = categoriesList.find(
+    (item) => String(item.id) === String(categoryId),
+  );
   return match?.name || null;
 };
 
@@ -343,7 +347,7 @@ const Card = React.memo(
       return renderCompact();
     }
     return renderDefault();
-  }
+  },
 );
 
 const Footer = () => {
@@ -356,7 +360,12 @@ const Footer = () => {
   const legalLinks = ["Términos de Servicio", "Privacidad", "Cookies"];
 
   return (
-    <View style={styles.footer}>
+    <LinearGradient
+      colors={["#0B1021", "#111B38", "#0C1325"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.footer}
+    >
       <View style={styles.footerHeader}>
         <View style={styles.footerLogoBox}>
           <FontAwesome name="globe" size={20} color={COLORS.white} />
@@ -407,6 +416,23 @@ const Footer = () => {
             </View>
           </View>
         </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.footerHeading}>Más información</Text>
+          <Text
+            style={styles.footerLink}
+            onPress={() =>
+              Linking.openURL("https://www.openstreetmap.org/copyright")
+            }
+          >
+            Map data © OpenStreetMap contributors
+          </Text>
+          <Text
+            style={styles.footerLink}
+            onPress={() => Linking.openURL("https://leafletjs.com/")}
+          >
+            Mapa con Leaflet
+          </Text>
+        </View>
       </View>
 
       <View style={styles.footerDivider} />
@@ -422,7 +448,7 @@ const Footer = () => {
           ))}
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 };
 
@@ -433,6 +459,8 @@ const HomeScreen = ({ navigation }) => {
   const cardWideWidth = isSmall ? 280 : 340;
   const packageCardWidth = isSmall ? windowWidth - SPACING.lg * 2 : 340;
   const detailImageHeight = windowHeight;
+  const sidePanelWidth = Math.min(windowWidth * 0.78, 320);
+  const sidePanelEdgeArea = 28;
   const { user, roles, logout } = useAuth();
 
   const [places, setPlaces] = useState([]);
@@ -468,12 +496,27 @@ const HomeScreen = ({ navigation }) => {
   const [showDetailInfo, setShowDetailInfo] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
+  const [topPlaces, setTopPlaces] = useState([]);
+  const [loadingTopPlaces, setLoadingTopPlaces] = useState(false);
+  const [topPlacesError, setTopPlacesError] = useState("");
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [panelHintDone, setPanelHintDone] = useState(false);
+  const [nearbyContext, setNearbyContext] = useState(null);
+  const [loadingNearbyContext, setLoadingNearbyContext] = useState(false);
+  const [nearbyContextError, setNearbyContextError] = useState("");
   const imageListRef = useRef(null);
   const isAdvancingRef = useRef(false);
   const pendingScrollPositionRef = useRef(null);
   const pendingAdvanceRef = useRef(null);
   const placeDetailCacheRef = useRef(new Map());
   const slideUpAnim = useRef(new Animated.Value(0)).current;
+  const sidePanelTranslateX = useRef(
+    new Animated.Value(-sidePanelWidth),
+  ).current;
+  const panelGestureStartX = useRef(-sidePanelWidth);
+  const panelOpenRef = useRef(sidePanelOpen);
+  const panelHintShownRef = useRef(false);
+  const panelHintHandleAnim = useRef(new Animated.Value(0)).current;
   const [authVisible, setAuthVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
@@ -500,7 +543,47 @@ const HomeScreen = ({ navigation }) => {
     loadPopular();
     loadPackages();
     loadAgencies();
+    loadTopPlaces();
   }, []);
+
+  useEffect(() => {
+    panelOpenRef.current = sidePanelOpen;
+  }, [sidePanelOpen]);
+
+  useEffect(() => {
+    const targetX = panelOpenRef.current ? 0 : -sidePanelWidth;
+    sidePanelTranslateX.setValue(targetX);
+    panelGestureStartX.current = targetX;
+  }, [sidePanelWidth, sidePanelTranslateX]);
+
+  useEffect(() => {
+    if (panelHintShownRef.current) return;
+    panelHintShownRef.current = true;
+    const timer = setTimeout(() => {
+      if (panelOpenRef.current) return;
+      const handleSequence = Animated.sequence([
+        Animated.timing(panelHintHandleAnim, {
+          toValue: 1,
+          duration: 500,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(panelHintHandleAnim, {
+          toValue: 0,
+          duration: 500,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]);
+      Animated.loop(handleSequence, { iterations: 3 }).start(({ finished }) => {
+        if (finished) {
+          setPanelHintDone(true);
+          panelHintHandleAnim.setValue(0);
+        }
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [panelHintHandleAnim]);
 
   const packageGradients = useMemo(
     () => [
@@ -509,13 +592,14 @@ const HomeScreen = ({ navigation }) => {
       ["#1f2937", "#f97316"],
       ["#2b1b4d", "#ec4899"],
     ],
-    []
+    [],
   );
 
   const allowedRoutes = useMemo(() => {
     const normalizedRoles = (roles || []).map((role) => role.toLowerCase());
     const hasRole = (needed) =>
-      normalizedRoles.includes("admin") || needed.some((role) => normalizedRoles.includes(role));
+      normalizedRoles.includes("admin") ||
+      needed.some((role) => normalizedRoles.includes(role));
 
     const routes = [
       {
@@ -553,11 +637,85 @@ const HomeScreen = ({ navigation }) => {
 
   const handleMapTouchStart = useCallback(
     () => setIsInteractingWithMap(true),
-    []
+    [],
   );
   const handleMapTouchEnd = useCallback(
     () => setIsInteractingWithMap(false),
-    []
+    [],
+  );
+
+  const openSidePanel = useCallback(() => {
+    Animated.timing(sidePanelTranslateX, {
+      toValue: 0,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setSidePanelOpen(true));
+  }, [sidePanelTranslateX]);
+
+  const closeSidePanel = useCallback(() => {
+    Animated.timing(sidePanelTranslateX, {
+      toValue: -sidePanelWidth,
+      duration: 260,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setSidePanelOpen(false));
+  }, [sidePanelTranslateX, sidePanelWidth]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => {
+          const { dx, dy, x0 } = gesture;
+          if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
+          if (!panelOpenRef.current) {
+            if (dx < 0) return false;
+            if (x0 > sidePanelEdgeArea) return false;
+          }
+          return true;
+        },
+        onPanResponderGrant: () => {
+          panelGestureStartX.current = panelOpenRef.current
+            ? 0
+            : -sidePanelWidth;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextX = Math.min(
+            0,
+            Math.max(-sidePanelWidth, panelGestureStartX.current + gesture.dx),
+          );
+          sidePanelTranslateX.setValue(nextX);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const nextX = Math.min(
+            0,
+            Math.max(-sidePanelWidth, panelGestureStartX.current + gesture.dx),
+          );
+          const shouldOpen = nextX > -sidePanelWidth / 2 || gesture.vx > 0.5;
+          Animated.timing(sidePanelTranslateX, {
+            toValue: shouldOpen ? 0 : -sidePanelWidth,
+            duration: 240,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+          setSidePanelOpen(shouldOpen);
+        },
+        onPanResponderTerminate: (_, gesture) => {
+          const nextX = Math.min(
+            0,
+            Math.max(-sidePanelWidth, panelGestureStartX.current + gesture.dx),
+          );
+          const shouldOpen = nextX > -sidePanelWidth / 2;
+          Animated.timing(sidePanelTranslateX, {
+            toValue: shouldOpen ? 0 : -sidePanelWidth,
+            duration: 240,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+          setSidePanelOpen(shouldOpen);
+        },
+      }),
+    [sidePanelEdgeArea, sidePanelWidth, sidePanelTranslateX],
   );
 
   const loadAll = async () => {
@@ -631,6 +789,103 @@ const HomeScreen = ({ navigation }) => {
       setError("No se pudo cargar lugares populares.");
     }
   };
+
+  const normalizeTopPlace = useCallback((item) => {
+    if (!item || typeof item !== "object") return item;
+    if (item.place) {
+      const place = normalizePlace(item.place);
+      return {
+        ...place,
+        _metric:
+          item.visits ??
+          item.total ??
+          item.count ??
+          item.hits ??
+          item.totalVisits ??
+          null,
+      };
+    }
+    const normalized = normalizePlace(item);
+    return {
+      ...normalized,
+      name: normalized.name || normalized.placeName || normalized.title,
+      _metric:
+        normalized.visits ??
+        normalized.total ??
+        normalized.count ??
+        normalized.hits ??
+        null,
+    };
+  }, []);
+
+  const loadTopPlaces = async () => {
+    setLoadingTopPlaces(true);
+    setTopPlacesError("");
+    try {
+      const response = await api.get(ENDPOINTS.PLACES_TOP, {
+        params: { limit: 8 },
+      });
+      const data = Array.isArray(response.data)
+        ? response.data
+        : response.data?.data || [];
+      setTopPlaces(data.map(normalizeTopPlace));
+    } catch (err) {
+      setTopPlacesError("No se pudo cargar el top de sitios.");
+    } finally {
+      setLoadingTopPlaces(false);
+    }
+  };
+
+  const loadNearbyContext = async () => {
+    setLoadingNearbyContext(true);
+    setNearbyContextError("");
+    try {
+      if (!user) {
+        setNearbyContext(null);
+        setLoadingNearbyContext(false);
+        return;
+      }
+      let coordsData = coords;
+      if (!coordsData) {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({});
+          coordsData = loc.coords;
+          setCoords(coordsData);
+        } else {
+          setNearbyContext(null);
+          setLoadingNearbyContext(false);
+          return;
+        }
+      }
+      const response = await api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, {
+        params: {
+          lat: coordsData.latitude,
+          lng: coordsData.longitude,
+          radius: 150,
+          limit: 5,
+        },
+      });
+      const data = Array.isArray(response.data?.data) ? response.data.data : [];
+      const first = data[0] || null;
+      if (first?.place) {
+        setNearbyContext({
+          ...normalizePlace(first.place),
+          distanceM: first.distanceM,
+        });
+      } else {
+        setNearbyContext(null);
+      }
+    } catch (err) {
+      setNearbyContextError("No se pudo cargar el contexto cercano.");
+    } finally {
+      setLoadingNearbyContext(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) loadNearbyContext();
+  }, [user]);
 
   const ensureLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -726,11 +981,11 @@ const HomeScreen = ({ navigation }) => {
             typeof p.distanceMeters === "number"
               ? p.distanceMeters <= targetRadiusMeters
               : p.lat && p.lng
-              ? distanceBetweenMeters(coordsData, {
-                  latitude: p.lat,
-                  longitude: p.lng,
-                }) <= targetRadiusMeters
-              : false;
+                ? distanceBetweenMeters(coordsData, {
+                    latitude: p.lat,
+                    longitude: p.lng,
+                  }) <= targetRadiusMeters
+                : false;
           const withinCategory =
             categoryId == null
               ? true
@@ -771,13 +1026,20 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleRefresh = async () => {
-    await Promise.all([loadAll(), loadPopular(), loadPackages(), loadAgencies()]);
+    await Promise.all([
+      loadAll(),
+      loadPopular(),
+      loadPackages(),
+      loadAgencies(),
+      loadTopPlaces(),
+      loadNearbyContext(),
+    ]);
   };
 
   const filteredNearby = useMemo(() => {
     if (selectedCategory === "todos") return nearby;
     return nearby.filter(
-      (item) => Number(item.categoryId) === Number(selectedCategory)
+      (item) => Number(item.categoryId) === Number(selectedCategory),
     );
   }, [nearby, selectedCategory]);
 
@@ -785,20 +1047,31 @@ const HomeScreen = ({ navigation }) => {
     const term = query.trim().toLowerCase();
     if (!term) return places;
     return places.filter((item) =>
-      (item?.name || "").toLowerCase().includes(term)
+      (item?.name || "").toLowerCase().includes(term),
     );
   }, [places, query]);
 
   const filteredNearbyPlaces = useMemo(
     () => (filteredNearby.length ? filteredNearby : nearby),
-    [filteredNearby, nearby]
+    [filteredNearby, nearby],
   );
+
+  const nearbyDisplayPlace = useMemo(() => {
+    if (nearbyContext) return nearbyContext;
+    return filteredNearbyPlaces.length ? filteredNearbyPlaces[0] : null;
+  }, [filteredNearbyPlaces, nearbyContext]);
 
   const getPlaceKey = useCallback((place) => {
     if (!place) return "";
     if (place.id != null) return `id:${place.id}`;
     if (place.name) return `name:${place.name}`;
     return "";
+  }, []);
+
+  const getTopPlaceMeta = useCallback((item) => {
+    if (item?._metric != null) return `${item._metric} visitas`;
+    const category = getCategoryLabel(item);
+    return category || "Top visitado";
   }, []);
 
   const getSlideMetrics = useCallback((imageCount, hasNeighbors) => {
@@ -853,7 +1126,7 @@ const HomeScreen = ({ navigation }) => {
       if (detailPlaces.length <= 1) return null;
       const currentKey = getPlaceKey(selectedPlace);
       const currentIndex = detailPlaces.findIndex(
-        (place) => getPlaceKey(place) === currentKey
+        (place) => getPlaceKey(place) === currentKey,
       );
       const startIndex = currentIndex === -1 ? 0 : currentIndex;
       const delta = direction === "prev" ? -1 : 1;
@@ -861,7 +1134,7 @@ const HomeScreen = ({ navigation }) => {
         (startIndex + delta + detailPlaces.length) % detailPlaces.length;
       return detailPlaces[nextIndex] || null;
     },
-    [detailPlaces, selectedPlace, getPlaceKey]
+    [detailPlaces, selectedPlace, getPlaceKey],
   );
 
   const searchSuggestions = useMemo(() => {
@@ -872,7 +1145,7 @@ const HomeScreen = ({ navigation }) => {
   const filteredRecommended = useMemo(() => {
     if (selectedCategory === "todos") return recommended;
     return recommended.filter(
-      (item) => Number(item.categoryId) === Number(selectedCategory)
+      (item) => Number(item.categoryId) === Number(selectedCategory),
     );
   }, [recommended, selectedCategory]);
 
@@ -888,7 +1161,7 @@ const HomeScreen = ({ navigation }) => {
     const delta = Math.max(distanceKm / 111, 0.06);
     const nearbyMarkers = filteredNearby
       .filter(
-        (place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng)
+        (place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng),
       )
       .map((place) => ({
         latitude: place.lat,
@@ -1014,7 +1287,9 @@ const HomeScreen = ({ navigation }) => {
       let resolved = normalizedItem;
       try {
         if (normalizedItem?.id) {
-          const response = await api.get(ENDPOINTS.PLACE_DETAIL(normalizedItem.id));
+          const response = await api.get(
+            ENDPOINTS.PLACE_DETAIL(normalizedItem.id),
+          );
           const data = response.data?.data || response.data || normalizedItem;
           const normalizedData = normalizePlace(data);
           const merged = {
@@ -1038,7 +1313,7 @@ const HomeScreen = ({ navigation }) => {
       }
       return resolved;
     },
-    [getPlaceKey]
+    [getPlaceKey],
   );
 
   const loadPlaceDetail = useCallback(
@@ -1053,7 +1328,7 @@ const HomeScreen = ({ navigation }) => {
       setSelectedPlace(resolved);
       setDetailLoading(false);
     },
-    [fetchPlaceDetail, getPlaceKey]
+    [fetchPlaceDetail, getPlaceKey],
   );
 
   const [prefetchStatus, setPrefetchStatus] = useState({
@@ -1078,7 +1353,7 @@ const HomeScreen = ({ navigation }) => {
         [direction]: { key, loading: false, ready: true },
       }));
     },
-    [fetchPlaceDetail, getPlaceKey]
+    [fetchPlaceDetail, getPlaceKey],
   );
 
   const openDetail = useCallback(
@@ -1089,7 +1364,76 @@ const HomeScreen = ({ navigation }) => {
       closeDetailInfo();
       await loadPlaceDetail(item);
     },
-    [closeDetailInfo, loadPlaceDetail]
+    [closeDetailInfo, loadPlaceDetail],
+  );
+
+  const renderTopPlaceItem = useCallback(
+    ({ item, index }) => {
+      const imageUri =
+        item?.imageUrls?.[0] || item?.imageUrl || item?.image || null;
+      const title = item?.name || item?.title || "Lugar";
+      const meta = getTopPlaceMeta(item);
+      const initial = title ? title.charAt(0).toUpperCase() : "•";
+      const address = item?.address || item?.location || "";
+      const description = item?.description || "";
+      const categoryLabel = getCategoryLabel(item);
+      const categoryText =
+        categoryLabel ||
+        (item?.categoryId != null ? `Categoria ${item.categoryId}` : "");
+
+      return (
+        <TouchableOpacity
+          style={styles.sidePanelItemCard}
+          onPress={() => {
+            closeSidePanel();
+            if (item) openDetail(item, "all");
+          }}
+        >
+          <View style={styles.sidePanelThumb}>
+            {imageUri ? (
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.sidePanelThumbImage}
+              />
+            ) : (
+              <FontAwesome name="map-marker" size={16} color="#64748B" />
+            )}
+          </View>
+          <View style={styles.sidePanelItemInfo}>
+            <Text style={styles.sidePanelItemTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            {address ? (
+              <Text style={styles.sidePanelItemMeta} numberOfLines={1}>
+                {address}
+              </Text>
+            ) : null}
+            {description ? (
+              <Text style={styles.sidePanelItemMeta} numberOfLines={2}>
+                {description}
+              </Text>
+            ) : null}
+            <View style={styles.sidePanelMetaRow}>
+              {meta ? (
+                <View style={styles.sidePanelMetaPill}>
+                  <Text style={styles.sidePanelMetaPillText}>{meta}</Text>
+                </View>
+              ) : null}
+              {categoryText ? (
+                <View
+                  style={[styles.sidePanelMetaPill, styles.sidePanelMetaPillOutline]}
+                >
+                  <Text style={styles.sidePanelMetaPillText}>
+                    {categoryText}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [closeSidePanel, getTopPlaceMeta, openDetail],
   );
 
   const goToNextPlace = useCallback(() => {
@@ -1127,7 +1471,10 @@ const HomeScreen = ({ navigation }) => {
       .map((url) => {
         const type = getModelType(url);
         if (!type) return null;
-        if (type !== platformType && !(platformType === "glb" && type === "gltf")) {
+        if (
+          type !== platformType &&
+          !(platformType === "glb" && type === "gltf")
+        ) {
           return null;
         }
         const label = url.split("/").pop()?.split("?")[0] || url;
@@ -1142,7 +1489,7 @@ const HomeScreen = ({ navigation }) => {
       return;
     }
     const stillSelected = model3dOptions.some(
-      (model) => model.url === selectedModelUrl
+      (model) => model.url === selectedModelUrl,
     );
     if (stillSelected) return;
 
@@ -1188,14 +1535,14 @@ const HomeScreen = ({ navigation }) => {
             (variant === "compact"
               ? cardCompactWidth
               : variant === "wide"
-              ? cardWideWidth
-              : undefined)
+                ? cardWideWidth
+                : undefined)
           }
           imageHeight={overrideHeight ?? (variant === "compact" ? 200 : 240)}
         />
       );
     },
-    [openDetail, cardCompactWidth, cardWideWidth]
+    [openDetail, cardCompactWidth, cardWideWidth],
   );
 
   const getPackageImage = useCallback((pkg) => {
@@ -1206,7 +1553,7 @@ const HomeScreen = ({ navigation }) => {
           .map((place) =>
             Array.isArray(place?.imageUrls)
               ? place.imageUrls.find((url) => url && url.trim())
-              : null
+              : null,
           )
           .find(Boolean)
       : null;
@@ -1221,7 +1568,7 @@ const HomeScreen = ({ navigation }) => {
         .reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
       return packageGradients[hash % packageGradients.length];
     },
-    [packageGradients]
+    [packageGradients],
   );
 
   const openAgency = (agency) => {
@@ -1234,7 +1581,10 @@ const HomeScreen = ({ navigation }) => {
       ? pkg.includes.filter((item) => item && String(item).trim())
       : [];
     const includeList = sanitizedIncludes.slice(0, 3);
-    const remaining = Math.max(sanitizedIncludes.length - includeList.length, 0);
+    const remaining = Math.max(
+      sanitizedIncludes.length - includeList.length,
+      0,
+    );
     const cityTags = pkg.city ? pkg.city.split("/").map((c) => c.trim()) : [];
     const packageImage = getPackageImage(pkg);
     const hasImage = Boolean(packageImage);
@@ -1285,7 +1635,10 @@ const HomeScreen = ({ navigation }) => {
           </View>
           <View style={styles.packageLocationRow}>
             {cityTags.map((tag, idx) => (
-              <View key={`${pkg.id}-city-${idx}`} style={styles.packageLocationChip}>
+              <View
+                key={`${pkg.id}-city-${idx}`}
+                style={styles.packageLocationChip}
+              >
                 <FontAwesome name="map-marker" size={12} color="#fff" />
                 <Text style={styles.packageLocationText}>{tag}</Text>
               </View>
@@ -1299,12 +1652,14 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.packageRating}>
               <FontAwesome name="star" size={12} color="#f5b000" />
               <Text style={styles.packageRatingText}>
-                {(pkg.rating ?? 4.5)} ({pkg.reviews ?? 0} reseñas)
+                {pkg.rating ?? 4.5} ({pkg.reviews ?? 0} reseñas)
               </Text>
             </View>
           </View>
           {pkg.agencyName ? (
-            <Text style={styles.packageAgency}>Publicado por {pkg.agencyName}</Text>
+            <Text style={styles.packageAgency}>
+              Publicado por {pkg.agencyName}
+            </Text>
           ) : null}
           <Text style={styles.packageSubtitle}>{pkg.description}</Text>
 
@@ -1324,7 +1679,10 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.packageIncludes}>
             <Text style={styles.packageIncludesTitle}>Incluye:</Text>
             {includeList.map((item, idx) => (
-              <View key={`${pkg.id}-inc-${idx}`} style={styles.packageIncludeRow}>
+              <View
+                key={`${pkg.id}-inc-${idx}`}
+                style={styles.packageIncludeRow}
+              >
                 <FontAwesome name="check" size={12} color="#10b981" />
                 <Text style={styles.packageIncludeText}>{item}</Text>
               </View>
@@ -1347,7 +1705,10 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
               <Text style={styles.packagePriceNote}>por persona</Text>
             </View>
-            <TouchableOpacity style={styles.packageButton} onPress={() => openPayment(pkg)}>
+            <TouchableOpacity
+              style={styles.packageButton}
+              onPress={() => openPayment(pkg)}
+            >
               <LinearGradient
                 colors={["#7B5BFF", "#D66DFF"]}
                 start={{ x: 0, y: 0 }}
@@ -1399,7 +1760,7 @@ const HomeScreen = ({ navigation }) => {
     const hasNeighbors = detailPlaces.length > 1;
     const { infoIndex, lastImageIndex } = getSlideMetrics(
       imageCount,
-      hasNeighbors
+      hasNeighbors,
     );
     let targetIndex = infoIndex;
     if (pendingScrollPositionRef.current === "lastImage") {
@@ -1488,7 +1849,11 @@ const HomeScreen = ({ navigation }) => {
       const infoDetails = [
         { icon: "ticket", label: "Entrada", value: "$12.000 COP" },
         { icon: "clock-o", label: "Horario", value: "8:00 AM - 6:00 PM" },
-        { icon: "info-circle", label: "Servicios", value: "Guía local, Parqueadero, Zona picnic" },
+        {
+          icon: "info-circle",
+          label: "Servicios",
+          value: "Guía local, Parqueadero, Zona picnic",
+        },
         { icon: "road", label: "Recorrido", value: "2.3 km • 1h 45m" },
         { icon: "phone", label: "Contacto", value: "+57 310 123 4567" },
       ];
@@ -1496,7 +1861,9 @@ const HomeScreen = ({ navigation }) => {
       const fallbackPreview =
         model3dOptions[0]?.url ||
         parseUrlList(selectedPlace?.model3dUrls).find((url) =>
-          String(url || "").trim().startsWith("http")
+          String(url || "")
+            .trim()
+            .startsWith("http"),
         ) ||
         null;
       const previewModelUrl =
@@ -1526,13 +1893,22 @@ const HomeScreen = ({ navigation }) => {
         model3dOptions.length ? (
           <View style={styles.arPreviewCard}>
             <View style={styles.arPreviewHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.xs }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: SPACING.xs,
+                }}
+              >
                 <FontAwesome name="cubes" size={14} color="#5B3CF0" />
-                <Text style={styles.arPreviewTitle}>Modelos 3D disponibles</Text>
+                <Text style={styles.arPreviewTitle}>
+                  Modelos 3D disponibles
+                </Text>
               </View>
               <View style={styles.arPreviewBadge}>
                 <Text style={styles.arPreviewBadgeText}>
-                  {model3dOptions.length} modelo{model3dOptions.length > 1 ? "s" : ""}
+                  {model3dOptions.length} modelo
+                  {model3dOptions.length > 1 ? "s" : ""}
                 </Text>
               </View>
             </View>
@@ -1542,10 +1918,7 @@ const HomeScreen = ({ navigation }) => {
                 return (
                   <TouchableOpacity
                     key={`${model.url}-${idx}`}
-                    style={[
-                      styles.modelChip,
-                      active && styles.modelChipActive,
-                    ]}
+                    style={[styles.modelChip, active && styles.modelChipActive]}
                     onPress={() => setSelectedModelUrl(model.url)}
                     activeOpacity={0.8}
                   >
@@ -1575,7 +1948,9 @@ const HomeScreen = ({ navigation }) => {
 
       const renderInfoSlide = () => {
         const infoSlideTheme =
-          detailSource === "nearby" ? styles.infoSlideNearby : styles.infoSlideAll;
+          detailSource === "nearby"
+            ? styles.infoSlideNearby
+            : styles.infoSlideAll;
         const infoSlideGradient =
           detailSource === "nearby"
             ? ["#F5F9FF", "#E6F0FF"]
@@ -1588,119 +1963,154 @@ const HomeScreen = ({ navigation }) => {
               { width: windowWidth, height: detailImageHeight },
             ]}
           >
-          <LinearGradient
-            colors={infoSlideGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.infoSlideGradient}
-            pointerEvents="none"
-          />
-          <ScrollView
-            contentContainerStyle={[styles.infoSlideScroll, { paddingBottom: SPACING.xl * 2 }]}
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled
-          >
-            <View style={styles.infoSlideHeader}>
-              <View style={styles.infoSlideTags}>
-                <View style={styles.infoSlideTagPrimary}>
-                  <FontAwesome name="star" size={12} color="#5B3CF0" />
-                  <Text style={styles.infoSlideTagText}>
-                    {selectedPlace?.rating || "4.8"}
-                  </Text>
-                </View>
-                {getCategoryLabel(selectedPlace) ? (
-                  <View style={styles.infoSlideTagSecondary}>
-                    <FontAwesome name="tag" size={12} color="#0E9F6E" />
+            <LinearGradient
+              colors={infoSlideGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.infoSlideGradient}
+              pointerEvents="none"
+            />
+            <ScrollView
+              contentContainerStyle={[
+                styles.infoSlideScroll,
+                { paddingBottom: SPACING.xl * 2 },
+              ]}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <View style={styles.infoSlideHeader}>
+                <View style={styles.infoSlideTags}>
+                  <View style={styles.infoSlideTagPrimary}>
+                    <FontAwesome name="star" size={12} color="#5B3CF0" />
                     <Text style={styles.infoSlideTagText}>
-                      {getCategoryLabel(selectedPlace)}
+                      {selectedPlace?.rating || "4.8"}
                     </Text>
                   </View>
-                ) : null}
-                {selectedPlace?.distanceMeters ? (
-                  <View style={styles.infoSlideTagMuted}>
-                    <FontAwesome name="location-arrow" size={12} color="#111827" />
-                    <Text style={styles.infoSlideTagMutedText}>
-                      {formatDistance(selectedPlace.distanceMeters)}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={styles.infoSlideTitle}>{selectedPlace?.name || "Lugar destacado"}</Text>
-              <Text style={styles.infoSlideSubtitle}>
-                {selectedPlace?.address || "Ubicación por confirmar"}
-              </Text>
-              <Text style={styles.infoSlideDescription}>
-                {selectedPlace?.description ||
-                  "Sendero tranquilo junto al río, ideal para caminatas cortas y fotografía de naturaleza."}
-              </Text>
-            </View>
-
-            <View style={styles.infoSlideGrid}>
-              {infoDetails.map((item, idx) => (
-                <View key={`${item.label}-${idx}`} style={styles.infoSlideCard}>
-                  <FontAwesome name={item.icon} size={16} color="#5B3CF0" />
-                  <Text style={styles.infoSlideCardLabel}>{item.label}</Text>
-                  <Text style={styles.infoSlideCardValue}>{item.value}</Text>
+                  {getCategoryLabel(selectedPlace) ? (
+                    <View style={styles.infoSlideTagSecondary}>
+                      <FontAwesome name="tag" size={12} color="#0E9F6E" />
+                      <Text style={styles.infoSlideTagText}>
+                        {getCategoryLabel(selectedPlace)}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {selectedPlace?.distanceMeters ? (
+                    <View style={styles.infoSlideTagMuted}>
+                      <FontAwesome
+                        name="location-arrow"
+                        size={12}
+                        color="#111827"
+                      />
+                      <Text style={styles.infoSlideTagMutedText}>
+                        {formatDistance(selectedPlace.distanceMeters)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
-              ))}
-            </View>
-
-            {arPreviewHtml ? (
-              <View style={styles.arPreviewCard}>
-                <View style={styles.arPreviewHeader}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.xs }}>
-                    <FontAwesome name="cube" size={14} color="#5B3CF0" />
-                    <Text style={styles.arPreviewTitle}>Vista previa 3D</Text>
-                  </View>
-                  <View style={styles.arPreviewBadge}>
-                    <Text style={styles.arPreviewBadgeText}>AR Ready</Text>
-                  </View>
-                </View>
-                <View style={styles.arPreviewFrame}>
-                  <WebView
-                    originWhitelist={["*"]}
-                    source={{ html: arPreviewHtml }}
-                    style={{ flex: 1, borderRadius: 14 }}
-                    javaScriptEnabled
-                    automaticallyAdjustContentInsets={false}
-                    scrollEnabled={false}
-                  />
-                </View>
-                <Text style={styles.arPreviewHint}>
-                  Mueve el modelo con un dedo y acércalo con gesto de pinza antes de ir a AR.
+                <Text style={styles.infoSlideTitle}>
+                  {selectedPlace?.name || "Lugar destacado"}
+                </Text>
+                <Text style={styles.infoSlideSubtitle}>
+                  {selectedPlace?.address || "Ubicación por confirmar"}
+                </Text>
+                <Text style={styles.infoSlideDescription}>
+                  {selectedPlace?.description ||
+                    "Sendero tranquilo junto al río, ideal para caminatas cortas y fotografía de naturaleza."}
                 </Text>
               </View>
-            ) : null}
-            {renderModelSelector()}
 
-            <View style={styles.infoSlideActions}>
-              <TouchableOpacity
-                style={[styles.actionButtonRow, styles.actionButtonPrimary]}
-                onPress={openDirectionsFromCurrent}
-                disabled={!selectedPlace?.lat || !selectedPlace?.lng}
-              >
-                <FontAwesome name="location-arrow" size={14} color={COLORS.white} />
-                <Text style={styles.actionButtonPrimaryText}>Cómo llegar</Text>
-              </TouchableOpacity>
-            {platformArUrl ? (
-              <TouchableOpacity
-                style={[styles.actionButtonRow, styles.actionButtonSecondary]}
-                onPress={openNativeAR}
-              >
-                <FontAwesome name="cube" size={14} color="#111827" />
-                <Text style={styles.actionButtonSecondaryText}>Abrir AR</Text>
-              </TouchableOpacity>
-            ) : null}
+              <View style={styles.infoSlideGrid}>
+                {infoDetails.map((item, idx) => (
+                  <View
+                    key={`${item.label}-${idx}`}
+                    style={styles.infoSlideCard}
+                  >
+                    <FontAwesome name={item.icon} size={16} color="#5B3CF0" />
+                    <Text style={styles.infoSlideCardLabel}>{item.label}</Text>
+                    <Text style={styles.infoSlideCardValue}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {arPreviewHtml ? (
+                <View style={styles.arPreviewCard}>
+                  <View style={styles.arPreviewHeader}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: SPACING.xs,
+                      }}
+                    >
+                      <FontAwesome name="cube" size={14} color="#5B3CF0" />
+                      <Text style={styles.arPreviewTitle}>Vista previa 3D</Text>
+                    </View>
+                    <View style={styles.arPreviewBadge}>
+                      <Text style={styles.arPreviewBadgeText}>AR Ready</Text>
+                    </View>
+                  </View>
+                  <View style={styles.arPreviewFrame}>
+                    <WebView
+                      originWhitelist={["*"]}
+                      source={{ html: arPreviewHtml }}
+                      style={{ flex: 1, borderRadius: 14 }}
+                      javaScriptEnabled
+                      automaticallyAdjustContentInsets={false}
+                      scrollEnabled={false}
+                    />
+                  </View>
+                  <Text style={styles.arPreviewHint}>
+                    Mueve el modelo con un dedo y acércalo con gesto de pinza
+                    antes de ir a AR.
+                  </Text>
+                </View>
+              ) : null}
+              {renderModelSelector()}
+
+              <View style={styles.infoSlideActions}>
+                <TouchableOpacity
+                  style={[styles.actionButtonRow, styles.actionButtonPrimary]}
+                  onPress={openDirectionsFromCurrent}
+                  disabled={!selectedPlace?.lat || !selectedPlace?.lng}
+                >
+                  <FontAwesome
+                    name="location-arrow"
+                    size={14}
+                    color={COLORS.white}
+                  />
+                  <Text style={styles.actionButtonPrimaryText}>
+                    Cómo llegar
+                  </Text>
+                </TouchableOpacity>
+                {platformArUrl ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButtonRow,
+                      styles.actionButtonSecondary,
+                    ]}
+                    onPress={openNativeAR}
+                  >
+                    <FontAwesome name="cube" size={14} color="#111827" />
+                    <Text style={styles.actionButtonSecondaryText}>
+                      Abrir AR
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              {platformArUrl ? (
+                <TouchableOpacity
+                  onPress={openNativeAR}
+                  style={styles.arNativeLink}
+                >
+                  <FontAwesome name="rocket" size={12} color="#5B3CF0" />
+                  <Text style={styles.arNativeLinkText}>
+                    Abrir en AR nativa
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </ScrollView>
           </View>
-
-          {platformArUrl ? (
-            <TouchableOpacity onPress={openNativeAR} style={styles.arNativeLink}>
-              <FontAwesome name="rocket" size={12} color="#5B3CF0" />
-              <Text style={styles.arNativeLinkText}>Abrir en AR nativa</Text>
-            </TouchableOpacity>
-          ) : null}
-          </ScrollView>
-        </View>
         );
       };
 
@@ -1738,7 +2148,8 @@ const HomeScreen = ({ navigation }) => {
       );
 
       const renderTransitionSlide = (direction) => {
-        const status = direction === "next" ? prefetchStatus.next : prefetchStatus.prev;
+        const status =
+          direction === "next" ? prefetchStatus.next : prefetchStatus.prev;
         return (
           <View
             style={[
@@ -1783,7 +2194,9 @@ const HomeScreen = ({ navigation }) => {
             maxToRenderPerBatch={3}
             removeClippedSubviews
             onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
+              const idx = Math.round(
+                e.nativeEvent.contentOffset.x / windowWidth,
+              );
               setImageIndex(idx);
               if (!hasNeighbors) return;
               if (idx === nextIndex && !isAdvancingRef.current) {
@@ -1816,8 +2229,10 @@ const HomeScreen = ({ navigation }) => {
                 }
                 return;
               }
-              const shouldPreloadNext = idx >= Math.max(lastImageIndex - 1, infoIndex);
-              const shouldPreloadPrev = idx <= Math.min(firstImageIndex, infoIndex + 1);
+              const shouldPreloadNext =
+                idx >= Math.max(lastImageIndex - 1, infoIndex);
+              const shouldPreloadPrev =
+                idx <= Math.min(firstImageIndex, infoIndex + 1);
               if (shouldPreloadNext) {
                 const nextPlace = getAdjacentPlace("next");
                 if (nextPlace) preloadPlaceDetail(nextPlace, "next");
@@ -1916,7 +2331,7 @@ const HomeScreen = ({ navigation }) => {
       getPlaceKey,
       goToNextPlace,
       goToPrevPlace,
-    ]
+    ],
   );
 
   const placeForAr = useMemo(() => {
@@ -1982,7 +2397,7 @@ const HomeScreen = ({ navigation }) => {
       Alert.alert(
         "Modelo no disponible",
         "No hay un modelo compatible para abrir en AR.",
-        [{ text: "Aceptar" }]
+        [{ text: "Aceptar" }],
       );
       return;
     }
@@ -2000,7 +2415,7 @@ const HomeScreen = ({ navigation }) => {
                 onPress: () => Linking.openURL(platformArUrl),
               }
             : null,
-        ]
+        ],
       );
       return;
     }
@@ -2016,7 +2431,7 @@ const HomeScreen = ({ navigation }) => {
                 onPress: () => Linking.openURL(platformArUrl),
               }
             : null,
-        ]
+        ],
       );
       return;
     }
@@ -2093,8 +2508,8 @@ const HomeScreen = ({ navigation }) => {
         </head>
         <body>
           <model-viewer src="${arConfig?.modelUrl || arUrl}" ios-src="${
-      arConfig?.iosModelUrl || ""
-    }"
+            arConfig?.iosModelUrl || ""
+          }"
             ar ar-modes="webxr scene-viewer quick-look" camera-controls auto-rotate shadow-intensity="1" exposure="1"
             style="width:100%;height:100%;">
           </model-viewer>
@@ -2219,7 +2634,9 @@ const HomeScreen = ({ navigation }) => {
                 style={styles.profileMenuToggle}
                 onPress={() => setProfileMenuVisible((prev) => !prev)}
               >
-                <Text style={styles.profileMenuToggleText}>Rutas permitidas</Text>
+                <Text style={styles.profileMenuToggleText}>
+                  Rutas permitidas
+                </Text>
                 <FontAwesome
                   name={profileMenuVisible ? "chevron-up" : "chevron-down"}
                   size={12}
@@ -2240,10 +2657,18 @@ const HomeScreen = ({ navigation }) => {
                         onPress={() => handleRoutePress(route.route)}
                       >
                         <View>
-                          <Text style={styles.profileMenuItemTitle}>{route.label}</Text>
-                          <Text style={styles.profileMenuItemDesc}>{route.description}</Text>
+                          <Text style={styles.profileMenuItemTitle}>
+                            {route.label}
+                          </Text>
+                          <Text style={styles.profileMenuItemDesc}>
+                            {route.description}
+                          </Text>
                         </View>
-                        <FontAwesome name="angle-right" size={14} color="#5B3CF0" />
+                        <FontAwesome
+                          name="angle-right"
+                          size={14}
+                          color="#5B3CF0"
+                        />
                       </TouchableOpacity>
                     ))
                   )}
@@ -2274,7 +2699,10 @@ const HomeScreen = ({ navigation }) => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0}
+      keyboardVerticalOffset={
+        Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0
+      }
+      {...panResponder.panHandlers}
     >
       <ScrollView
         refreshControl={
@@ -2282,7 +2710,7 @@ const HomeScreen = ({ navigation }) => {
         }
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isInteractingWithMap}
-        contentContainerStyle={{ paddingBottom: SPACING.lg }}
+        contentContainerStyle={{ paddingBottom: 0 }}
         contentInsetAdjustmentBehavior="never"
       >
         <View style={styles.pageHeader}>
@@ -2407,25 +2835,6 @@ const HomeScreen = ({ navigation }) => {
                   </View>
                 ) : null}
               </View>
-
-              <View style={styles.heroStats}>
-                <View style={styles.stat}>
-                  <Text style={styles.statNumber}>200+</Text>
-                  <Text style={styles.statLabel}>Destinos</Text>
-                </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statNumber}>500+</Text>
-                  <Text style={styles.statLabel}>Experiencias</Text>
-                </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statNumber}>50K+</Text>
-                  <Text style={styles.statLabel}>Visitantes</Text>
-                </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statNumber}>4.9★</Text>
-                  <Text style={styles.statLabel}>Satisfacción</Text>
-                </View>
-              </View>
             </LinearGradient>
           </ImageBackground>
         </View>
@@ -2546,8 +2955,9 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.sectionPill}>Ofertas Especiales</Text>
             <Text style={styles.sectionHeroTitle}>Paquetes Turísticos</Text>
             <Text style={styles.sectionDescription}>
-              Descubre nuestras experiencias diseñadas para que vivas lo mejor del Huila. Incluyen alojamiento,
-              transporte, alimentación y guías especializados.
+              Descubre nuestras experiencias diseñadas para que vivas lo mejor
+              del Huila. Incluyen alojamiento, transporte, alimentación y guías
+              especializados.
             </Text>
           </View>
 
@@ -2559,7 +2969,9 @@ const HomeScreen = ({ navigation }) => {
             </View>
           ) : packages.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No hay paquetes publicados aún.</Text>
+              <Text style={styles.emptyText}>
+                No hay paquetes publicados aún.
+              </Text>
             </View>
           ) : (
             <View style={styles.packageList}>
@@ -2590,7 +3002,8 @@ const HomeScreen = ({ navigation }) => {
             <Text style={styles.sectionPillSecondary}>Agencias</Text>
             <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
             <Text style={styles.sectionDescription}>
-              Encuentra agencias confiables y conoce su información antes de reservar.
+              Encuentra agencias confiables y conoce su información antes de
+              reservar.
             </Text>
           </View>
 
@@ -2602,7 +3015,9 @@ const HomeScreen = ({ navigation }) => {
             </View>
           ) : agencies.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No hay agencias registradas aún.</Text>
+              <Text style={styles.emptyText}>
+                No hay agencias registradas aún.
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -2630,10 +3045,184 @@ const HomeScreen = ({ navigation }) => {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </ScrollView>
 
-      <AuthModal
-        visible={authVisible}
-        onClose={() => setAuthVisible(false)}
-      />
+      <View style={styles.sidePanelOverlayContainer} pointerEvents="box-none">
+        {!sidePanelOpen ? (
+          <Pressable style={styles.sidePanelHandlePress} onPress={openSidePanel}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.sidePanelHandle,
+                panelHintDone
+                  ? { opacity: 0.18, transform: [{ translateX: 0 }] }
+                  : {
+                      opacity: panelHintHandleAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.2, 0.55],
+                      }),
+                      transform: [
+                        {
+                          translateX: panelHintHandleAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 6],
+                          }),
+                        },
+                      ],
+                    },
+              ]}
+            />
+          </Pressable>
+        ) : null}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={closeSidePanel}
+          pointerEvents={sidePanelOpen ? "auto" : "none"}
+        >
+          <Animated.View
+            style={[
+              styles.sidePanelOverlay,
+              {
+                opacity: sidePanelTranslateX.interpolate({
+                  inputRange: [-sidePanelWidth, 0],
+                  outputRange: [0, 0.35],
+                  extrapolate: "clamp",
+                }),
+              },
+            ]}
+          />
+        </Pressable>
+        <Animated.View
+          style={[
+            styles.sidePanel,
+            {
+              width: sidePanelWidth,
+              transform: [{ translateX: sidePanelTranslateX }],
+            },
+          ]}
+        >
+          {nearbyContext ? (
+            <View style={styles.sidePanelWelcome}>
+              <Text style={styles.sidePanelWelcomeTitle}>Bienvenido</Text>
+              <Text style={styles.sidePanelWelcomeSubtitle}>
+                Estás cerca de este lugar.
+              </Text>
+            </View>
+          ) : null}
+
+          {loadingNearbyContext ? (
+            <ActivityIndicator
+              color={COLORS.primary}
+              style={styles.sidePanelLoader}
+            />
+          ) : nearbyDisplayPlace ? (
+            <TouchableOpacity
+              style={styles.sidePanelNearbyCard}
+              onPress={() => {
+                closeSidePanel();
+                openDetail(nearbyDisplayPlace, "nearby");
+              }}
+            >
+              <View style={styles.sidePanelBadgeRow}>
+                <View style={styles.sidePanelBadge}>
+                  <Text style={styles.sidePanelBadgeTextLight}>
+                    {nearbyContext ? "Cerca de ti" : "Explora"}
+                  </Text>
+                </View>
+                {!nearbyContext ? (
+                  <View style={styles.sidePanelBadgeOutline}>
+                    <Text style={styles.sidePanelBadgeText}>
+                      Primer resultado
+                    </Text>
+                  </View>
+                ) : null}
+                {typeof nearbyDisplayPlace.distanceM === "number" ? (
+                  <View style={styles.sidePanelBadgeOutline}>
+                    <Text style={styles.sidePanelBadgeText}>
+                      {Math.round(nearbyDisplayPlace.distanceM)} m
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {nearbyDisplayPlace?.imageUrls?.[0] ? (
+                <Image
+                  source={{ uri: nearbyDisplayPlace.imageUrls[0] }}
+                  style={styles.sidePanelNearbyImage}
+                />
+              ) : null}
+              <Text style={styles.sidePanelNearbyTitle} numberOfLines={2}>
+                {nearbyDisplayPlace.name}
+              </Text>
+              <Text style={styles.sidePanelNearbyMeta} numberOfLines={1}>
+                {nearbyDisplayPlace.address ||
+                  getCategoryLabel(nearbyDisplayPlace) ||
+                  "Lugar cercano"}
+              </Text>
+              {nearbyDisplayPlace.description ? (
+                <Text
+                  style={styles.sidePanelNearbyDescription}
+                  numberOfLines={3}
+                >
+                  {nearbyDisplayPlace.description}
+                </Text>
+              ) : null}
+              {nearbyDisplayPlace.categoryId != null ? (
+                <Text style={styles.sidePanelNearbyMeta}>
+                  Categoria {nearbyDisplayPlace.categoryId}
+                </Text>
+              ) : null}
+              {nearbyDisplayPlace.lat != null &&
+              nearbyDisplayPlace.lng != null ? (
+                <Text style={styles.sidePanelNearbyMeta}>
+                  {Number(nearbyDisplayPlace.lat).toFixed(3)},{" "}
+                  {Number(nearbyDisplayPlace.lng).toFixed(3)}
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.sidePanelEmpty}>
+              Acércate a un sitio para darte la bienvenida.
+            </Text>
+          )}
+
+          <View style={styles.sidePanelHeader}>
+            <View>
+              <Text style={styles.sidePanelTitle}>Más visitados</Text>
+              <Text style={styles.sidePanelSubtitle}>
+                Sitios favoritos cerca de la comunidad
+              </Text>
+            </View>
+            {topPlaces.length > 0 ? (
+              <View style={styles.sidePanelCountBadge}>
+                <Text style={styles.sidePanelCountText}>{topPlaces.length}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {loadingTopPlaces ? (
+            <ActivityIndicator
+              color={COLORS.primary}
+              style={styles.sidePanelLoader}
+            />
+          ) : topPlacesError ? (
+            <Text style={styles.sidePanelEmpty}>{topPlacesError}</Text>
+          ) : topPlaces.length === 0 ? (
+            <Text style={styles.sidePanelEmpty}>
+              Sé el primero en visitar un lugar.
+            </Text>
+          ) : (
+            <FlatList
+              data={topPlaces}
+              keyExtractor={(item, index) =>
+                getPlaceKey(item) || `top:${index}`
+              }
+              renderItem={renderTopPlaceItem}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sidePanelList}
+            />
+          )}
+        </Animated.View>
+      </View>
+
+      <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
       <ProfileModal />
 
       <Modal
@@ -2808,7 +3397,10 @@ const HomeScreen = ({ navigation }) => {
       {/* Modal detalle */}
       <Modal visible={detailVisible} animationType="slide" transparent>
         <View style={styles.detailOverlay}>
-          <Pressable style={styles.detailDismissArea} onPress={() => setDetailVisible(false)} />
+          <Pressable
+            style={styles.detailDismissArea}
+            onPress={() => setDetailVisible(false)}
+          />
           <View style={styles.detailSheet}>
             <ScrollView
               style={styles.detailContainer}
@@ -2825,7 +3417,7 @@ const HomeScreen = ({ navigation }) => {
               {renderImages(
                 Array.isArray(selectedPlace?.imageUrls)
                   ? selectedPlace.imageUrls
-                  : []
+                  : [],
               )}
             </ScrollView>
           </View>
@@ -2854,7 +3446,9 @@ const HomeScreen = ({ navigation }) => {
                 </View>
                 <View>
                   <Text style={styles.paymentTitle}>Pasarela de Pago</Text>
-                  <Text style={styles.paymentSubtitle}>Reserva tu paquete turístico</Text>
+                  <Text style={styles.paymentSubtitle}>
+                    Reserva tu paquete turístico
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity onPress={closePayment}>
@@ -2903,7 +3497,9 @@ const HomeScreen = ({ navigation }) => {
                   placeholder="1234 5678 9012 3456"
                   keyboardType="number-pad"
                   value={paymentForm.cardNumber}
-                  onChangeText={(text) => handlePaymentChange("cardNumber", text)}
+                  onChangeText={(text) =>
+                    handlePaymentChange("cardNumber", text)
+                  }
                 />
               </View>
               <View style={styles.inputGroup}>
@@ -2946,7 +3542,10 @@ const HomeScreen = ({ navigation }) => {
                 </Text>
               </View>
 
-              <TouchableOpacity style={styles.paymentConfirm} onPress={closePayment}>
+              <TouchableOpacity
+                style={styles.paymentConfirm}
+                onPress={closePayment}
+              >
                 <LinearGradient
                   colors={["#7B5BFF", "#D66DFF"]}
                   start={{ x: 0, y: 0 }}
@@ -3017,7 +3616,7 @@ const HomeScreen = ({ navigation }) => {
               const nearbyMarkers = filteredNearby
                 .filter(
                   (place) =>
-                    Number.isFinite(place?.lat) && Number.isFinite(place?.lng)
+                    Number.isFinite(place?.lat) && Number.isFinite(place?.lng),
                 )
                 .map((place) => ({
                   latitude: place.lat,
@@ -3791,12 +4390,17 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: SPACING.lg,
-    backgroundColor: "#0c1325",
     borderRadius: 18,
     borderBottomEndRadius: 0,
     borderBottomStartRadius: 0,
     padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
     gap: SPACING.md,
+    shadowColor: "#0b1021",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
   },
   footerHeader: {
     flexDirection: "row",
@@ -3807,9 +4411,11 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "rgba(91, 60, 240, 0.9)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   footerTitle: {
     color: COLORS.white,
@@ -3828,11 +4434,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.16)",
   },
   footerColumns: {
     flexDirection: "row",
@@ -3861,7 +4467,9 @@ const styles = StyleSheet.create({
   },
   footerDivider: {
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 1,
+    marginTop: SPACING.xs,
   },
   footerBottomRow: {
     gap: SPACING.sm,
@@ -5108,6 +5716,226 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textLight,
     textAlign: "center",
+  },
+  sidePanelOverlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+  },
+  sidePanelHandlePress: {
+    position: "absolute",
+    left: 0,
+    top: "50%",
+    width: 32,
+    height: 120,
+    marginTop: -60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sidePanelHandle: {
+    position: "absolute",
+    left: 8,
+    top: "50%",
+    width: 6,
+    height: 84,
+    marginTop: -42,
+    borderRadius: 999,
+    backgroundColor: "#5B3CF0",
+  },
+  sidePanelOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#0b1120",
+  },
+  sidePanel: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "#F8FAFF",
+    paddingTop: Platform.OS === "ios" ? SPACING.xxl * 1.6 : SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 6, height: 0 },
+    elevation: 12,
+  },
+  sidePanelHeader: {
+    marginBottom: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: SPACING.sm,
+  },
+  sidePanelWelcome: {
+    padding: SPACING.md,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 18,
+    marginBottom: SPACING.lg,
+  },
+  sidePanelWelcomeTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  sidePanelWelcomeSubtitle: {
+    marginTop: 4,
+    fontSize: FONT_SIZES.sm,
+    color: "#475569",
+  },
+  sidePanelNearbyCard: {
+    padding: SPACING.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    marginBottom: SPACING.lg,
+  },
+  sidePanelNearbyImage: {
+    width: "100%",
+    height: 120,
+    borderRadius: 12,
+    marginBottom: SPACING.sm,
+  },
+  sidePanelNearbyTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  sidePanelNearbyMeta: {
+    marginTop: 4,
+    fontSize: FONT_SIZES.sm,
+    color: "#64748B",
+  },
+  sidePanelNearbyDescription: {
+    marginTop: 6,
+    fontSize: FONT_SIZES.sm,
+    color: "#475569",
+  },
+  sidePanelTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+    color: "#5B3CF0",
+  },
+  sidePanelSubtitle: {
+    marginTop: 4,
+    fontSize: FONT_SIZES.sm,
+    color: "#64748B",
+  },
+  sidePanelLoader: {
+    marginTop: SPACING.lg,
+  },
+  sidePanelEmpty: {
+    marginTop: SPACING.lg,
+    fontSize: FONT_SIZES.sm,
+    color: "#64748B",
+  },
+  sidePanelList: {
+    paddingBottom: SPACING.xl,
+    gap: SPACING.sm,
+  },
+  sidePanelItemCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: SPACING.sm,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    gap: SPACING.sm,
+  },
+  sidePanelThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  sidePanelThumbImage: {
+    width: "100%",
+    height: "100%",
+  },
+  sidePanelItemInfo: {
+    flex: 1,
+  },
+  sidePanelItemTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  sidePanelItemMeta: {
+    fontSize: FONT_SIZES.sm,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  sidePanelMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  sidePanelMetaPill: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#EEF2FF",
+  },
+  sidePanelMetaPillOutline: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  sidePanelMetaPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: "#4338CA",
+  },
+  sidePanelBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  sidePanelBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#5B3CF0",
+  },
+  sidePanelBadgeOutline: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    backgroundColor: "#EEF2FF",
+  },
+  sidePanelBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: "#4338CA",
+  },
+  sidePanelBadgeTextLight: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: COLORS.white,
+  },
+  sidePanelCountBadge: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.xs,
+  },
+  sidePanelCountText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: "#5B3CF0",
   },
 });
 

@@ -22,11 +22,13 @@ export const ENDPOINTS = {
   PLACES_SEARCH: '/api/places/search',
   PLACE_DETAIL: (id) => `/api/places/${id}`,
   PLACES_CREATE: '/api/places',
+  PLACES_TOP: '/api/pruebas/analytics/places/top',
 
   // Feedback / Reviews
   PLACE_RATING: (id) => `/api/pruebas/places/${id}/rating`,
   PLACE_REVIEWS: (id) => `/api/pruebas/places/${id}/reviews`,
   PLACE_FEEDBACK: (id) => `/api/pruebas/places/${id}/feedback`,
+  PLACES_NEARBY_CONTEXT: "/api/pruebas/places/nearby/getpalce",
 
   // Packages / Agencies
   PACKAGES: "/api/packages",
