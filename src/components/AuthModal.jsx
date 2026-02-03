@@ -56,13 +56,25 @@ const InputWithIcon = ({
 );
 
 const AuthModal = ({ visible, onClose }) => {
-  const { login, register, setupTotp, confirmTotp, totpStatus } = useAuth();
+  const {
+    login,
+    loginWithPassword,
+    register,
+    setupTotp,
+    confirmTotp,
+    totpStatus,
+    requestRecovery,
+    confirmRecovery,
+    requestEmailValidation,
+  } = useAuth();
 
   const [activeTab, setActiveTab] = useState('login');
+  const [loginMethod, setLoginMethod] = useState('totp');
   const [step, setStep] = useState('login'); // login | setup | confirm | success
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
+  const [password, setPassword] = useState('');
   const [qrData, setQrData] = useState(null);
   const [manualCode, setManualCode] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
@@ -72,6 +84,11 @@ const AuthModal = ({ visible, onClose }) => {
   const [urlAvatar, setUrlAvatar] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [docTypeOpen, setDocTypeOpen] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryStep, setRecoveryStep] = useState('request');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
 
   const docTypeOptions = [
     { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
@@ -87,16 +104,34 @@ const AuthModal = ({ visible, onClose }) => {
     setManualCode('');
     setVerifyCode('');
     setTotpCode('');
+    setPassword('');
     setStatusMessage('');
+    setLoginMethod('totp');
+    setShowRecovery(false);
+    setRecoveryStep('request');
+    setRecoveryEmail('');
+    setRecoveryCode('');
+    setRecoveryPassword('');
   };
 
   const handleLogin = async () => {
-    if (!email || !totpCode) {
-      Alert.alert('Completa los datos', 'Ingresa tu correo y el código TOTP.');
-      return;
-    }
     setLoading(true);
-    const result = await login(email.trim(), totpCode.trim());
+    let result = null;
+    if (loginMethod === 'password') {
+      if (!email || !password) {
+        setLoading(false);
+        Alert.alert('Completa los datos', 'Ingresa tu correo y contraseña.');
+        return;
+      }
+      result = await loginWithPassword(email.trim(), password.trim());
+    } else {
+      if (!email || !totpCode) {
+        setLoading(false);
+        Alert.alert('Completa los datos', 'Ingresa tu correo y el código TOTP.');
+        return;
+      }
+      result = await login(email.trim(), totpCode.trim());
+    }
     setLoading(false);
     if (!result.success) {
       Alert.alert('No se pudo iniciar sesión', result.error || 'Intenta nuevamente.');
@@ -114,6 +149,7 @@ const AuthModal = ({ visible, onClose }) => {
     const result = await register({
       fullName: fullName.trim(),
       email: email.trim(),
+      password: password.trim() || undefined,
       identificationType: identificationType.trim() || undefined,
       identificationNumber: identificationNumber.trim() || undefined,
       urlAvatar: urlAvatar.trim() || undefined,
@@ -135,6 +171,10 @@ const AuthModal = ({ visible, onClose }) => {
       Alert.alert('Correo requerido', 'Ingresa tu correo para generar el código.');
       return;
     }
+    if (!password) {
+      Alert.alert('Contraseña requerida', 'Necesitamos tu contraseña para generar el código TOTP.');
+      return;
+    }
     setLoading(true);
     try {
       const statusRes = await totpStatus(email.trim()).catch(() => null);
@@ -144,13 +184,20 @@ const AuthModal = ({ visible, onClose }) => {
         setStep('success');
         return;
       }
-      const res = await setupTotp(email.trim());
+      const res = await setupTotp({ email: email.trim(), password: password.trim() });
       const data = res.data?.data || res.data || {};
       setQrData(data.qrImage || data.qrImageUrl || data.qr);
       setManualCode(data.secretBase32 || data.secret || '');
       setStep('setup');
     } catch (err) {
-      Alert.alert('No se pudo generar el QR', err.response?.data?.message || 'Intenta de nuevo.');
+      if (err.response?.status === 409) {
+        setStatusMessage(err.response?.data?.message || 'TOTP ya habilitado para este usuario.');
+        setStep('success');
+      } else if (err.response?.status === 400) {
+        Alert.alert('Credenciales requeridas', err.response?.data?.message || 'Verifica tu contraseña.');
+      } else {
+        Alert.alert('No se pudo generar el QR', err.response?.data?.message || 'Intenta de nuevo.');
+      }
     } finally {
       setLoading(false);
     }
@@ -172,6 +219,49 @@ const AuthModal = ({ visible, onClose }) => {
     }
   };
 
+  const handleRecoveryRequest = async () => {
+    if (!recoveryEmail) {
+      Alert.alert('Correo requerido', 'Ingresa tu correo para recuperar la cuenta.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await requestRecovery({ email: recoveryEmail.trim() });
+      setRecoveryStep('confirm');
+      setRecoveryMessage('Te enviamos un correo con el código de recuperación.');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'No se pudo enviar el código';
+      setRecoveryMessage(msg);
+      try {
+        await requestEmailValidation(recoveryEmail.trim());
+        setRecoveryMessage('Necesitas verificar tu correo. Revisa tu bandeja y vuelve a intentar.');
+      } catch (e) {
+        // silencioso
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecoveryConfirm = async () => {
+    if (!recoveryEmail || !recoveryCode || !recoveryPassword) {
+      Alert.alert('Datos requeridos', 'Ingresa el código y la nueva contraseña.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await confirmRecovery({
+        token: recoveryCode.trim(),
+        newPassword: recoveryPassword.trim(),
+      });
+      setRecoveryStep('success');
+    } catch (err) {
+      Alert.alert('No se pudo confirmar', err.response?.data?.message || 'Intenta nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCopyManualCode = async () => {
     if (!manualCode) return;
     await Clipboard.setStringAsync(manualCode);
@@ -187,7 +277,25 @@ const AuthModal = ({ visible, onClose }) => {
 
   const renderLogin = () => (
     <>
-      <Text style={styles.subtitle}>Usa tu correo y el código de tu autenticador.</Text>
+      <Text style={styles.subtitle}>Elige cómo quieres iniciar sesión.</Text>
+      <View style={styles.toggleRow}>
+        <TouchableOpacity
+          style={[styles.toggleButton, loginMethod === 'totp' && styles.toggleButtonActive]}
+          onPress={() => setLoginMethod('totp')}
+        >
+          <Text style={[styles.toggleText, loginMethod === 'totp' && styles.toggleTextActive]}>
+            Código
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, loginMethod === 'password' && styles.toggleButtonActive]}
+          onPress={() => setLoginMethod('password')}
+        >
+          <Text style={[styles.toggleText, loginMethod === 'password' && styles.toggleTextActive]}>
+            Contraseña
+          </Text>
+        </TouchableOpacity>
+      </View>
       <Text style={styles.inputLabel}>Correo Electrónico</Text>
       <InputWithIcon
         icon="envelope"
@@ -200,19 +308,48 @@ const AuthModal = ({ visible, onClose }) => {
       {statusMessage ? <Text style={styles.statusText}>{statusMessage}</Text> : null}
       {step === 'login' && (
         <>
-          <Text style={styles.inputLabel}>Código TOTP</Text>
-          <InputWithIcon
-            icon="key"
-            placeholder="Código TOTP de 6 dígitos"
-            value={totpCode}
-            onChangeText={setTotpCode}
-            keyboardType="number-pad"
-          />
+          {loginMethod === 'password' ? (
+            <>
+              <Text style={styles.inputLabel}>Contraseña</Text>
+              <InputWithIcon
+                icon="lock"
+                placeholder="Contraseña"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.inputLabel}>Código TOTP</Text>
+              <InputWithIcon
+                icon="key"
+                placeholder="Código TOTP de 6 dígitos"
+                value={totpCode}
+                onChangeText={setTotpCode}
+                keyboardType="number-pad"
+              />
+              <Text style={styles.inputLabel}>Contraseña (para configurar TOTP)</Text>
+              <InputWithIcon
+                icon="lock"
+                placeholder="Contraseña"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            </>
+          )}
           <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Tengo TOTP</Text>}
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Iniciar sesión</Text>}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleSetupTotp} disabled={loading}>
-            <Text style={styles.secondaryText}>Configurar TOTP</Text>
+          {loginMethod === 'totp' ? (
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleSetupTotp} disabled={loading}>
+              <Text style={styles.secondaryText}>Configurar TOTP</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={styles.linkButton} onPress={() => setShowRecovery(true)}>
+            <Text style={styles.linkText}>¿Olvidaste tu cuenta?</Text>
           </TouchableOpacity>
         </>
       )}
@@ -225,7 +362,7 @@ const AuthModal = ({ visible, onClose }) => {
   const renderRegister = () => (
     <>
       <Text style={styles.subtitle}>
-        Crea tu cuenta para administrar rutas y lugares. Luego podrás configurar autenticación TOTP.
+        Crea tu cuenta y elige si deseas usar contraseña o código.
       </Text>
       <Text style={styles.inputLabel}>Nombre completo</Text>
       <InputWithIcon
@@ -243,6 +380,14 @@ const AuthModal = ({ visible, onClose }) => {
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+      />
+      <Text style={styles.inputLabel}>Contraseña (opcional)</Text>
+      <InputWithIcon
+        icon="lock"
+        placeholder="Crea una contraseña"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
       />
       <View style={styles.docRow}>
         <View style={{ flex: 1 }}>
@@ -384,6 +529,81 @@ const AuthModal = ({ visible, onClose }) => {
     </View>
   );
 
+  const renderRecovery = () => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Recuperar cuenta</Text>
+      <Text style={styles.infoText}>
+        Recibe un código en tu correo para reconfigurar la autenticación.
+      </Text>
+      {recoveryMessage ? <Text style={styles.statusText}>{recoveryMessage}</Text> : null}
+      <Text style={styles.inputLabel}>Correo Electrónico</Text>
+      <InputWithIcon
+        icon="envelope"
+        placeholder="Correo electrónico"
+        value={recoveryEmail}
+        onChangeText={setRecoveryEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => requestEmailValidation({ email: recoveryEmail.trim() })}
+        disabled={loading || !recoveryEmail}
+      >
+        <Text style={styles.secondaryText}>Validar correo</Text>
+      </TouchableOpacity>
+      {recoveryStep === 'request' ? (
+        <TouchableOpacity style={styles.primaryButton} onPress={handleRecoveryRequest} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Enviar código</Text>}
+        </TouchableOpacity>
+      ) : null}
+      {recoveryStep === 'confirm' ? (
+        <>
+          <Text style={styles.inputLabel}>Código de recuperación</Text>
+          <InputWithIcon
+            icon="key"
+            placeholder="Pega el token del correo"
+            value={recoveryCode}
+            onChangeText={setRecoveryCode}
+            autoCapitalize="none"
+          />
+          <Text style={styles.inputLabel}>Nueva contraseña</Text>
+          <InputWithIcon
+            icon="lock"
+            placeholder="Nueva contraseña"
+            value={recoveryPassword}
+            onChangeText={setRecoveryPassword}
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <TouchableOpacity style={styles.primaryButton} onPress={handleRecoveryConfirm} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Confirmar</Text>}
+          </TouchableOpacity>
+        </>
+      ) : null}
+      {recoveryStep === 'success' ? (
+        <View style={styles.successBox}>
+          <Text style={styles.successTitle}>Cuenta recuperada</Text>
+          <Text style={styles.successMessage}>
+            Ya puedes configurar tu autenticación nuevamente.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => {
+              setShowRecovery(false);
+              setRecoveryStep('request');
+            }}
+          >
+            <Text style={styles.primaryText}>Volver al inicio</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      <TouchableOpacity style={styles.linkButton} onPress={() => setShowRecovery(false)}>
+        <Text style={styles.linkText}>Volver</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
       <View style={styles.modalBackdrop}>
@@ -402,11 +622,11 @@ const AuthModal = ({ visible, onClose }) => {
                   <Text style={styles.closeText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              {renderTabs()}
+              {showRecovery ? null : renderTabs()}
             </LinearGradient>
 
             <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-              {activeTab === 'login' ? renderLogin() : renderRegister()}
+              {showRecovery ? renderRecovery() : activeTab === 'login' ? renderLogin() : renderRegister()}
             </ScrollView>
           </KeyboardAvoidingView>
         </View>
@@ -479,6 +699,32 @@ const styles = StyleSheet.create({
   },
   tabButtonTextActive: {
     color: '#5B3CF0',
+    fontWeight: '700',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: SPACING.xs,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#5B3CF0',
+    borderColor: '#5B3CF0',
+  },
+  toggleText: {
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#fff',
     fontWeight: '700',
   },
   body: {
@@ -561,6 +807,14 @@ const styles = StyleSheet.create({
     color: '#5B3CF0',
     fontWeight: '600',
     marginTop: SPACING.xs,
+  },
+  linkButton: {
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  linkText: {
+    color: '#5B3CF0',
+    fontWeight: '600',
   },
   primaryButton: {
     backgroundColor: '#5B3CF0',
@@ -652,6 +906,20 @@ const styles = StyleSheet.create({
   successIcon: {
     fontSize: 32,
     textAlign: 'center',
+  },
+  successBox: {
+    backgroundColor: '#eef2ff',
+    borderRadius: 14,
+    padding: SPACING.md,
+    gap: SPACING.xs,
+  },
+  successTitle: {
+    color: '#1f2937',
+    fontWeight: '800',
+    fontSize: FONT_SIZES.md,
+  },
+  successMessage: {
+    color: COLORS.textLight,
   },
   headerRight: {
     flexDirection: 'row',

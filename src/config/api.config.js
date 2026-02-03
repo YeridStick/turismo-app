@@ -9,7 +9,12 @@ export const API_TIMEOUT = 10000;
 export const ENDPOINTS = {
   // Auth (TOTP)
   LOGIN: '/api/auth/login-code',
+  LOGIN_PASSWORD: '/api/auth/login-password',
   REGISTER: '/api/auth/create/user',
+  EMAIL_REQUEST: '/api/auth/email/request',
+  EMAIL_VERIFY: '/api/auth/email/verify',
+  RECOVERY_REQUEST: '/api/auth/recovery/request',
+  RECOVERY_CONFIRM: '/api/auth/recovery/confirm',
   REFRESH: '/api/auth/refresh',
   LOGOUT: '/api/auth/logout',
   TOTP_SETUP: '/api/auth/code/setup',

@@ -4,8 +4,12 @@ import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 import {
   confirmTotp as confirmTotpService,
+  confirmRecovery as confirmRecoveryService,
+  requestEmailValidation as requestEmailValidationService,
+  loginPassword,
   loginTotp,
   registerUser,
+  requestRecovery as requestRecoveryService,
   setupTotp as setupTotpService,
   totpStatus as totpStatusService,
 } from '../services/auth';
@@ -61,7 +65,16 @@ export const AuthProvider = ({ children }) => {
   const fetchUserInfo = async (email) => {
     try {
       const response = await api.get('/api/info/user', { params: { userEmail: email } });
-      return response.data?.data || response.data || null;
+      const payload = response.data?.data || response.data || null;
+      if (!payload) return null;
+      if (payload.user) {
+        return {
+          ...payload.user,
+          emailVerified: payload.emailVerified,
+          passwordEnabled: payload.passwordEnabled,
+        };
+      }
+      return payload;
     } catch (err) {
       return null;
     }
@@ -92,6 +105,43 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithPassword = async (email, password) => {
+    try {
+      const response = await loginPassword({ email, password });
+      const payload = response.data?.data || response.data;
+      const token = payload?.token;
+
+      if (token) {
+        await AsyncStorage.setItem('token', token);
+        const jwtPayload = decodeJwtPayload(token);
+        setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
+      }
+      const userData = await fetchUserInfo(email);
+      if (userData) {
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Error al iniciar sesión con contraseña',
+      };
+    }
+  };
+
+  const requestEmailValidation = async (email) => {
+    try {
+      const response = await requestEmailValidationService({ email });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'No se pudo validar el correo',
+      };
+    }
+  };
+
   const register = async (userData) => {
     try {
       const response = await registerUser(userData);
@@ -117,6 +167,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const confirmRecovery = async ({ token, newPassword }) => {
+    try {
+      await confirmRecoveryService({ token, newPassword });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'No se pudo confirmar la recuperación',
+      };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -124,11 +186,15 @@ export const AuthProvider = ({ children }) => {
         roles,
         loading,
         login,
+        loginWithPassword,
         register,
         logout,
         setupTotp: setupTotpService,
         confirmTotp: confirmTotpService,
         totpStatus: totpStatusService,
+        requestRecovery: requestRecoveryService,
+        confirmRecovery,
+        requestEmailValidation,
       }}
     >
       {children}

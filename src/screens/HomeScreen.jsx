@@ -36,7 +36,6 @@ import {
 } from "react-native";
 // Map components are now loaded dynamically.
 import { WebView } from "react-native-webview";
-import AuthModal from "../components/AuthModal";
 import PlaceMap from "../components/PlaceMap";
 import WebViewMap from "../components/WebViewMap";
 import { ENDPOINTS } from "../config/api.config";
@@ -518,9 +517,11 @@ const HomeScreen = ({ navigation }) => {
   const panelOpenRef = useRef(sidePanelOpen);
   const panelHintShownRef = useRef(false);
   const panelHintHandleAnim = useRef(new Animated.Value(0)).current;
-  const [authVisible, setAuthVisible] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [emailVerifyVisible, setEmailVerifyVisible] = useState(false);
+  const [emailVerifyLoading, setEmailVerifyLoading] = useState(false);
+  const [emailVerifyStatus, setEmailVerifyStatus] = useState(null);
   const [paymentVisible, setPaymentVisible] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [paymentForm, setPaymentForm] = useState({
@@ -2497,8 +2498,38 @@ const HomeScreen = ({ navigation }) => {
     const handleRoutePress = (route) => {
       setProfileVisible(false);
       setProfileMenuVisible(false);
+      setEmailVerifyVisible(false);
+      setEmailVerifyStatus(null);
       if (navigation?.navigate) {
         navigation.navigate(route);
+      }
+    };
+
+    const handleSendVerificationEmail = async () => {
+      if (!user?.email || emailVerifyLoading) return;
+      setEmailVerifyLoading(true);
+      setEmailVerifyStatus(null);
+      try {
+        const response = await api.post("/api/auth/email/request", {
+          email: user.email,
+        });
+        const payload = response.data?.data || response.data || null;
+        setEmailVerifyStatus({
+          type: "success",
+          message:
+            payload?.message ||
+            response.data?.message ||
+            "Correo de verificación enviado",
+        });
+      } catch (error) {
+        setEmailVerifyStatus({
+          type: "error",
+          message:
+            error.response?.data?.message ||
+            "No se pudo enviar el correo de verificación",
+        });
+      } finally {
+        setEmailVerifyLoading(false);
       }
     };
 
@@ -2510,6 +2541,8 @@ const HomeScreen = ({ navigation }) => {
         onRequestClose={() => {
           setProfileVisible(false);
           setProfileMenuVisible(false);
+          setEmailVerifyVisible(false);
+          setEmailVerifyStatus(null);
         }}
       >
         <View style={styles.modalBackdrop}>
@@ -2523,6 +2556,8 @@ const HomeScreen = ({ navigation }) => {
                 onPress={() => {
                   setProfileVisible(false);
                   setProfileMenuVisible(false);
+                  setEmailVerifyVisible(false);
+                  setEmailVerifyStatus(null);
                 }}
               >
                 <Text style={styles.closeText}>✕</Text>
@@ -2561,6 +2596,59 @@ const HomeScreen = ({ navigation }) => {
                 </Text>
               </View>
             </View>
+            {user.emailVerified === false ? (
+              <View style={styles.profileVerifyBlock}>
+                <TouchableOpacity
+                  style={styles.profileVerifyToggle}
+                  onPress={() => setEmailVerifyVisible((prev) => !prev)}
+                >
+                  <Text style={styles.profileVerifyToggleText}>
+                    Verificar correo
+                  </Text>
+                  <FontAwesome
+                    name={emailVerifyVisible ? "chevron-up" : "chevron-down"}
+                    size={12}
+                    color="#5B3CF0"
+                  />
+                </TouchableOpacity>
+                {emailVerifyVisible ? (
+                  <View style={styles.profileVerifyPanel}>
+                    <Text style={styles.profileVerifyText}>
+                      Tu correo aún no está verificado. Envía un correo de
+                      verificación para continuar.
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.profileVerifyButton,
+                        emailVerifyLoading && styles.profileVerifyButtonDisabled,
+                      ]}
+                      onPress={handleSendVerificationEmail}
+                      disabled={emailVerifyLoading}
+                    >
+                      {emailVerifyLoading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.profileVerifyButtonText}>
+                          Enviar correo
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                    {emailVerifyStatus ? (
+                      <Text
+                        style={[
+                          styles.profileVerifyStatus,
+                          emailVerifyStatus.type === "error"
+                            ? styles.profileVerifyStatusError
+                            : styles.profileVerifyStatusSuccess,
+                        ]}
+                      >
+                        {emailVerifyStatus.message}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
             <View style={styles.profileMenuWrapper}>
               <TouchableOpacity
                 style={styles.profileMenuToggle}
@@ -2613,6 +2701,8 @@ const HomeScreen = ({ navigation }) => {
                 onPress={() => {
                   setProfileVisible(false);
                   setProfileMenuVisible(false);
+                  setEmailVerifyVisible(false);
+                  setEmailVerifyStatus(null);
                 }}
               >
                 <Text style={styles.modalSecondaryText}>Cerrar</Text>
@@ -2683,9 +2773,7 @@ const HomeScreen = ({ navigation }) => {
                 ) : (
                   <TouchableOpacity
                     style={styles.loginButton}
-                    onPress={() => {
-                      setAuthVisible(true);
-                    }}
+                    onPress={() => navigation.navigate("Auth")}
                   >
                     <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
                   </TouchableOpacity>
@@ -2998,7 +3086,6 @@ const HomeScreen = ({ navigation }) => {
         getPlaceKey={getPlaceKey}
       />
 
-      <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
       <ProfileModal />
 
       <Modal
@@ -4479,6 +4566,58 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textLight,
     marginTop: 2,
+  },
+  profileVerifyBlock: {
+    backgroundColor: "#f9f9fe",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e6e9f5",
+    padding: SPACING.sm,
+  },
+  profileVerifyToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  profileVerifyToggleText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: "#5B3CF0",
+  },
+  profileVerifyPanel: {
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingBottom: SPACING.xs,
+  },
+  profileVerifyText: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 18,
+  },
+  profileVerifyButton: {
+    backgroundColor: "#7B5BFF",
+    borderRadius: 12,
+    paddingVertical: SPACING.sm,
+    alignItems: "center",
+  },
+  profileVerifyButtonDisabled: {
+    opacity: 0.7,
+  },
+  profileVerifyButtonText: {
+    color: COLORS.white,
+    fontWeight: "700",
+  },
+  profileVerifyStatus: {
+    fontSize: FONT_SIZES.sm,
+  },
+  profileVerifyStatusSuccess: {
+    color: "#16a34a",
+  },
+  profileVerifyStatusError: {
+    color: "#ef4444",
   },
   detailOverlay: {
     flex: 1,
