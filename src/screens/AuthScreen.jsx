@@ -1,4 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
@@ -13,9 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import * as Clipboard from 'expo-clipboard';
-import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 
@@ -66,6 +66,11 @@ const AuthScreen = () => {
   const [recoveryMessage, setRecoveryMessage] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showTotpPassword, setShowTotpPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showRecoveryPassword, setShowRecoveryPassword] = useState(false);
 
   useEffect(() => {
     if (route.params?.showRecovery) {
@@ -99,6 +104,8 @@ const AuthScreen = () => {
     setRecoveryMessage('');
     setRecoveryCode('');
     setRecoveryPassword('');
+    setConfirmPassword('');
+    setShowTotpPassword(false);
   };
 
   const handleLogin = async () => {
@@ -134,11 +141,16 @@ const AuthScreen = () => {
       Alert.alert('Campos faltantes', 'Completa nombre y correo.');
       return;
     }
+    if (password && password !== confirmPassword) {
+      Alert.alert('Contraseña no coincide', 'Repite la contraseña correctamente.');
+      return;
+    }
     setLoading(true);
     const result = await register({
       fullName: fullName.trim(),
       email: email.trim(),
       password: password.trim() || undefined,
+      confirmPassword: confirmPassword.trim() || undefined,
       identificationType: identificationType.trim() || undefined,
       identificationNumber: identificationNumber.trim() || undefined,
       urlAvatar: urlAvatar.trim() || undefined,
@@ -311,42 +323,82 @@ const AuthScreen = () => {
       {step === 'login' && (
         <>
           {loginMethod === 'password' ? (
-            <TextInput
-              style={styles.input}
-              placeholder="Contraseña"
-              placeholderTextColor="#9ca3af"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          ) : (
-            <>
+            <View style={styles.passwordContainer}>
               <TextInput
-                style={styles.input}
-                placeholder="Código TOTP"
-                placeholderTextColor="#9ca3af"
-                value={totpCode}
-                onChangeText={setTotpCode}
-                keyboardType="number-pad"
-                maxLength={6}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña (para configurar TOTP)"
+                style={styles.passwordInput}
+                placeholder="Contraseña"
                 placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
+                secureTextEntry={!showPassword}
               />
+              <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
+                <FontAwesome name={showPassword ? "eye" : "eye-slash"} size={20} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {showTotpPassword ? (
+                <View style={styles.passwordContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="Contraseña (para configurar TOTP)"
+                    placeholderTextColor="#9ca3af"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
+                    <FontAwesome name={showPassword ? "eye" : "eye-slash"} size={20} color="#9ca3af" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Código TOTP"
+                  placeholderTextColor="#9ca3af"
+                  value={totpCode}
+                  onChangeText={setTotpCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                />
+              )}
+              {showTotpPassword ? (
+                <TouchableOpacity
+                  style={styles.linkButton}
+                  onPress={() => {
+                    setShowTotpPassword(false);
+                    setPassword('');
+                  }}
+                >
+                  <Text style={styles.linkText}>Volver a código TOTP</Text>
+                </TouchableOpacity>
+              ) : null}
             </>
           )}
-          <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleLogin}
+            disabled={loading || showTotpPassword}
+          >
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Iniciar sesión</Text>}
           </TouchableOpacity>
           {loginMethod === 'totp' ? (
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleSetupTotp} disabled={loading}>
-              <Text style={styles.secondaryText}>Configurar TOTP</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                if (!showTotpPassword) {
+                  setShowTotpPassword(true);
+                  return;
+                }
+                handleSetupTotp();
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.secondaryText}>
+                {showTotpPassword ? 'Generar código TOTP' : 'Configurar TOTP'}
+              </Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
@@ -389,14 +441,34 @@ const AuthScreen = () => {
         keyboardType="email-address"
         autoCapitalize="none"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña (opcional)"
-        placeholderTextColor="#9ca3af"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Contraseña (opcional)"
+          placeholderTextColor="#9ca3af"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
+          <FontAwesome name={showPassword ? "eye" : "eye-slash"} size={20} color="#9ca3af" />
+        </TouchableOpacity>
+      </View>
+      {password ? (
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Confirmar contraseña"
+            placeholderTextColor="#9ca3af"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry={!showConfirmPassword}
+          />
+          <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+            <FontAwesome name={showConfirmPassword ? "eye" : "eye-slash"} size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <View style={styles.inputRow}>
         <View style={[styles.inputHalf, { zIndex: 2 }]}>
           <TouchableOpacity
@@ -618,15 +690,20 @@ const AuthScreen = () => {
             onChangeText={setRecoveryCode}
             autoCapitalize="none"
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Nueva contraseña"
-            placeholderTextColor="#9ca3af"
-            value={recoveryPassword}
-            onChangeText={setRecoveryPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Nueva contraseña"
+              placeholderTextColor="#9ca3af"
+              value={recoveryPassword}
+              onChangeText={setRecoveryPassword}
+              secureTextEntry={!showRecoveryPassword}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowRecoveryPassword(!showRecoveryPassword)}>
+              <FontAwesome name={showRecoveryPassword ? "eye" : "eye-slash"} size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={handleRecoveryConfirm}
@@ -790,6 +867,25 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: SPACING.sm,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  eyeIcon: {
+    padding: 12,
   },
   inputRow: {
     flexDirection: 'row',

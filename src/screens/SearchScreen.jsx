@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,9 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Location from 'expo-location';
-import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
+import api from '../services/api';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 
 const SearchScreen = () => {
@@ -36,9 +36,10 @@ const SearchScreen = () => {
         }
       }
       const params = {
+        mode: 'TEXT',
         q: query.trim(),
         ...coords,
-        radiusMeters: coords ? 1200 : undefined,
+        radius: coords ? 1200 : undefined,
       };
       const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];

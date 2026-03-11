@@ -22,8 +22,6 @@ export const ENDPOINTS = {
   TOTP_STATUS: '/api/auth/code/status',
 
   // Places
-  PLACES_ALL: '/api/places/all',
-  PLACES_NEARBY: '/api/places/nearby',
   PLACES_SEARCH: '/api/places/search',
   PLACE_DETAIL: (id) => `/api/places/${id}`,
   PLACES_CREATE: '/api/places',

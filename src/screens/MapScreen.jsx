@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { getDistance } from 'geolib';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import WebViewMap from '../components/WebViewMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
@@ -62,7 +62,7 @@ const MapScreen = ({ route }) => {
 
     const fetchPlaces = async () => {
         try {
-            const response = await api.get(ENDPOINTS.PLACES_ALL);
+            const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: 1000 } });
             if (response.data?.data) {
                 const placesData = response.data.data.map(place => ({
                     id: place.id,

@@ -1,8 +1,8 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
-import React, { useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -37,6 +37,8 @@ const InputWithIcon = ({
   keyboardType,
   secureTextEntry,
   autoCapitalize = 'none',
+  rightIcon,
+  onRightIconPress,
 }) => (
   <View style={styles.inputRow}>
     <View style={styles.inputIcon}>
@@ -52,6 +54,11 @@ const InputWithIcon = ({
       secureTextEntry={secureTextEntry}
       autoCapitalize={autoCapitalize}
     />
+    {rightIcon && (
+      <TouchableOpacity style={styles.rightIcon} onPress={onRightIconPress} activeOpacity={0.7}>
+        <FontAwesome name={rightIcon} size={16} color="#6b7280" />
+      </TouchableOpacity>
+    )}
   </View>
 );
 
@@ -89,6 +96,11 @@ const AuthModal = ({ visible, onClose }) => {
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showTotpPassword, setShowTotpPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showRecoveryPassword, setShowRecoveryPassword] = useState(false);
 
   const docTypeOptions = [
     { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
@@ -112,6 +124,8 @@ const AuthModal = ({ visible, onClose }) => {
     setRecoveryEmail('');
     setRecoveryCode('');
     setRecoveryPassword('');
+    setConfirmPassword('');
+    setShowTotpPassword(false);
   };
 
   const handleLogin = async () => {
@@ -145,11 +159,16 @@ const AuthModal = ({ visible, onClose }) => {
       Alert.alert('Campos faltantes', 'Completa nombre y correo.');
       return;
     }
+    if (password && password !== confirmPassword) {
+      Alert.alert('Contraseña no coincide', 'Repite la contraseña correctamente.');
+      return;
+    }
     setLoading(true);
     const result = await register({
       fullName: fullName.trim(),
       email: email.trim(),
       password: password.trim() || undefined,
+      confirmPassword: confirmPassword.trim() || undefined,
       identificationType: identificationType.trim() || undefined,
       identificationNumber: identificationNumber.trim() || undefined,
       urlAvatar: urlAvatar.trim() || undefined,
@@ -316,36 +335,62 @@ const AuthModal = ({ visible, onClose }) => {
                 placeholder="Contraseña"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                rightIcon={showPassword ? 'eye' : 'eye-slash'}
+                onRightIconPress={() => setShowPassword(!showPassword)}
               />
             </>
           ) : (
             <>
-              <Text style={styles.inputLabel}>Código TOTP</Text>
-              <InputWithIcon
-                icon="key"
-                placeholder="Código TOTP de 6 dígitos"
-                value={totpCode}
-                onChangeText={setTotpCode}
-                keyboardType="number-pad"
-              />
-              <Text style={styles.inputLabel}>Contraseña (para configurar TOTP)</Text>
-              <InputWithIcon
-                icon="lock"
-                placeholder="Contraseña"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-              />
+              {showTotpPassword ? (
+                <>
+                  <Text style={styles.inputLabel}>Contraseña (para configurar TOTP)</Text>
+                  <InputWithIcon
+                    icon="lock"
+                    placeholder="Contraseña"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    rightIcon={showPassword ? 'eye' : 'eye-slash'}
+                    onRightIconPress={() => setShowPassword(!showPassword)}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity style={styles.linkButton} onPress={() => { setShowTotpPassword(false); setPassword(''); }}>
+                    <Text style={styles.linkText}>Volver a código TOTP</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.inputLabel}>Código TOTP</Text>
+                  <InputWithIcon
+                    icon="key"
+                    placeholder="Código TOTP de 6 dígitos"
+                    value={totpCode}
+                    onChangeText={setTotpCode}
+                    keyboardType="number-pad"
+                  />
+                </>
+              )}
             </>
           )}
-          <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
+          <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading || showTotpPassword}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Iniciar sesión</Text>}
           </TouchableOpacity>
           {loginMethod === 'totp' ? (
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleSetupTotp} disabled={loading}>
-              <Text style={styles.secondaryText}>Configurar TOTP</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                if (!showTotpPassword) {
+                  setShowTotpPassword(true);
+                  return;
+                }
+                handleSetupTotp();
+              }}
+              disabled={loading}
+            >
+              <Text style={styles.secondaryText}>
+                {showTotpPassword ? 'Generar código TOTP' : 'Configurar TOTP'}
+              </Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity style={styles.linkButton} onPress={() => setShowRecovery(true)}>
@@ -387,8 +432,24 @@ const AuthModal = ({ visible, onClose }) => {
         placeholder="Crea una contraseña"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
+        secureTextEntry={!showPassword}
+        rightIcon={showPassword ? 'eye' : 'eye-slash'}
+        onRightIconPress={() => setShowPassword(!showPassword)}
       />
+      {password ? (
+        <>
+          <Text style={styles.inputLabel}>Confirmar contraseña</Text>
+          <InputWithIcon
+            icon="lock"
+            placeholder="Repite la contraseña"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry={!showConfirmPassword}
+            rightIcon={showConfirmPassword ? 'eye' : 'eye-slash'}
+            onRightIconPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          />
+        </>
+      ) : null}
       <View style={styles.docRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.inputLabel}>Tipo de documento</Text>
@@ -573,7 +634,9 @@ const AuthModal = ({ visible, onClose }) => {
             placeholder="Nueva contraseña"
             value={recoveryPassword}
             onChangeText={setRecoveryPassword}
-            secureTextEntry
+            secureTextEntry={!showRecoveryPassword}
+            rightIcon={showRecoveryPassword ? 'eye' : 'eye-slash'}
+            onRightIconPress={() => setShowRecoveryPassword(!showRecoveryPassword)}
             autoCapitalize="none"
           />
           <TouchableOpacity style={styles.primaryButton} onPress={handleRecoveryConfirm} disabled={loading}>
@@ -938,6 +1001,11 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   inputIcon: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rightIcon: {
     width: 32,
     alignItems: 'center',
     justifyContent: 'center',

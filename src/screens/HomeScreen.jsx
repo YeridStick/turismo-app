@@ -1,5 +1,4 @@
 import { FontAwesome } from "@expo/vector-icons";
-import Slider from "@react-native-community/slider";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
@@ -18,6 +17,7 @@ import {
   Easing,
   FlatList,
   ImageBackground,
+  InteractionManager,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -148,8 +148,10 @@ const categoriesList = [
   { id: 1, name: "Mirador" },
   { id: 2, name: "Museo" },
   { id: 3, name: "Cascada" },
-  { id: 4, name: "Desierto" },
-  { id: 5, name: "Parque" },
+  { id: 4, name: "Embalse/Represa" },
+  { id: 5, name: "Termales" },
+  { id: 6, name: "Desierto" },
+  { id: 7, name: "Parque" },
 ];
 
 const navTabs = [
@@ -157,8 +159,10 @@ const navTabs = [
   { id: 1, label: "Mirador" },
   { id: 2, label: "Museo" },
   { id: 3, label: "Cascada" },
-  { id: 4, label: "Desierto" },
-  { id: 5, label: "Parque" },
+  { id: 4, label: "Embalse/Represa" },
+  { id: 5, label: "Termales" },
+  { id: 6, label: "Desierto" },
+  { id: 7, label: "Parque" },
 ];
 
 const getCategoryLabel = (place) => {
@@ -469,6 +473,9 @@ const HomeScreen = ({ navigation }) => {
   const [recommended, setRecommended] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [loadingAll, setLoadingAll] = useState(true);
+  const [allPlacesPage, setAllPlacesPage] = useState(0);
+  const [hasMorePlaces, setHasMorePlaces] = useState(true);
+  const [loadingMorePlaces, setLoadingMorePlaces] = useState(false);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -539,6 +546,17 @@ const HomeScreen = ({ navigation }) => {
   const [agenciesError, setAgenciesError] = useState("");
   const [selectedAgency, setSelectedAgency] = useState(null);
   const [agencyVisible, setAgencyVisible] = useState(false);
+
+  // Slider Pagination states
+  const [activeExplorationIndex, setActiveExplorationIndex] = useState(0);
+  const handleExplorationScroll = useCallback(({ viewableItems }) => {
+    if (viewableItems && viewableItems.length > 0) {
+      setActiveExplorationIndex(viewableItems[0].index);
+    }
+  }, []);
+  const explorationViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
 
   useEffect(() => {
     loadAll();
@@ -720,75 +738,49 @@ const HomeScreen = ({ navigation }) => {
     [sidePanelEdgeArea, sidePanelWidth, sidePanelTranslateX],
   );
 
-  const loadAll = async () => {
-    setLoadingAll(true);
+  const loadAll = async (pageIndex = 0, isLoadMore = false) => {
+    if (isLoadMore) {
+      setLoadingMorePlaces(true);
+    } else {
+      setLoadingAll(true);
+      setAllPlacesPage(0);
+    }
     setError("");
     try {
+      const pageSize = 12;
       // Always load ALL places for the "Todos los lugares" section
-      const response = await api.get(ENDPOINTS.PLACES_ALL);
+      const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: pageSize, page: pageIndex } });
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
       const normalized = data.map(normalizePlace);
-      setPlaces(normalized);
-      setRecommended(normalized.slice(6, 20)); // Show items 7-20 in recommended
+
+      setHasMorePlaces(data.length === pageSize);
+
+      if (isLoadMore) {
+        setPlaces(prev => [...prev, ...normalized]);
+      } else {
+        setPlaces(normalized);
+        setRecommended(normalized.slice(0, 10)); // Show items in recommended
+      }
       return normalized;
     } catch (err) {
-      setError("No se pudo cargar el catálogo.");
+      if (!isLoadMore) setError("No se pudo cargar el catálogo.");
       return [];
     } finally {
-      setLoadingAll(false);
+      if (isLoadMore) setLoadingMorePlaces(false);
+      else setLoadingAll(false);
     }
   };
 
   const loadPopular = async () => {
     setError("");
     try {
-      // Get location for nearby places
-      let coordsData = coords;
-      if (!coordsData) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === "granted") {
-          try {
-            const loc = await Location.getCurrentPositionAsync({});
-            coordsData = loc.coords;
-            setCoords(coordsData);
-          } catch (err) {
-            // Location failed, fallback to all places for popular section
-            const response = await api.get(ENDPOINTS.PLACES_ALL);
-            const data = Array.isArray(response.data)
-              ? response.data
-              : response.data?.data || [];
-            setPopular(data.map(normalizePlace).slice(0, 10));
-            return;
-          }
-        } else {
-          // No location permission, fallback to all places
-          const response = await api.get(ENDPOINTS.PLACES_ALL);
-          const data = Array.isArray(response.data)
-            ? response.data
-            : response.data?.data || [];
-          setPopular(data.map(normalizePlace).slice(0, 10));
-          return;
-        }
-      }
-
-      // Load nearby places with user's current distance preference
-      const response = await api.get(ENDPOINTS.PLACES_NEARBY, {
-        params: {
-          lat: coordsData.latitude,
-          lng: coordsData.longitude,
-          radiusMeters: distanceKm * 1000, // Use user's distance preference
-          limit: 50, // Aumentado de 20 a 50 para consistencia
-        },
-      });
-
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-      setNearby(data.map(normalizePlace)); // Save to nearby instead of popular
+      const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: 10 } });
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setPopular(data.map(normalizePlace).slice(0, 10));
     } catch (err) {
-      setError("No se pudo cargar lugares populares.");
+      console.warn("Error loadPopular");
     }
   };
 
@@ -827,9 +819,16 @@ const HomeScreen = ({ navigation }) => {
       const response = await api.get(ENDPOINTS.PLACES_TOP, {
         params: { limit: 8 },
       });
-      const data = Array.isArray(response.data)
+      let data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
+
+      if (data.length === 0) {
+        const fallbackRes = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: 8 } });
+        data = Array.isArray(fallbackRes.data)
+          ? fallbackRes.data
+          : fallbackRes.data?.data || [];
+      }
       setTopPlaces(data.map(normalizeTopPlace));
     } catch (err) {
       setTopPlacesError("No se pudo cargar el top de sitios.");
@@ -984,9 +983,9 @@ const HomeScreen = ({ navigation }) => {
               ? p.distanceMeters <= targetRadiusMeters
               : p.lat && p.lng
                 ? distanceBetweenMeters(coordsData, {
-                    latitude: p.lat,
-                    longitude: p.lng,
-                  }) <= targetRadiusMeters
+                  latitude: p.lat,
+                  longitude: p.lng,
+                }) <= targetRadiusMeters
                 : false;
           const withinCategory =
             categoryId == null
@@ -1003,13 +1002,14 @@ const HomeScreen = ({ navigation }) => {
       }
 
       const params = {
+        mode: 'NEARBY',
         lat: coordsData.latitude,
         lng: coordsData.longitude,
-        radiusMeters: targetRadiusMeters,
-        limit: 50, // Aumentado de 12 a 50 para mostrar más resultados
+        radius: targetRadiusMeters,
+        size: 50, // Aumentado de 12 a 50 para mostrar más resultados
         categoryId: categoryId ?? undefined,
       };
-      const response = await api.get(ENDPOINTS.PLACES_NEARBY, { params });
+      const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params });
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
@@ -1154,8 +1154,8 @@ const HomeScreen = ({ navigation }) => {
   const renderNearbyMapBlock = () => {
     const center =
       coords &&
-      Number.isFinite(coords.latitude) &&
-      Number.isFinite(coords.longitude)
+        Number.isFinite(coords.latitude) &&
+        Number.isFinite(coords.longitude)
         ? coords
         : fallbackCenter;
     const hasCoords =
@@ -1430,11 +1430,48 @@ const HomeScreen = ({ navigation }) => {
       Platform.OS === "ios"
         ? model3dOptions.find((model) => model.type === "usdz")
         : model3dOptions.find((model) => model.type === "glb") ||
-          model3dOptions.find((model) => model.type === "gltf");
+        model3dOptions.find((model) => model.type === "gltf");
 
     const fallback = preferred || model3dOptions[0] || null;
     setSelectedModelUrl(fallback ? fallback.url : null);
   }, [selectedPlace, model3dOptions, selectedModelUrl]);
+
+  const placeForAr = useMemo(() => {
+    if (!selectedPlace) return null;
+
+    const fallbackGlb =
+      model3dOptions.find((model) => model.type === "glb")?.url ||
+      model3dOptions.find((model) => model.type === "gltf")?.url ||
+      null;
+    const fallbackUsdz =
+      model3dOptions.find((model) => model.type === "usdz")?.url || null;
+
+    const selectedType = getModelType(selectedModelUrl);
+    const arModelUrl =
+      (selectedType === "glb" || selectedType === "gltf"
+        ? selectedModelUrl
+        : null) || fallbackGlb;
+    const arModelIosUrl =
+      (selectedType === "usdz" ? selectedModelUrl : null) || fallbackUsdz;
+
+    if (!arModelUrl && !arModelIosUrl) return selectedPlace;
+
+    return {
+      ...selectedPlace,
+      arModelUrl,
+      arModelIosUrl,
+      modelUrl: arModelUrl,
+      iosModelUrl: arModelIosUrl,
+    };
+  }, [selectedPlace, selectedModelUrl, model3dOptions]);
+
+  const arConfig = getPlaceArConfig(placeForAr);
+  const arUrl = arConfig?.arUrl;
+  const platformArUrl =
+    Platform.OS === "ios"
+      ? arConfig?.iosQuicklookUrl || arUrl
+      : arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl || arUrl;
+
 
   const renderPlace = useCallback(
     ({
@@ -1483,12 +1520,12 @@ const HomeScreen = ({ navigation }) => {
     if (direct) return direct;
     const fromPlaces = Array.isArray(pkg?.places)
       ? pkg.places
-          .map((place) =>
-            Array.isArray(place?.imageUrls)
-              ? place.imageUrls.find((url) => url && url.trim())
-              : null,
-          )
-          .find(Boolean)
+        .map((place) =>
+          Array.isArray(place?.imageUrls)
+            ? place.imageUrls.find((url) => url && url.trim())
+            : null,
+        )
+        .find(Boolean)
       : null;
     return fromPlaces || null;
   }, []);
@@ -1537,7 +1574,7 @@ const HomeScreen = ({ navigation }) => {
                 transition={200}
               />
               <LinearGradient
-                colors={["rgba(0,0,0,0.05)", "rgba(0,0,0,0.7)"]}
+                colors={["rgba(0,0,0,0.01)", "rgba(0,0,0,0.5)"]}
                 style={styles.packageImageOverlay}
               />
             </>
@@ -1572,7 +1609,7 @@ const HomeScreen = ({ navigation }) => {
                 key={`${pkg.id}-city-${idx}`}
                 style={styles.packageLocationChip}
               >
-                <FontAwesome name="map-marker" size={12} color="#fff" />
+                <FontAwesome name="map-marker" size={10} color="#fff" />
                 <Text style={styles.packageLocationText}>{tag}</Text>
               </View>
             ))}
@@ -1580,76 +1617,64 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.packageBody}>
-          <View style={styles.packageTitleRow}>
-            <Text style={styles.packageTitle}>{pkg.title}</Text>
-            <View style={styles.packageRating}>
-              <FontAwesome name="star" size={12} color="#f5b000" />
-              <Text style={styles.packageRatingText}>
-                {pkg.rating ?? 4.5} ({pkg.reviews ?? 0} reseñas)
-              </Text>
-            </View>
+          <View style={{ marginBottom: 4 }}>
+            <Text style={styles.packageTitle} numberOfLines={2}>{pkg.title}</Text>
           </View>
+
+          <View style={styles.packageRatingRow}>
+            <FontAwesome name="star" size={14} color="#F59E0B" />
+            <Text style={styles.packageRatingText}>{pkg.rating ?? 4.8}</Text>
+            <Text style={styles.packageReviewsText}>({pkg.reviews ?? Math.floor(Math.random() * 50 + 10)} opiniones)</Text>
+          </View>
+
           {pkg.agencyName ? (
-            <Text style={styles.packageAgency}>
-              Publicado por {pkg.agencyName}
-            </Text>
+            <Text style={styles.packageAgency}>Por {pkg.agencyName}</Text>
           ) : null}
-          <Text style={styles.packageSubtitle}>{pkg.description}</Text>
 
-          <View style={styles.packageMetaRow}>
-            <View style={styles.packageMetaItem}>
-              <FontAwesome name="clock-o" size={12} color="#6b7280" />
-              <Text style={styles.packageMetaText}>
-                {pkg.days} días / {pkg.nights} noches
-              </Text>
+          <Text style={styles.packageSubtitle} numberOfLines={2}>{pkg.description}</Text>
+
+          <View style={styles.packageMetaCleanRow}>
+            <View style={styles.packageMetaCleanItem}>
+              <FontAwesome name="clock-o" size={14} color="#64748B" />
+              <Text style={styles.packageMetaCleanText}>{pkg.days}D / {pkg.nights}N</Text>
             </View>
-            <View style={styles.packageMetaItem}>
-              <FontAwesome name="users" size={12} color="#6b7280" />
-              <Text style={styles.packageMetaText}>{pkg.people}</Text>
+            <View style={styles.packageMetaCleanItem}>
+              <FontAwesome name="user" size={14} color="#64748B" />
+              <Text style={styles.packageMetaCleanText}>{pkg.people}</Text>
             </View>
           </View>
 
-          <View style={styles.packageIncludes}>
-            <Text style={styles.packageIncludesTitle}>Incluye:</Text>
+          <View style={styles.packageIncludesClean}>
             {includeList.map((item, idx) => (
-              <View
-                key={`${pkg.id}-inc-${idx}`}
-                style={styles.packageIncludeRow}
-              >
-                <FontAwesome name="check" size={12} color="#10b981" />
-                <Text style={styles.packageIncludeText}>{item}</Text>
+              <View key={`${pkg.id}-inc-${idx}`} style={styles.packageIncludeCleanRow}>
+                <View style={styles.packageIncludeBullet} />
+                <Text style={styles.packageIncludeCleanText} numberOfLines={1}>{item}</Text>
               </View>
             ))}
-            {!includeList.length ? (
-              <Text style={styles.packageIncludeEmpty}>
-                Incluye detalles por confirmar.
-              </Text>
-            ) : null}
-            {remaining > 0 ? (
-              <Text style={styles.packageIncludeMore}>+{remaining} más…</Text>
-            ) : null}
+            {remaining > 0 && (
+              <Text style={[styles.packageIncludeCleanText, { color: '#94A3B8', marginTop: 2 }]}>+{remaining} más incluidos</Text>
+            )}
+            {!includeList.length && (
+              <Text style={[styles.packageIncludeCleanText, { color: '#94A3B8' }]}>Detalles por confirmar</Text>
+            )}
           </View>
 
-          <View style={styles.packagePriceRow}>
-            <View>
-              <Text style={styles.packagePriceOriginal}>
-                {formatPrice(pkg.originalPrice)}
-              </Text>
-              <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
-              <Text style={styles.packagePriceNote}>por persona</Text>
+          <View style={styles.packageDivider} />
+
+          <View style={styles.packageFooter}>
+            <View style={styles.packagePriceCol}>
+              <Text style={styles.packagePriceNote}>Precio por persona</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
+              </View>
+              {pkg.originalPrice ? (
+                <Text style={styles.packagePriceOriginal}>{formatPrice(pkg.originalPrice)}</Text>
+              ) : null}
             </View>
-            <TouchableOpacity
-              style={styles.packageButton}
-              onPress={() => openPayment(pkg)}
-            >
-              <LinearGradient
-                colors={["#7B5BFF", "#D66DFF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.packageButtonGradient}
-              >
-                <Text style={styles.packageButtonText}>Reservar Ahora</Text>
-              </LinearGradient>
+
+            <TouchableOpacity style={styles.packageButtonClean} onPress={() => openPayment(pkg)}>
+              <Text style={styles.packageButtonCleanText}>Reservar</Text>
+              <FontAwesome name="arrow-right" size={12} color="#FFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1762,15 +1787,15 @@ const HomeScreen = ({ navigation }) => {
       } = getSlideMetrics(imageCount, hasNeighbors);
       const sliderData = hasNeighbors
         ? [
-            { type: "prev" },
-            { type: "info" },
-            ...imageList.map((uri) => ({ type: "image", uri })),
-            { type: "next" },
-          ]
+          { type: "prev" },
+          { type: "info" },
+          ...imageList.map((uri) => ({ type: "image", uri })),
+          { type: "next" },
+        ]
         : [
-            { type: "info" },
-            ...imageList.map((uri) => ({ type: "image", uri })),
-          ];
+          { type: "info" },
+          ...imageList.map((uri) => ({ type: "image", uri })),
+        ];
       if (!totalSlides) return null;
 
       const getItemLayout = (_, index) => ({
@@ -2267,41 +2292,6 @@ const HomeScreen = ({ navigation }) => {
     ],
   );
 
-  const placeForAr = useMemo(() => {
-    if (!selectedPlace) return null;
-
-    const fallbackGlb =
-      model3dOptions.find((model) => model.type === "glb")?.url ||
-      model3dOptions.find((model) => model.type === "gltf")?.url ||
-      null;
-    const fallbackUsdz =
-      model3dOptions.find((model) => model.type === "usdz")?.url || null;
-
-    const selectedType = getModelType(selectedModelUrl);
-    const arModelUrl =
-      (selectedType === "glb" || selectedType === "gltf"
-        ? selectedModelUrl
-        : null) || fallbackGlb;
-    const arModelIosUrl =
-      (selectedType === "usdz" ? selectedModelUrl : null) || fallbackUsdz;
-
-    if (!arModelUrl && !arModelIosUrl) return selectedPlace;
-
-    return {
-      ...selectedPlace,
-      arModelUrl,
-      arModelIosUrl,
-      modelUrl: arModelUrl,
-      iosModelUrl: arModelIosUrl,
-    };
-  }, [selectedPlace, selectedModelUrl, model3dOptions]);
-
-  const arConfig = getPlaceArConfig(placeForAr);
-  const arUrl = arConfig?.arUrl;
-  const platformArUrl =
-    Platform.OS === "ios"
-      ? arConfig?.iosQuicklookUrl || arUrl
-      : arConfig?.sceneViewerIntent || arConfig?.sceneViewerUrl || arUrl;
 
   const openDirectionsFromCurrent = async () => {
     if (!selectedPlace?.lat || !selectedPlace?.lng) return;
@@ -2344,9 +2334,9 @@ const HomeScreen = ({ navigation }) => {
           { text: "Cancelar", style: "cancel" },
           platformArUrl
             ? {
-                text: "Abrir AR web",
-                onPress: () => Linking.openURL(platformArUrl),
-              }
+              text: "Abrir AR web",
+              onPress: () => Linking.openURL(platformArUrl),
+            }
             : null,
         ],
       );
@@ -2360,9 +2350,9 @@ const HomeScreen = ({ navigation }) => {
           { text: "Cancelar", style: "cancel" },
           platformArUrl
             ? {
-                text: "Abrir AR web",
-                onPress: () => Linking.openURL(platformArUrl),
-              }
+              text: "Abrir AR web",
+              onPress: () => Linking.openURL(platformArUrl),
+            }
             : null,
         ],
       );
@@ -2379,7 +2369,9 @@ const HomeScreen = ({ navigation }) => {
     setLoadingPackages(true);
     setPackagesError("");
     try {
-      const response = await api.get(ENDPOINTS.PACKAGES);
+      const response = await api.get(ENDPOINTS.PACKAGES, {
+        params: { limit: 15, offset: 0 }
+      });
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
@@ -2440,9 +2432,8 @@ const HomeScreen = ({ navigation }) => {
           <style>html,body{margin:0;padding:0;height:100%;background:#0b1021;} model-viewer{width:100%;height:100%;}</style>
         </head>
         <body>
-          <model-viewer src="${arConfig?.modelUrl || arUrl}" ios-src="${
-            arConfig?.iosModelUrl || ""
-          }"
+          <model-viewer src="${arConfig?.modelUrl || arUrl}" ios-src="${arConfig?.iosModelUrl || ""
+      }"
             ar ar-modes="webxr scene-viewer quick-look" camera-controls auto-rotate shadow-intensity="1" exposure="1"
             style="width:100%;height:100%;">
           </model-viewer>
@@ -2453,7 +2444,7 @@ const HomeScreen = ({ navigation }) => {
       if (Platform.OS === "android" && url.startsWith("intent://")) {
         const fallback = arConfig?.sceneViewerUrl || arUrl;
         if (fallback) {
-          Linking.openURL(fallback).catch(() => {});
+          Linking.openURL(fallback).catch(() => { });
         }
         return false;
       }
@@ -2887,14 +2878,17 @@ const HomeScreen = ({ navigation }) => {
                   ]}
                   onPress={() => {
                     setShowAllNearby(false);
-                    setSelectedCategory(chip.id);
+                    // Use InteractionManager to render visual change first before mounting complex list
+                    InteractionManager.runAfterInteractions(() => {
+                      setSelectedCategory(chip.id);
+                    });
                   }}
                 >
                   <Text
                     style={[
                       styles.categoryTabText,
                       selectedCategory === chip.id &&
-                        styles.categoryTabTextActive,
+                      styles.categoryTabTextActive,
                     ]}
                   >
                     {chip.name}
@@ -2907,17 +2901,90 @@ const HomeScreen = ({ navigation }) => {
             </ScrollView>
           </View>
 
-          {loadingNearby ? (
-            <ActivityIndicator color={COLORS.primary} style={styles.loader} />
-          ) : filteredNearby.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                No hay lugares cercanos en este radio. Prueba aumentar la
-                distancia.
+          <View style={{ position: "relative" }}>
+            {renderNearbyMapBlock()}
+            {(loadingNearby || (!loadingNearby && filteredNearby.length === 0)) && (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  {
+                    backgroundColor: "rgba(255,255,255,0.85)",
+                    zIndex: 10,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    borderRadius: 24,
+                    marginTop: SPACING.md, // Matches mapCard marginTop
+                  },
+                ]}
+              >
+                {loadingNearby ? (
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                      No hay lugares cercanos en un radio de {distanceKm} km.
+                    </Text>
+                    {distanceKm < 100 && (
+                      <TouchableOpacity
+                        style={{
+                          marginTop: 16,
+                          backgroundColor: "#5B3CF0",
+                          paddingHorizontal: 20,
+                          paddingVertical: 10,
+                          borderRadius: 999,
+                        }}
+                        onPress={() => {
+                          const newRadius = Math.min(distanceKm + 10, 100);
+                          setDistanceKm(newRadius);
+                          loadNearby(newRadius);
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                          Aumentar radio a {Math.min(distanceKm + 10, 100)} km
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
+          {!loadingNearby && filteredNearby.length === 0 && popular?.length > 0 && (
+            <View style={{ marginTop: SPACING.xl }}>
+              <Text
+                style={[
+                  styles.sectionPillSecondary,
+                  { marginBottom: SPACING.sm, marginHorizontal: SPACING.lg },
+                ]}
+              >
+                Sugerencias
               </Text>
+              <Text
+                style={[
+                  styles.sectionHeroTitle,
+                  { fontSize: 20, marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
+                ]}
+              >
+                Top Destinos Huila
+              </Text>
+              <FlatList
+                horizontal
+                data={popular}
+                keyExtractor={(item, idx) => `${item.id || idx}-popular-fallback`}
+                renderItem={({ item }) =>
+                  renderPlace({
+                    item,
+                    variant: "compact",
+                    cardWidth: cardCompactWidth,
+                    imageHeight: 180,
+                    sourceKey: "popular",
+                  })
+                }
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+              />
             </View>
-          ) : (
-            renderNearbyMapBlock()
           )}
         </View>
 
@@ -2938,34 +3005,84 @@ const HomeScreen = ({ navigation }) => {
           ) : (
             <View style={styles.paddingLeft}>
               {emptyState}
-              <FlatList
-                horizontal
-                data={filteredPlaces}
-                keyExtractor={(item, idx) => `${item.id || idx}-all`}
-                renderItem={({ item }) =>
-                  renderPlace({
-                    item,
-                    variant: "compact",
-                    cardWidth: cardCompactWidth,
-                    imageHeight: 180,
-                    sourceKey: "all",
-                  })
-                }
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalList}
-                snapToInterval={cardCompactWidth + SPACING.md}
-                decelerationRate="fast"
-                snapToAlignment="start"
-                getItemLayout={(_, index) => ({
-                  length: cardCompactWidth + SPACING.md,
-                  offset: (cardCompactWidth + SPACING.md) * index,
-                  index,
-                })}
-                windowSize={5}
-                maxToRenderPerBatch={5}
-                initialNumToRender={6}
-                removeClippedSubviews
-              />
+              <View>
+                <FlatList
+                  horizontal
+                  data={filteredPlaces}
+                  keyExtractor={(item, idx) => `${item.id || idx}-all`}
+                  renderItem={({ item }) =>
+                    renderPlace({
+                      item,
+                      variant: "compact",
+                      cardWidth: cardCompactWidth,
+                      imageHeight: 180,
+                      sourceKey: "all",
+                    })
+                  }
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalList}
+                  snapToInterval={cardCompactWidth + SPACING.md}
+                  decelerationRate="fast"
+                  snapToAlignment="start"
+                  onViewableItemsChanged={handleExplorationScroll}
+                  viewabilityConfig={explorationViewabilityConfig}
+                  getItemLayout={(_, index) => ({
+                    length: cardCompactWidth + SPACING.md,
+                    offset: (cardCompactWidth + SPACING.md) * index,
+                    index,
+                  })}
+                  windowSize={5}
+                  maxToRenderPerBatch={5}
+                  initialNumToRender={6}
+                  removeClippedSubviews
+                  ListFooterComponent={() => {
+                    if (!hasMorePlaces || query) return null;
+                    return (
+                      <TouchableOpacity
+                        style={{
+                          width: cardCompactWidth,
+                          height: 280,
+                          borderRadius: 24,
+                          backgroundColor: '#EEF2FF',
+                          marginLeft: SPACING.md,
+                          marginRight: SPACING.lg,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        onPress={() => {
+                          const next = allPlacesPage + 1;
+                          setAllPlacesPage(next);
+                          loadAll(next, true);
+                        }}
+                        disabled={loadingMorePlaces}
+                      >
+                        {loadingMorePlaces ? (
+                          <ActivityIndicator color="#5B3CF0" />
+                        ) : (
+                          <>
+                            <FontAwesome name="plus-circle" size={32} color="#5B3CF0" style={{ marginBottom: 8 }} />
+                            <Text style={{ color: "#5B3CF0", fontWeight: 'bold' }}>Cargar más</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
+                />
+
+                {filteredPlaces.length > 0 && (
+                  <View style={styles.paginationDotsContainer}>
+                    {filteredPlaces.map((_, index) => (
+                      <View
+                        key={`dot-${index}`}
+                        style={[
+                          styles.paginationDot,
+                          index === activeExplorationIndex && styles.paginationDotActive
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
             </View>
           )}
         </View>
@@ -3205,24 +3322,33 @@ const HomeScreen = ({ navigation }) => {
                 ))}
               </View>
 
-              <Slider
-                style={{ width: "100%", height: 40, marginTop: SPACING.sm }}
-                minimumValue={1}
-                maximumValue={maxDistanceKm}
-                step={0.5}
-                minimumTrackTintColor="#7B5BFF"
-                maximumTrackTintColor={COLORS.border}
-                thumbTintColor="#7B5BFF"
-                value={distanceKm}
-                onValueChange={(value) => {
-                  setShowAllNearby(false);
-                  setDistanceKm(value);
-                }}
-              />
-              <Text style={styles.sliderValue}>
-                Radio personalizado: {distanceKm.toFixed(1)} km (máx{" "}
-                {maxDistanceKm} km)
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: SPACING.lg, marginBottom: SPACING.md }}>
+                <TouchableOpacity
+                  style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: distanceKm > 1 ? '#EEF2FF' : '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}
+                  onPress={() => {
+                    setShowAllNearby(false);
+                    setDistanceKm(prev => Math.max(1, prev - 5));
+                  }}
+                  disabled={distanceKm <= 1}
+                >
+                  <FontAwesome name="minus" size={16} color={distanceKm > 1 ? "#5B3CF0" : "#94A3B8"} />
+                </TouchableOpacity>
+                <View style={{ alignItems: 'center', minWidth: 100 }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A' }}>
+                    {distanceKm.toFixed(1)} km
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Radio personalizado</Text>
+                </View>
+                <TouchableOpacity
+                  style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' }}
+                  onPress={() => {
+                    setShowAllNearby(false);
+                    setDistanceKm(prev => prev + 5);
+                  }}
+                >
+                  <FontAwesome name="plus" size={16} color="#5B3CF0" />
+                </TouchableOpacity>
+              </View>
 
               <Text style={styles.modalHint}>
                 Ajusta la distancia para refinar lugares cercanos. Las
@@ -3456,8 +3582,8 @@ const HomeScreen = ({ navigation }) => {
             (() => {
               const center =
                 coords &&
-                Number.isFinite(coords.latitude) &&
-                Number.isFinite(coords.longitude)
+                  Number.isFinite(coords.latitude) &&
+                  Number.isFinite(coords.longitude)
                   ? coords
                   : fallbackCenter;
               const hasCoords =
@@ -3500,8 +3626,8 @@ const HomeScreen = ({ navigation }) => {
                   markers={nearbyMarkers}
                   userLocation={
                     coords &&
-                    Number.isFinite(coords.latitude) &&
-                    Number.isFinite(coords.longitude)
+                      Number.isFinite(coords.latitude) &&
+                      Number.isFinite(coords.longitude)
                       ? coords
                       : null
                   }
@@ -3523,12 +3649,12 @@ const HomeScreen = ({ navigation }) => {
         place={
           selectedPlace
             ? {
-                id: selectedPlace.id,
-                name: selectedPlace.name,
-                lat: selectedPlace.lat,
-                lng: selectedPlace.lng,
-                address: selectedPlace.address,
-              }
+              id: selectedPlace.id,
+              name: selectedPlace.name,
+              lat: selectedPlace.lat,
+              lng: selectedPlace.lng,
+              address: selectedPlace.address,
+            }
             : null
         }
       />
@@ -3908,46 +4034,51 @@ const styles = StyleSheet.create({
   },
   sectionIntro: {
     alignItems: "center",
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
   },
   sectionPill: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    backgroundColor: "#EEF0FF",
+    paddingVertical: 6,
+    backgroundColor: "#F8FAFC",
+    color: "#64748B",
+    fontWeight: "700",
+    borderRadius: 999,
+    fontSize: FONT_SIZES.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sectionPillSecondary: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    backgroundColor: "#EEF2FF",
     color: "#5B3CF0",
     fontWeight: "700",
     borderRadius: 999,
     fontSize: FONT_SIZES.xs,
-  },
-  sectionPillSecondary: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    backgroundColor: "#F2E9FF",
-    color: "#7B5BFF",
-    fontWeight: "700",
-    borderRadius: 999,
-    fontSize: FONT_SIZES.xs,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   sectionHeroTitle: {
-    fontSize: FONT_SIZES.lg + 4,
+    fontSize: 28,
     fontWeight: "800",
-    color: COLORS.text,
+    color: "#0F172A",
     textAlign: "center",
+    letterSpacing: -0.5,
   },
   sectionDescription: {
-    color: COLORS.textLight,
+    color: "#475569",
     textAlign: "center",
-    lineHeight: 20,
-    marginHorizontal: SPACING.lg,
+    lineHeight: 22,
+    fontSize: 15,
   },
   sectionAllIntro: {
     alignItems: "center",
-    gap: SPACING.xs,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
-    paddingTop: SPACING.sm,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    paddingTop: SPACING.lg,
   },
   mapCard: {
     width: "100%",
@@ -5145,15 +5276,15 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    borderColor: "#F1F5F9",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 4,
   },
   packageImageWrapper: {
-    height: 180,
+    height: 220,
     position: "relative",
   },
   packageImage: {
@@ -5180,18 +5311,18 @@ const styles = StyleSheet.create({
   },
   packageBadgeRow: {
     position: "absolute",
-    top: SPACING.sm,
-    left: SPACING.sm,
-    right: SPACING.sm,
+    top: SPACING.md,
+    left: SPACING.md,
+    right: SPACING.md,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   packageDiscount: {
-    backgroundColor: "rgba(220, 38, 38, 0.9)",
-    paddingHorizontal: SPACING.sm,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   packageDiscountText: {
     color: COLORS.white,
@@ -5199,154 +5330,153 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
   },
   packageTag: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    paddingHorizontal: SPACING.md,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   packageTagText: {
-    color: "#111827",
+    color: "#0F172A",
     fontWeight: "700",
     fontSize: FONT_SIZES.sm,
   },
   packageLocationRow: {
     position: "absolute",
-    bottom: SPACING.sm,
-    left: SPACING.sm,
-    right: SPACING.sm,
+    bottom: SPACING.md,
+    left: SPACING.md,
+    right: SPACING.md,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: SPACING.xs,
+    gap: 6,
   },
   packageLocationChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    paddingHorizontal: SPACING.sm,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   packageLocationText: {
     color: COLORS.white,
-    fontWeight: "700",
-    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    fontSize: FONT_SIZES.xs,
   },
   packageBody: {
-    padding: SPACING.md,
+    padding: SPACING.lg,
     gap: SPACING.sm,
-  },
-  packageTitleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: SPACING.sm,
-    alignItems: "center",
   },
   packageTitle: {
-    flex: 1,
-    fontSize: FONT_SIZES.lg,
+    fontSize: 20,
     fontWeight: "800",
-    color: COLORS.text,
+    color: "#0F172A",
+    lineHeight: 28,
   },
-  packageRating: {
+  packageRatingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
   packageRatingText: {
-    color: COLORS.text,
+    color: "#0F172A",
     fontWeight: "700",
+    fontSize: FONT_SIZES.sm,
+  },
+  packageReviewsText: {
+    color: "#64748B",
     fontSize: FONT_SIZES.sm,
   },
   packageAgency: {
     color: "#5B3CF0",
     fontWeight: "600",
+    fontSize: FONT_SIZES.sm,
   },
   packageSubtitle: {
-    color: COLORS.textLight,
-    lineHeight: 20,
+    color: "#475569",
+    lineHeight: 22,
+    fontSize: 15,
   },
-  packageMetaRow: {
+  packageMetaCleanRow: {
     flexDirection: "row",
-    gap: SPACING.sm,
-    flexWrap: "wrap",
+    gap: SPACING.md,
+    marginTop: 4,
   },
-  packageMetaItem: {
+  packageMetaCleanItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#F7F8FD",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 12,
   },
-  packageMetaText: {
-    color: COLORS.text,
+  packageMetaCleanText: {
+    color: "#475569",
     fontWeight: "600",
     fontSize: FONT_SIZES.sm,
   },
-  packageIncludes: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    padding: SPACING.sm,
-    gap: 4,
-    backgroundColor: "#FDFDFE",
-  },
-  packageIncludesTitle: {
-    color: COLORS.text,
-    fontWeight: "700",
-  },
-  packageIncludeRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  packageIncludesClean: {
+    marginTop: SPACING.xs,
     gap: 6,
   },
-  packageIncludeText: {
-    color: COLORS.text,
-    fontSize: FONT_SIZES.sm,
+  packageIncludeCleanRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  packageIncludeEmpty: {
-    color: COLORS.textLight,
-    fontSize: FONT_SIZES.sm,
+  packageIncludeBullet: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#10B981",
   },
-  packageIncludeMore: {
-    color: COLORS.textLight,
-    fontSize: FONT_SIZES.sm,
+  packageIncludeCleanText: {
+    color: "#334155",
+    fontSize: 14,
   },
-  packagePriceRow: {
+  packageDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: SPACING.md,
+  },
+  packageFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: SPACING.xs,
-    gap: SPACING.md,
+    alignItems: "flex-end",
   },
-  packagePriceOriginal: {
-    color: COLORS.textLight,
-    textDecorationLine: "line-through",
-    fontSize: FONT_SIZES.sm,
-  },
-  packagePrice: {
-    color: "#111827",
-    fontWeight: "800",
-    fontSize: FONT_SIZES.lg,
-  },
-  packagePriceNote: {
-    color: COLORS.textLight,
-    fontSize: FONT_SIZES.sm,
-  },
-  packageButton: {
+  packagePriceCol: {
     flex: 1,
   },
-  packageButtonGradient: {
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: 14,
+  packagePriceNote: {
+    color: "#64748B",
+    fontSize: FONT_SIZES.xs,
+    textTransform: "uppercase",
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  packagePriceOriginal: {
+    color: "#94A3B8",
+    textDecorationLine: "line-through",
+    fontSize: FONT_SIZES.sm,
+    marginTop: 2,
+  },
+  packagePrice: {
+    color: "#0F172A",
+    fontWeight: "800",
+    fontSize: 24,
+  },
+  packageButtonClean: {
+    backgroundColor: "#111827",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 8,
   },
-  packageButtonText: {
+  packageButtonCleanText: {
     color: COLORS.white,
-    fontWeight: "800",
+    fontWeight: "700",
+    fontSize: FONT_SIZES.md,
   },
   agencyList: {
     paddingHorizontal: SPACING.lg,
@@ -5631,6 +5761,24 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.textLight,
     textAlign: "center",
+  },
+  paginationDotsContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.border,
+    marginHorizontal: 4,
+  },
+  paginationDotActive: {
+    width: 24,
+    backgroundColor: COLORS.primary,
   },
 });
 

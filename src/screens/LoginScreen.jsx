@@ -1,23 +1,25 @@
+import { FontAwesome } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
+  View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
+import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginMethod, setLoginMethod] = useState('password');
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
@@ -89,14 +91,22 @@ const LoginScreen = () => {
         />
 
         {loginMethod === 'password' ? (
-          <TextInput
-            style={styles.input}
-            placeholder="Contraseña"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Contraseña"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={styles.eyeIcon}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <FontAwesome name={showPassword ? "eye" : "eye-slash"} size={20} color={COLORS.textLight} />
+            </TouchableOpacity>
+          </View>
         ) : (
           <TextInput
             style={styles.input}
@@ -171,6 +181,23 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     marginBottom: SPACING.md,
     fontSize: FONT_SIZES.md,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    marginBottom: SPACING.md,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: SPACING.md,
+    fontSize: FONT_SIZES.md,
+  },
+  eyeIcon: {
+    padding: SPACING.md,
   },
   button: {
     backgroundColor: COLORS.primary,
