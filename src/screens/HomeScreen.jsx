@@ -1325,10 +1325,19 @@ const HomeScreen = ({ navigation }) => {
         key && placeDetailCacheRef.current.has(key)
           ? placeDetailCacheRef.current.get(key)
           : null;
-      setDetailLoading(!cached);
-      const resolved = cached || (await fetchPlaceDetail(item));
-      setSelectedPlace(resolved);
-      setDetailLoading(false);
+
+      // Update immediately with whatever data we currently have so the transition is instant
+      setSelectedPlace(cached || item);
+
+      if (!cached) {
+        setDetailLoading(true);
+        // Async fetch while already displaying the base item data
+        const resolved = await fetchPlaceDetail(item);
+        setSelectedPlace(resolved);
+        setDetailLoading(false);
+      } else {
+        setDetailLoading(false);
+      }
     },
     [fetchPlaceDetail, getPlaceKey],
   );
@@ -1384,7 +1393,7 @@ const HomeScreen = ({ navigation }) => {
     const prevPlace = getAdjacentPlace("prev");
     if (!prevPlace) return;
     isAdvancingRef.current = true;
-    pendingScrollPositionRef.current = "lastImage";
+    pendingScrollPositionRef.current = "info";
     pendingAdvanceRef.current = null;
     setImageIndex(0);
     closeDetailInfo();
@@ -1708,21 +1717,20 @@ const HomeScreen = ({ navigation }) => {
   useEffect(() => {
     isAdvancingRef.current = false;
     pendingAdvanceRef.current = null;
+    setImageIndex(0); // Reset index on open
   }, [selectedPlace?.id, selectedPlace?.name]);
 
   useEffect(() => {
     if (!detailVisible) return;
-    const imageCount = Array.isArray(selectedPlace?.imageUrls)
-      ? selectedPlace.imageUrls.length
-      : 0;
+    const imageCount = 0; // Force 0 to match our simplified swiping layout
     const hasNeighbors = detailPlaces.length > 1;
     const { infoIndex, lastImageIndex } = getSlideMetrics(
       imageCount,
       hasNeighbors,
     );
     let targetIndex = infoIndex;
-    if (pendingScrollPositionRef.current === "lastImage") {
-      targetIndex = lastImageIndex;
+    if (pendingScrollPositionRef.current === "info" || pendingScrollPositionRef.current === "lastImage") {
+      targetIndex = infoIndex;
     }
     pendingScrollPositionRef.current = null;
     const timer = setTimeout(() => {
@@ -1757,7 +1765,33 @@ const HomeScreen = ({ navigation }) => {
     const prevPlace = getAdjacentPlace("prev");
     if (nextPlace) preloadPlaceDetail(nextPlace, "next");
     if (prevPlace) preloadPlaceDetail(prevPlace, "prev");
-  }, [detailPlaces.length, getAdjacentPlace, preloadPlaceDetail]);
+
+    // Eagerly prefetch +/- 2 places in the background for fluid scrolling
+    const getPlaceAtOffset = (offset) => {
+      const currentKey = getPlaceKey(selectedPlace);
+      const currentIndex = detailPlaces.findIndex((p) => getPlaceKey(p) === currentKey);
+      if (currentIndex === -1) return null;
+      const targetIndex = (currentIndex + offset + detailPlaces.length) % detailPlaces.length;
+      return detailPlaces[targetIndex] || null;
+    };
+
+    const nextNextPlace = getPlaceAtOffset(2);
+    const prevPrevPlace = getPlaceAtOffset(-2);
+
+    // We fetch them directly to cache them without affecting the immediate "next/prev" UI spinners
+    if (nextNextPlace && getPlaceKey(nextNextPlace)) {
+      const key = getPlaceKey(nextNextPlace);
+      if (!placeDetailCacheRef.current.has(key)) {
+        fetchPlaceDetail(nextNextPlace).catch(() => { });
+      }
+    }
+    if (prevPrevPlace && getPlaceKey(prevPrevPlace)) {
+      const key = getPlaceKey(prevPrevPlace);
+      if (!placeDetailCacheRef.current.has(key)) {
+        fetchPlaceDetail(prevPrevPlace).catch(() => { });
+      }
+    }
+  }, [detailPlaces, selectedPlace, getAdjacentPlace, preloadPlaceDetail, fetchPlaceDetail, getPlaceKey]);
 
   useEffect(() => {
     const pending = pendingAdvanceRef.current;
@@ -1776,7 +1810,9 @@ const HomeScreen = ({ navigation }) => {
     (images) => {
       const imageList = Array.isArray(images) ? images : [];
       const imageCount = imageList.length;
+      const currentImage = imageList[imageIndex] || imageList[0] || null;
       const hasNeighbors = detailPlaces.length > 1;
+      // Force 0 image slides to navigate directly between places
       const {
         infoIndex,
         firstImageIndex,
@@ -1784,17 +1820,15 @@ const HomeScreen = ({ navigation }) => {
         prevIndex,
         nextIndex,
         totalSlides,
-      } = getSlideMetrics(imageCount, hasNeighbors);
+      } = getSlideMetrics(0, hasNeighbors);
       const sliderData = hasNeighbors
         ? [
           { type: "prev" },
           { type: "info" },
-          ...imageList.map((uri) => ({ type: "image", uri })),
           { type: "next" },
         ]
         : [
           { type: "info" },
-          ...imageList.map((uri) => ({ type: "image", uri })),
         ];
       if (!totalSlides) return null;
 
@@ -1840,7 +1874,16 @@ const HomeScreen = ({ navigation }) => {
           </head>
           <body>
             <model-viewer src="${previewModelUrl}" ios-src="${arConfig?.iosModelUrl || ""}"
-              camera-controls auto-rotate shadow-intensity="1" exposure="1" ar-modes="webxr scene-viewer quick-look">
+              poster="${currentImage || ''}"
+              loading="lazy" reveal="interaction"
+              camera-controls auto-rotate shadow-intensity="1.5" shadow-softness="1" exposure="1.2" environment-image="neutral" ar-modes="webxr scene-viewer quick-look">
+              
+              <div slot="poster" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background-size: cover; background-position: center; background-image: url('${currentImage || ''}'); border-radius: 14px;">
+                <div style="background: rgba(91, 60, 240, 0.85); padding: 12px 24px; border-radius: 24px; color: white; font-family: sans-serif; font-weight: bold; backdrop-filter: blur(4px); box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                  Toca para cargar 3D
+                </div>
+              </div>
+
             </model-viewer>
           </body>
         </html>
@@ -1936,137 +1979,138 @@ const HomeScreen = ({ navigation }) => {
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
             >
-              <View style={styles.infoSlideHeader}>
-                <View style={styles.infoSlideTags}>
-                  <View style={styles.infoSlideTagPrimary}>
-                    <FontAwesome name="star" size={12} color="#5B3CF0" />
-                    <Text style={styles.infoSlideTagText}>
-                      {selectedPlace?.rating || "4.8"}
-                    </Text>
-                  </View>
-                  {getCategoryLabel(selectedPlace) ? (
-                    <View style={styles.infoSlideTagSecondary}>
-                      <FontAwesome name="tag" size={12} color="#0E9F6E" />
-                      <Text style={styles.infoSlideTagText}>
-                        {getCategoryLabel(selectedPlace)}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {selectedPlace?.distanceMeters ? (
-                    <View style={styles.infoSlideTagMuted}>
-                      <FontAwesome
-                        name="location-arrow"
-                        size={12}
-                        color="#111827"
-                      />
-                      <Text style={styles.infoSlideTagMutedText}>
-                        {formatDistance(selectedPlace.distanceMeters)}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.infoSlideTitle}>
-                  {selectedPlace?.name || "Lugar destacado"}
-                </Text>
-                <Text style={styles.infoSlideSubtitle}>
-                  {selectedPlace?.address || "Ubicación por confirmar"}
-                </Text>
-                <Text style={styles.infoSlideDescription}>
-                  {selectedPlace?.description ||
-                    "Sendero tranquilo junto al río, ideal para caminatas cortas y fotografía de naturaleza."}
-                </Text>
-              </View>
-
-              <View style={styles.infoSlideGrid}>
-                {infoDetails.map((item, idx) => (
-                  <View
-                    key={`${item.label}-${idx}`}
-                    style={styles.infoSlideCard}
-                  >
-                    <FontAwesome name={item.icon} size={16} color="#5B3CF0" />
-                    <Text style={styles.infoSlideCardLabel}>{item.label}</Text>
-                    <Text style={styles.infoSlideCardValue}>{item.value}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {arPreviewHtml ? (
-                <View style={styles.arPreviewCard}>
-                  <View style={styles.arPreviewHeader}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: SPACING.xs,
-                      }}
-                    >
-                      <FontAwesome name="cube" size={14} color="#5B3CF0" />
-                      <Text style={styles.arPreviewTitle}>Vista previa 3D</Text>
-                    </View>
-                    <View style={styles.arPreviewBadge}>
-                      <Text style={styles.arPreviewBadgeText}>AR Ready</Text>
-                    </View>
-                  </View>
-                  <View style={styles.arPreviewFrame}>
-                    <WebView
-                      originWhitelist={["*"]}
-                      source={{ html: arPreviewHtml }}
-                      style={{ flex: 1, borderRadius: 14 }}
-                      javaScriptEnabled
-                      automaticallyAdjustContentInsets={false}
-                      scrollEnabled={false}
-                    />
-                  </View>
-                  <Text style={styles.arPreviewHint}>
-                    Mueve el modelo con un dedo y acércalo con gesto de pinza
-                    antes de ir a AR.
-                  </Text>
-                </View>
-              ) : null}
-              {renderModelSelector()}
-
-              <View style={styles.infoSlideActions}>
-                <TouchableOpacity
-                  style={[styles.actionButtonRow, styles.actionButtonPrimary]}
-                  onPress={openDirectionsFromCurrent}
-                  disabled={!selectedPlace?.lat || !selectedPlace?.lng}
-                >
-                  <FontAwesome
-                    name="location-arrow"
-                    size={14}
-                    color={COLORS.white}
+              {/* === MODERN IMAGE HEADER === */}
+              <View style={{ width: windowWidth, height: detailImageHeight * 0.65, position: 'relative' }}>
+                {currentImage ? (
+                  <Image
+                    source={{ uri: currentImage }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    placeholder={IMAGE_PLACEHOLDER}
+                    transition={300}
                   />
-                  <Text style={styles.actionButtonPrimaryText}>
-                    Cómo llegar
+                ) : (
+                  <View style={{ width: '100%', height: '100%', backgroundColor: '#f1f5f9' }} />
+                )}
+
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.6)', 'transparent', 'transparent']}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 120, zIndex: 1 }}
+                  pointerEvents="none"
+                />
+
+                {/* Floating Thumbnail Gallery Overlay */}
+                {imageList.length > 1 && (
+                  <View style={[styles.thumbnailGalleryContainer, { bottom: 20 }]}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md, gap: SPACING.sm }}>
+                      {imageList.map((uri, idx) => {
+                        const isActive = imageIndex === idx;
+                        return (
+                          <TouchableOpacity key={idx} onPress={() => setImageIndex(idx)} activeOpacity={0.8} style={[styles.thumbnailWrap, isActive && styles.thumbnailWrapActive]}>
+                            <Image
+                              source={{ uri }}
+                              style={styles.thumbnailImage}
+                              contentFit="cover"
+                            />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, gap: SPACING.md }}>
+                <View style={styles.infoSlideHeader}>
+                  <View style={styles.infoSlideTags}>
+                    <View style={styles.infoSlideTagPrimary}>
+                      <FontAwesome name="star" size={12} color="#5B3CF0" />
+                      <Text style={styles.infoSlideTagText}>
+                        {selectedPlace?.rating || "4.8"}
+                      </Text>
+                    </View>
+                    {getCategoryLabel(selectedPlace) ? (
+                      <View style={styles.infoSlideTagSecondary}>
+                        <FontAwesome name="tag" size={12} color="#0E9F6E" />
+                        <Text style={styles.infoSlideTagText}>
+                          {getCategoryLabel(selectedPlace)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {selectedPlace?.distanceMeters ? (
+                      <View style={styles.infoSlideTagMuted}>
+                        <FontAwesome
+                          name="location-arrow"
+                          size={12}
+                          color="#111827"
+                        />
+                        <Text style={styles.infoSlideTagMutedText}>
+                          {formatDistance(selectedPlace.distanceMeters)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={styles.infoSlideTitle}>
+                    {selectedPlace?.name || "Lugar destacado"}
                   </Text>
-                </TouchableOpacity>
-                {platformArUrl ? (
+                  <Text style={styles.infoSlideSubtitle}>
+                    {selectedPlace?.address || "Ubicación por confirmar"}
+                  </Text>
+                  <Text style={styles.infoSlideDescription}>
+                    {selectedPlace?.description ||
+                      "Sendero tranquilo junto al río, ideal para caminatas cortas y fotografía de naturaleza."}
+                  </Text>
+                </View>
+
+                <View style={styles.infoSlideGrid}>
+                  {infoDetails.map((item, idx) => (
+                    <View
+                      key={`${item.label}-${idx}`}
+                      style={styles.infoSlideCard}
+                    >
+                      <FontAwesome name={item.icon} size={16} color="#5B3CF0" />
+                      <Text style={styles.infoSlideCardLabel}>{item.label}</Text>
+                      <Text style={styles.infoSlideCardValue}>{item.value}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* AR web preview card has been removed */}
+
+                <View style={styles.infoSlideActions}>
                   <TouchableOpacity
-                    style={[
-                      styles.actionButtonRow,
-                      styles.actionButtonSecondary,
-                    ]}
-                    onPress={openNativeAR}
+                    style={[styles.actionButtonRow, styles.actionButtonPrimary]}
+                    onPress={openDirectionsFromCurrent}
+                    disabled={!selectedPlace?.lat || !selectedPlace?.lng}
                   >
-                    <FontAwesome name="cube" size={14} color="#111827" />
-                    <Text style={styles.actionButtonSecondaryText}>
-                      Abrir AR
+                    <FontAwesome
+                      name="location-arrow"
+                      size={14}
+                      color={COLORS.white}
+                    />
+                    <Text style={styles.actionButtonPrimaryText}>
+                      Cómo llegar
                     </Text>
                   </TouchableOpacity>
-                ) : null}
-              </View>
+                  {platformArUrl ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.actionButtonRow,
+                        styles.actionButtonSecondary,
+                      ]}
+                      onPress={openNativeAR}
+                    >
+                      <FontAwesome name="cube" size={14} color="#111827" />
+                      <Text style={styles.actionButtonSecondaryText}>
+                        Abrir AR
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
 
-              {platformArUrl ? (
-                <TouchableOpacity
-                  onPress={openNativeAR}
-                  style={styles.arNativeLink}
-                >
-                  <FontAwesome name="rocket" size={12} color="#5B3CF0" />
-                  <Text style={styles.arNativeLinkText}>
-                    Abrir en AR nativa
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
+
+              </View>
             </ScrollView>
           </View>
         );
@@ -2106,19 +2150,36 @@ const HomeScreen = ({ navigation }) => {
       );
 
       const renderTransitionSlide = (direction) => {
-        const status =
-          direction === "next" ? prefetchStatus.next : prefetchStatus.prev;
+        const targetPlace = getAdjacentPlace(direction);
+        const imageUrl = targetPlace?.imageUrls?.[0] || null;
+
         return (
           <View
             style={[
               styles.transitionSlide,
-              { width: windowWidth, height: detailImageHeight },
+              { width: windowWidth, height: detailImageHeight, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' },
             ]}
           >
+            {imageUrl ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  { width: windowWidth, height: detailImageHeight, opacity: 0.5 }
+                ]}
+                contentFit="cover"
+                cachePolicy="disk"
+              />
+            ) : null}
             <ActivityIndicator
-              color={COLORS.primary}
-              size={status?.ready ? "small" : "large"}
+              color="#ffffff"
+              size="large"
             />
+            {targetPlace?.name && (
+              <Text style={{ color: 'white', marginTop: 12, fontWeight: 'bold', fontSize: 16 }}>
+                {targetPlace.name}
+              </Text>
+            )}
           </View>
         );
       };
@@ -2130,6 +2191,17 @@ const HomeScreen = ({ navigation }) => {
             { height: detailImageHeight, minHeight: detailImageHeight },
           ]}
         >
+          {/* Top Controls Overlay Outside the Slider */}
+          <View style={[styles.modernTopControls, { zIndex: 100 }]}>
+            <TouchableOpacity style={styles.modernCircularBtn} onPress={() => setDetailVisible(false)}>
+              <FontAwesome name="arrow-left" size={18} color="#0f172a" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modernCircularBtn}>
+              <FontAwesome name="heart-o" size={18} color="#0f172a" />
+            </TouchableOpacity>
+          </View>
+
           <FlatList
             ref={imageListRef}
             horizontal
@@ -3397,17 +3469,18 @@ const HomeScreen = ({ navigation }) => {
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
             >
-              {detailLoading ? (
-                <ActivityIndicator
-                  color={COLORS.primary}
-                  style={{ marginTop: SPACING.md }}
-                />
-              ) : null}
-              {renderImages(
-                Array.isArray(selectedPlace?.imageUrls)
-                  ? selectedPlace.imageUrls
-                  : [],
-              )}
+              <View style={{ flex: 1 }}>
+                {renderImages(
+                  Array.isArray(selectedPlace?.imageUrls)
+                    ? selectedPlace.imageUrls
+                    : [],
+                )}
+                {detailLoading ? (
+                  <View style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, right: 70, backgroundColor: 'rgba(255,255,255,0.85)', padding: 8, borderRadius: 20, zIndex: 200, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+                    <ActivityIndicator color="#5B3CF0" size="small" />
+                  </View>
+                ) : null}
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -3807,29 +3880,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xs,
   },
   categoryTab: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "transparent",
-    backgroundColor: "rgba(255,255,255,0.85)",
-    marginRight: SPACING.sm,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    paddingHorizontal: SPACING.md + 4,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    marginRight: 10,
+    shadowColor: "#64748b",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   categoryTabActive: {
-    borderColor: "#7B5BFF",
-    backgroundColor: "#F2EEFF",
+    backgroundColor: "#5B3CF0", // Primary brand color for active pill
+    borderColor: "#5B3CF0",
+    shadowColor: "#5B3CF0",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
   categoryTabText: {
-    color: COLORS.text,
+    color: "#64748b",
     fontWeight: "600",
+    fontSize: FONT_SIZES.sm,
+    letterSpacing: 0.3,
   },
   categoryTabTextActive: {
-    color: "#5B3CF0",
+    color: "#ffffff",
+    fontWeight: "800",
   },
   categoryIndicator: {
     marginTop: 6,
@@ -3854,15 +3935,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   searchCard: {
-    padding: SPACING.sm,
-    borderRadius: 18,
+    padding: SPACING.md,
+    borderRadius: 24,
     gap: SPACING.sm,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    backgroundColor: "rgba(255,255,255,0.99)",
+    shadowColor: "#4f46e5",
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   searchRow: {
     flexDirection: "row",
@@ -4136,10 +4219,16 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     backgroundColor: COLORS.white,
-    padding: SPACING.lg,
     borderRadius: 24,
-    borderWidth: 0,
+    borderWidth: 1.5,
+    borderColor: '#f1f5f9',
     overflow: "hidden",
+    shadowColor: '#4f46e5',
+    shadowOpacity: 0.08,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+    marginBottom: SPACING.md,
   },
   cardCompact: {
     width: 300,
@@ -4147,16 +4236,14 @@ const styles = StyleSheet.create({
   },
   cardWide: {
     width: 340,
+    marginBottom: 0,
   },
   cardImageWrapper: {
     position: "relative",
-    marginBottom: SPACING.sm,
   },
   cardImage: {
     width: "100%",
-    height: 200,
-    borderRadius: 16,
-    marginBottom: SPACING.md,
+    height: 240,
     backgroundColor: COLORS.border,
   },
   cardTopRow: {
@@ -4211,7 +4298,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   cardBody: {
-    gap: SPACING.xs,
+    padding: SPACING.lg,
+    paddingTop: SPACING.md + 4,
+    paddingBottom: SPACING.lg + 4,
+    gap: SPACING.sm,
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -4259,10 +4349,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   popularCard: {
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: "hidden",
-    height: 280,
-    backgroundColor: COLORS.border,
+    height: 310,
+    backgroundColor: "#f8fafc",
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
   },
   popularImage: {
     width: "100%",
@@ -4270,16 +4367,16 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   popularImageRadius: {
-    borderRadius: 24,
+    borderRadius: 28,
   },
   popularFade: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: "70%",
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    height: "100%", // Covers more for better gradient transition to text
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   popularTopRow: {
     position: "absolute",
@@ -4301,14 +4398,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: SPACING.md,
+    bottom: 0,
     paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl, // better breathing room at bottom
+    paddingTop: SPACING.xl * 2, // smooth transition from gradient
     gap: SPACING.xs,
   },
   popularTitle: {
     color: COLORS.white,
     fontSize: FONT_SIZES.md + 2,
     fontWeight: "800",
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   popularMetaRow: {
     flexDirection: "row",
@@ -4916,8 +5018,8 @@ const styles = StyleSheet.create({
   infoSlide: {
     backgroundColor: "transparent",
     borderRadius: 20,
-    padding: SPACING.lg,
     flex: 1,
+    overflow: "hidden",
   },
   transitionSlide: {
     backgroundColor: "#F8FAFC",
@@ -5779,6 +5881,161 @@ const styles = StyleSheet.create({
   paginationDotActive: {
     width: 24,
     backgroundColor: COLORS.primary,
+  },
+  // Modern Details (Edge-to-Edge)
+  modernTopControls: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    zIndex: 10,
+  },
+  modernCircularBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  thumbnailGalleryContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  thumbnailWrap: {
+    width: 65,
+    height: 65,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  thumbnailWrapActive: {
+    borderColor: '#ffffff',
+    transform: [{ scale: 1.1 }],
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  modernInfoContainer: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    marginTop: -32,
+    paddingTop: 32,
+    paddingHorizontal: 24,
+    zIndex: 20,
+  },
+  modernInfoTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.5,
+  },
+  modernInfoLocation: {
+    fontSize: 16,
+    color: '#64748b',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  modernPriceBox: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  modernPriceValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#4f46e5',
+  },
+  modernPriceLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  modernStatsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 20,
+  },
+  modernStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    gap: 8,
+  },
+  modernStatIconWrap: {
+    width: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modernStatText: {
+    fontWeight: '700',
+    color: '#334155',
+    fontSize: 14,
+  },
+  modernInfoSectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginBottom: 12,
+  },
+  modernInfoDescription: {
+    fontSize: 16,
+    lineHeight: 26,
+    color: '#475569',
+  },
+  modernInfoActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 32,
+  },
+  modernPrimaryBtn: {
+    flex: 1,
+    backgroundColor: '#4f46e5',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 18,
+    borderRadius: 20,
+    gap: 10,
+    shadowColor: '#4f46e5',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  modernPrimaryBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  modernSecondaryBtn: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
   },
 });
 

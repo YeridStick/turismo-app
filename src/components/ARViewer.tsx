@@ -8,6 +8,9 @@ let ViroAmbientLight: any;
 let ViroARScene: any;
 let ViroARSceneNavigator: any;
 let ViroOmniLight: any;
+let ViroSpotLight: any;
+let ViroNode: any;
+let ViroQuad: any;
 
 if (isARSupported()) {
     const ViroModule = require('@reactvision/react-viro');
@@ -16,6 +19,9 @@ if (isARSupported()) {
     ViroARScene = ViroModule.ViroARScene;
     ViroARSceneNavigator = ViroModule.ViroARSceneNavigator;
     ViroOmniLight = ViroModule.ViroOmniLight;
+    ViroSpotLight = ViroModule.ViroSpotLight;
+    ViroNode = ViroModule.ViroNode;
+    ViroQuad = ViroModule.ViroQuad;
 }
 
 // URL del modelo de prueba
@@ -35,6 +41,8 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Posición inicial ajustada - Y en -0.3 para que esté a nivel del suelo
     const [position, setPosition] = useState<[number, number, number]>([0, -0.3, -1.2]);
     const [modelVisible, setModelVisible] = useState(true);
+
+    const objRef = useRef<any>(null);
 
     // Referencias para guardar el estado base durante los gestos
     const baseScale = useRef<[number, number, number]>([0.3, 0.3, 0.3]);
@@ -163,14 +171,42 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
         if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
 
         // Actualizamos la posición directamente
-        setPosition(dragToPos);
+        setPosition(dragToPos as [number, number, number]);
     };
 
     // Detectar cuando el modelo carga correctamente
-    const onModelLoadEnd = () => {
+    const onModelLoadEnd = async () => {
         setModelVisible(true);
         console.log('✓ Modelo cargado correctamente');
         onModelLoad?.();
+
+        // Auto-Scale Logic
+        if (objRef.current) {
+            try {
+                const boundingBox = await objRef.current.getBoundingBoxAsync();
+                if (boundingBox) {
+                    const width = boundingBox.maxX - boundingBox.minX;
+                    const height = boundingBox.maxY - boundingBox.minY;
+                    const depth = boundingBox.maxZ - boundingBox.minZ;
+
+                    const maxDim = Math.max(width, height, depth);
+                    // Standardize the max dimension to ~0.5 units
+                    if (maxDim > 0) {
+                        const targetSize = 0.5;
+                        const factor = targetSize / maxDim;
+                        // Avoid extreme scaling issues if bounding box is faulty
+                        if (factor > 0.001 && factor < 1000) {
+                            const newScale: [number, number, number] = [factor, factor, factor];
+                            setScale(newScale);
+                            baseScale.current = newScale;
+                            console.log(`Auto-escalado aplicado. Factor: ${factor}`);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log('No se pudo auto-escalar modelo', err);
+            }
+        }
     };
 
     const handleModelError = (error: any) => {
@@ -181,34 +217,56 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
 
     return (
         <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
-            {/* ILUMINACIÓN */}
-            <ViroAmbientLight color="#ffffff" intensity={1000} />
-            <ViroOmniLight color="#ffffff" intensity={800} position={[0, 5, 0]} />
-            <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
+            {/* ILUMINACIÓN MEJORADA CON SOMBRAS */}
+            <ViroAmbientLight color="#ffffff" intensity={300} />
+            <ViroSpotLight
+                innerAngle={5}
+                outerAngle={90}
+                direction={[0, -1, -0.2]}
+                position={[0, 4, 1]}
+                color="#ffffff"
+                castsShadow={true}
+                shadowMapSize={2048}
+                shadowNearZ={2}
+                shadowFarZ={5}
+                shadowOpacity={0.7}
+                intensity={1000}
+            />
 
-            {/* 
-                ESTRATEGIA DE GESTOS SIMPLIFICADA:
-                Aplicamos TODAS las transformaciones y gestos directamente al Viro3DObject.
-                Esto elimina conflictos de jerarquía y permite que los gestos multi-touch
-                (pinch y rotate) funcionen correctamente.
-            */}
+            {/* Agrupamos objeto y sombra en un ViroNode aplicando transformaciones aquí */}
             {modelVisible && (
-                <Viro3DObject
-                    source={{ uri: modelUrl }}
-                    type="GLB"
+                <ViroNode
                     position={position}
                     scale={scale}
                     rotation={rotation}
-                    onLoadStart={() => console.log('Iniciando carga del modelo...')}
-                    onLoadEnd={onModelLoadEnd}
-                    onError={handleModelError}
-
-                    // TODOS los gestos aplicados directamente al objeto
                     dragType="FixedToWorld"
                     onDrag={onDrag}
                     onPinch={onPinch}
                     onRotate={onRotate}
-                />
+                >
+                    <Viro3DObject
+                        ref={objRef}
+                        source={{ uri: modelUrl }}
+                        type="GLB"
+                        position={[0, 0, 0]}
+                        scale={[1, 1, 1]}
+                        rotation={[0, 0, 0]}
+                        onLoadStart={() => console.log('Iniciando carga del modelo...')}
+                        onLoadEnd={onModelLoadEnd}
+                        onError={handleModelError}
+                        lightReceivingBitMask={1}
+                        shadowCastingBitMask={1}
+                    />
+
+                    {/* Piso invisible para recibir sombras */}
+                    <ViroQuad
+                        rotation={[-90, 0, 0]}
+                        width={10}
+                        height={10}
+                        arShadowReceiver={true}
+                        lightReceivingBitMask={1}
+                    />
+                </ViroNode>
             )}
         </ViroARScene>
     );
