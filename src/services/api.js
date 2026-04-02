@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, API_TIMEOUT } from '../config/api.config';
+import { API_BASE_URL, API_TIMEOUT, ENDPOINTS } from '../config/api.config';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,43 +10,13 @@ const api = axios.create({
   },
 });
 
-const PROTECTED_PREFIXES = [
-  '/api/auth/refresh',
-  '/api/info/user',
-  '/api/users/me',
-  '/api/places/mine',
-  '/api/agencies/by-user',
-  '/api/agencies/dashboard',
-  '/api/agencies/users',
-  '/api/tools/geocode',
-  '/api/categories',
-  '/admin',
-  '/api/pruebas/places/', // feedback/checkin/reviews si están protegidos
-];
-
-const WRITE_METHODS = ['post', 'patch', 'put', 'delete'];
-
-const needsAuth = (config = {}) => {
-  const url = config?.url || '';
-  const method = (config?.method || 'get').toLowerCase();
-  if (
-    WRITE_METHODS.includes(method) &&
-    (url.startsWith('/api/places') || url.startsWith('/api/packages'))
-  ) {
-    return true;
-  }
-  return PROTECTED_PREFIXES.some((p) => url.startsWith(p));
-};
-
 // Interceptor para agregar el token a cada request
 api.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (token && needsAuth(config)) {
+      if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-      } else {
-        delete config.headers.Authorization;
       }
     } catch (error) {
       console.error('Error getting token:', error);
@@ -63,13 +33,23 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Token expirado o inválido
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
-      // Aquí podrías redirigir al login
     }
     return Promise.reject(error);
   }
 );
+
+// Named Exports for useHomeData and other components
+export const getPlaces = (params) => api.get(ENDPOINTS.PLACES_SEARCH, { params });
+export const getNearbyPlaces = (lat, lng, dist) => 
+  api.get(ENDPOINTS.PLACES_SEARCH, { params: { lat, lng, dist, all: false } });
+export const getPopularPlaces = () => 
+  api.get(ENDPOINTS.PLACES_SEARCH, { params: { limit: 10, sort: 'rating,desc' } });
+export const getTopPlaces = () => api.get(ENDPOINTS.PLACES_TOP);
+export const getPackages = () => api.get(ENDPOINTS.PACKAGES);
+export const getAgencies = () => api.get(ENDPOINTS.AGENCIES);
+export const getNearbyContext = (lat, lng) => 
+  api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, { params: { lat, lng } });
 
 export default api;
