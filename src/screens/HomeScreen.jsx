@@ -613,13 +613,18 @@ const HomeScreen = ({ navigation }) => {
       if (result.success) {
         setEmailVerifyStatus({ type: "success", message: "Correo enviado. Revisa tu bandeja de entrada." });
       } else {
-        setEmailVerifyStatus({ type: "error", message: result.error });
+        // Mejorar el mensaje de error si es un fallo de configuración (Brevo)
+        const errorMsg = result.error.includes("Brevo") 
+          ? "Error de configuración (Brevo): La API Key no es válida. Contacta a soporte."
+          : result.error;
+        setEmailVerifyStatus({ type: "error", message: errorMsg });
       }
     } catch (e) {
       setEmailVerifyStatus({ type: "error", message: "Algo salió mal. Inténtalo de nuevo." });
     } finally {
       setEmailVerifyLoading(false);
     }
+
   };
 
   const [verifyToken, setVerifyToken] = useState("");
@@ -2700,11 +2705,12 @@ const HomeScreen = ({ navigation }) => {
       statusBarTranslucent
       onRequestClose={() => setEmailVerifyVisible(false)}
     >
-      <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(15, 23, 42, 0.4)' }]}>
+      <View style={styles.modalBackdrop}>
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.verificationCard}
         >
+
           <View style={styles.verificationHeader}>
             <View style={styles.verificationIconBg}>
               <FontAwesome name="check-shield" size={20} color="#5B3CF0" />
@@ -5001,16 +5007,16 @@ const styles = StyleSheet.create({
   },
   verificationCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 24,
-    width: "90%",
-    maxWidth: 400,
+    borderRadius: 20,
+    width: "100%",
     shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
     overflow: "hidden",
   },
+
   verificationHeader: {
     backgroundColor: "#F8FAFC",
     padding: SPACING.lg,

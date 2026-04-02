@@ -188,17 +188,24 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    // 1. Limpiar estado local inmediatamente para respuesta instantánea
+    setUser(null);
+    setRoles([]);
+    
     try {
-      await api.post(ENDPOINTS.LOGOUT);
-    } catch (error) {
-      console.error('Error logging out:', error);
-    } finally {
+      // 2. Limpiar almacenamiento persistente
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
-      setUser(null);
-      setRoles([]);
+      
+      // 3. Notificar al backend en segundo plano (no bloqueante)
+      api.post(ENDPOINTS.LOGOUT).catch(err => 
+        console.error('Error logging out on server:', err.message)
+      );
+    } catch (error) {
+      console.error('Error during logout process:', error);
     }
   };
+
 
   const confirmRecovery = async ({ token, newPassword }) => {
     try {
