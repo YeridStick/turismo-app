@@ -1,4 +1,4 @@
-import { FontAwesome } from "@expo/vector-icons";
+import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
@@ -359,100 +359,40 @@ const Footer = () => {
     { name: "facebook", url: "#" },
     { name: "instagram", url: "#" },
     { name: "twitter", url: "#" },
-    { name: "youtube-play", url: "#" },
   ];
-  const legalLinks = ["Términos de Servicio", "Privacidad", "Cookies"];
 
   return (
-    <LinearGradient
-      colors={["#0B1021", "#111B38", "#0C1325"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.footer}
-    >
+    <View style={styles.footer}>
       <View style={styles.footerHeader}>
         <View style={styles.footerLogoBox}>
-          <FontAwesome name="globe" size={20} color={COLORS.white} />
+          <FontAwesome name="globe" size={16} color={COLORS.white} />
         </View>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.footerTitle}>Turismo Huila</Text>
-          <Text style={styles.footerSubtitle}>
-            Descubre la magia del Huila. Naturaleza, cultura y aventura en un
-            solo destino.
-          </Text>
+          <Text style={styles.footerSubtitle}>Neiva, Huila · Colombia</Text>
         </View>
-      </View>
-
-      <View style={styles.footerSocialRow}>
-        {socialIcons.map((icon) => (
-          <TouchableOpacity key={icon.name} style={styles.footerSocialButton}>
-            <FontAwesome name={icon.name} size={16} color={COLORS.white} />
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.footerColumns}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.footerHeading}>Contacto</Text>
-          <View style={styles.footerContactRow}>
-            <FontAwesome name="envelope" size={16} color="#7C8EEB" />
-            <View>
-              <Text style={styles.footerContactLabel}>Email</Text>
-              <Text style={styles.footerContactValue}>
-                info@turismohuila.com
-              </Text>
-            </View>
-          </View>
-          <View style={styles.footerContactRow}>
-            <FontAwesome name="phone" size={16} color="#7C8EEB" />
-            <View>
-              <Text style={styles.footerContactLabel}>Teléfono</Text>
-              <Text style={styles.footerContactValue}>+57 (8) 123 4567</Text>
-            </View>
-          </View>
-          <View style={styles.footerContactRow}>
-            <FontAwesome name="map-marker" size={16} color="#7C8EEB" />
-            <View>
-              <Text style={styles.footerContactLabel}>Ubicación</Text>
-              <Text style={styles.footerContactValue}>
-                Neiva, Huila, Colombia
-              </Text>
-            </View>
-          </View>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.footerHeading}>Más información</Text>
-          <Text
-            style={styles.footerLink}
-            onPress={() =>
-              Linking.openURL("https://www.openstreetmap.org/copyright")
-            }
-          >
-            Map data © OpenStreetMap contributors
-          </Text>
-          <Text
-            style={styles.footerLink}
-            onPress={() => Linking.openURL("https://leafletjs.com/")}
-          >
-            Mapa con Leaflet
-          </Text>
+        <View style={styles.footerSocialRow}>
+          {socialIcons.map((icon) => (
+            <TouchableOpacity key={icon.name} style={styles.footerSocialButton}>
+              <FontAwesome name={icon.name} size={14} color={COLORS.white} />
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
       <View style={styles.footerDivider} />
+
       <View style={styles.footerBottomRow}>
         <Text style={styles.footerBottomText}>
-          © 2025 Turismo Huila. Todos los derechos reservados.
+          © 2025 Turismo Huila
         </Text>
         <View style={styles.footerLegalRow}>
-          {legalLinks.map((item) => (
-            <Text key={item} style={styles.footerLegalText}>
-              {item}
-            </Text>
-          ))}
+          <Text style={styles.footerLegalText}>Términos</Text>
+          <Text style={styles.footerLegalText}>·</Text>
+          <Text style={styles.footerLegalText}>Privacidad</Text>
         </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -465,7 +405,15 @@ const HomeScreen = ({ navigation }) => {
   const detailImageHeight = windowHeight;
   const sidePanelWidth = Math.min(windowWidth * 0.78, 320);
   const sidePanelEdgeArea = 28;
-  const { user, roles, logout } = useAuth();
+  const { user, roles, logout, requestEmailValidation, verifyEmailToken } = useAuth();
+  
+  useEffect(() => {
+    if (user) {
+      console.log("[User] Logged in:", JSON.stringify(user, null, 2));
+    }
+  }, [user]);
+
+
 
   const [places, setPlaces] = useState([]);
   const [nearby, setNearby] = useState([]);
@@ -564,6 +512,7 @@ const HomeScreen = ({ navigation }) => {
     loadPackages();
     loadAgencies();
     loadTopPlaces();
+    loadNearby();   // Fix: carga cercanos en el primer render
   }, []);
 
   useEffect(() => {
@@ -655,10 +604,56 @@ const HomeScreen = ({ navigation }) => {
     }
   }, [distanceKm, selectedCategory, showAllNearby]);
 
+  const handleRequestVerification = async () => {
+    if (!user?.email) return;
+    setEmailVerifyLoading(true);
+    setEmailVerifyStatus(null);
+    try {
+      const result = await requestEmailValidation(user.email);
+      if (result.success) {
+        setEmailVerifyStatus({ type: "success", message: "Correo enviado. Revisa tu bandeja de entrada." });
+      } else {
+        setEmailVerifyStatus({ type: "error", message: result.error });
+      }
+    } catch (e) {
+      setEmailVerifyStatus({ type: "error", message: "Algo salió mal. Inténtalo de nuevo." });
+    } finally {
+      setEmailVerifyLoading(false);
+    }
+  };
+
+  const [verifyToken, setVerifyToken] = useState("");
+  const handleConfirmVerificationToken = async () => {
+    if (!verifyToken) {
+      setEmailVerifyStatus({ type: "error", message: "Por favor, ingresa el código." });
+      return;
+    }
+    setEmailVerifyLoading(true);
+    setEmailVerifyStatus(null);
+    try {
+      const result = await verifyEmailToken(verifyToken);
+      if (result.success) {
+        setEmailVerifyStatus({ type: "success", message: "¡Correo verificado exitosamente!" });
+        setTimeout(() => {
+          setEmailVerifyVisible(false);
+          setVerifyToken("");
+          setEmailVerifyStatus(null);
+        }, 1500);
+      } else {
+        setEmailVerifyStatus({ type: "error", message: result.error });
+      }
+    } catch (e) {
+      setEmailVerifyStatus({ type: "error", message: "Error al validar el token." });
+    } finally {
+      setEmailVerifyLoading(false);
+    }
+  };
+
   const handleMapTouchStart = useCallback(
     () => setIsInteractingWithMap(true),
     [],
   );
+
   const handleMapTouchEnd = useCallback(
     () => setIsInteractingWithMap(false),
     [],
@@ -1368,14 +1363,10 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const openDetail = useCallback(
-    async (item, sourceKey = "all") => {
-      setDetailVisible(true);
-      setImageIndex(0);
-      setDetailSource(sourceKey);
-      closeDetailInfo();
-      await loadPlaceDetail(item);
+    (item) => {
+      navigation.navigate("PlaceDetail", { place: item });
     },
-    [closeDetailInfo, loadPlaceDetail],
+    [navigation],
   );
 
   const goToNextPlace = useCallback(() => {
@@ -1583,7 +1574,7 @@ const HomeScreen = ({ navigation }) => {
                 transition={200}
               />
               <LinearGradient
-                colors={["rgba(0,0,0,0.01)", "rgba(0,0,0,0.5)"]}
+                colors={["rgba(0,0,0,0.01)", "rgba(0,0,0,0.55)"]}
                 style={styles.packageImageOverlay}
               />
             </>
@@ -1594,96 +1585,66 @@ const HomeScreen = ({ navigation }) => {
               end={{ x: 1, y: 1 }}
               style={[styles.packageImage, styles.packageImageFallback]}
             >
-              <FontAwesome name="suitcase" size={24} color="#fff" />
-              <Text style={styles.packageFallbackText}>
-                {pkg.agencyName || "Paquete turístico"}
-              </Text>
+              <FontAwesome name="suitcase" size={22} color="rgba(255,255,255,0.7)" />
             </LinearGradient>
           )}
-          <View style={styles.packageBadgeRow}>
-            {pkg.discount ? (
-              <View style={styles.packageDiscount}>
-                <Text style={styles.packageDiscountText}>{pkg.discount}</Text>
-              </View>
-            ) : null}
-            {pkg.tag ? (
-              <View style={styles.packageTag}>
-                <Text style={styles.packageTagText}>{pkg.tag}</Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.packageLocationRow}>
-            {cityTags.map((tag, idx) => (
-              <View
-                key={`${pkg.id}-city-${idx}`}
-                style={styles.packageLocationChip}
-              >
-                <FontAwesome name="map-marker" size={10} color="#fff" />
-                <Text style={styles.packageLocationText}>{tag}</Text>
-              </View>
-            ))}
-          </View>
+          {cityTags.length > 0 && (
+            <View style={styles.packageLocationRow}>
+              {cityTags.slice(0, 2).map((tag, idx) => (
+                <View key={`${pkg.id}-city-${idx}`} style={styles.packageLocationChip}>
+                  <FontAwesome name="map-marker" size={9} color="#fff" />
+                  <Text style={styles.packageLocationText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.packageBody}>
-          <View style={{ marginBottom: 4 }}>
-            <Text style={styles.packageTitle} numberOfLines={2}>{pkg.title}</Text>
-          </View>
+          <Text style={styles.packageTitle} numberOfLines={2}>{pkg.title}</Text>
 
           <View style={styles.packageRatingRow}>
-            <FontAwesome name="star" size={14} color="#F59E0B" />
+            <FontAwesome name="star" size={12} color="#F59E0B" />
             <Text style={styles.packageRatingText}>{pkg.rating ?? 4.8}</Text>
-            <Text style={styles.packageReviewsText}>({pkg.reviews ?? Math.floor(Math.random() * 50 + 10)} opiniones)</Text>
+            {pkg.agencyName ? (
+              <Text style={styles.packageAgency} numberOfLines={1}>
+                · {pkg.agencyName}
+              </Text>
+            ) : null}
           </View>
-
-          {pkg.agencyName ? (
-            <Text style={styles.packageAgency}>Por {pkg.agencyName}</Text>
-          ) : null}
-
-          <Text style={styles.packageSubtitle} numberOfLines={2}>{pkg.description}</Text>
 
           <View style={styles.packageMetaCleanRow}>
             <View style={styles.packageMetaCleanItem}>
-              <FontAwesome name="clock-o" size={14} color="#64748B" />
+              <FontAwesome name="clock-o" size={12} color="#94A3B8" />
               <Text style={styles.packageMetaCleanText}>{pkg.days}D / {pkg.nights}N</Text>
             </View>
             <View style={styles.packageMetaCleanItem}>
-              <FontAwesome name="user" size={14} color="#64748B" />
+              <FontAwesome name="user" size={12} color="#94A3B8" />
               <Text style={styles.packageMetaCleanText}>{pkg.people}</Text>
             </View>
           </View>
 
-          <View style={styles.packageIncludesClean}>
-            {includeList.map((item, idx) => (
-              <View key={`${pkg.id}-inc-${idx}`} style={styles.packageIncludeCleanRow}>
-                <View style={styles.packageIncludeBullet} />
-                <Text style={styles.packageIncludeCleanText} numberOfLines={1}>{item}</Text>
-              </View>
-            ))}
-            {remaining > 0 && (
-              <Text style={[styles.packageIncludeCleanText, { color: '#94A3B8', marginTop: 2 }]}>+{remaining} más incluidos</Text>
-            )}
-            {!includeList.length && (
-              <Text style={[styles.packageIncludeCleanText, { color: '#94A3B8' }]}>Detalles por confirmar</Text>
-            )}
-          </View>
-
-          <View style={styles.packageDivider} />
+          {includeList.length > 0 && (
+            <View style={styles.packageIncludesClean}>
+              {includeList.map((item, idx) => (
+                <View key={`${pkg.id}-inc-${idx}`} style={styles.packageIncludeCleanRow}>
+                  <View style={styles.packageIncludeBullet} />
+                  <Text style={styles.packageIncludeCleanText} numberOfLines={1}>{item}</Text>
+                </View>
+              ))}
+              {remaining > 0 && (
+                <Text style={[styles.packageIncludeCleanText, { color: '#94A3B8' }]}>+{remaining} más</Text>
+              )}
+            </View>
+          )}
 
           <View style={styles.packageFooter}>
             <View style={styles.packagePriceCol}>
-              <Text style={styles.packagePriceNote}>Precio por persona</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
-              </View>
-              {pkg.originalPrice ? (
-                <Text style={styles.packagePriceOriginal}>{formatPrice(pkg.originalPrice)}</Text>
-              ) : null}
+              <Text style={styles.packagePriceNote}>por persona</Text>
+              <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
             </View>
-
             <TouchableOpacity style={styles.packageButtonClean} onPress={() => openPayment(pkg)}>
               <Text style={styles.packageButtonCleanText}>Reservar</Text>
-              <FontAwesome name="arrow-right" size={12} color="#FFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -2433,6 +2394,7 @@ const HomeScreen = ({ navigation }) => {
     if (navigation?.navigate) {
       navigation.navigate("ARView", {
         modelUrl: arLaunchUrl,
+        placeName: selectedPlace?.name || 'Modelo 3D',
       });
     }
   };
@@ -2553,46 +2515,33 @@ const HomeScreen = ({ navigation }) => {
 
   const ProfileModal = () => {
     if (!user) return null;
+    
     const avatar =
       user.urlAvatar ||
       user.avatar ||
-      "https://api.dicebear.com/7.x/miniavs/svg?seed=turismo";
+      "https://api.dicebear.com/7.x/miniavs/svg?seed=" + (user.email || "turismo");
+    
+    const firstName = (user.fullName || "").split(" ")[0] || user.email || "Usuario";
+    const fullDisplayName = user.fullName || user.email || "Usuario";
 
     const handleRoutePress = (route) => {
       setProfileVisible(false);
       setProfileMenuVisible(false);
-      setEmailVerifyVisible(false);
-      setEmailVerifyStatus(null);
-      if (navigation?.navigate) {
-        navigation.navigate(route);
-      }
+      if (navigation?.navigate) navigation.navigate(route);
     };
 
-    const handleSendVerificationEmail = async () => {
-      if (!user?.email || emailVerifyLoading) return;
-      setEmailVerifyLoading(true);
-      setEmailVerifyStatus(null);
+    const formatDate = (dateString) => {
+      if (!dateString) return "No disponible";
       try {
-        const response = await api.post("/api/auth/email/request", {
-          email: user.email,
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return "Fecha inválida";
+        return date.toLocaleDateString('es-CO', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
         });
-        const payload = response.data?.data || response.data || null;
-        setEmailVerifyStatus({
-          type: "success",
-          message:
-            payload?.message ||
-            response.data?.message ||
-            "Correo de verificación enviado",
-        });
-      } catch (error) {
-        setEmailVerifyStatus({
-          type: "error",
-          message:
-            error.response?.data?.message ||
-            "No se pudo enviar el correo de verificación",
-        });
-      } finally {
-        setEmailVerifyLoading(false);
+      } catch (e) {
+        return "Error de formato";
       }
     };
 
@@ -2601,177 +2550,140 @@ const HomeScreen = ({ navigation }) => {
         visible={profileVisible}
         animationType="slide"
         transparent
+        statusBarTranslucent
         onRequestClose={() => {
           setProfileVisible(false);
           setProfileMenuVisible(false);
-          setEmailVerifyVisible(false);
-          setEmailVerifyStatus(null);
         }}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.profileCard}>
+            {/* Header */}
             <View style={styles.profileHeaderRow}>
               <View style={styles.profileHeaderTitle}>
-                <FontAwesome name="user" size={18} color="#5B3CF0" />
-                <Text style={styles.profileTitleText}>Mi Perfil</Text>
+                <FontAwesome name="user-circle" size={20} color="#5B3CF0" />
+                <Text style={styles.profileTitleText}>Mi perfil</Text>
               </View>
               <TouchableOpacity
                 onPress={() => {
                   setProfileVisible(false);
                   setProfileMenuVisible(false);
-                  setEmailVerifyVisible(false);
-                  setEmailVerifyStatus(null);
                 }}
+                style={styles.profileCloseBtn}
               >
-                <Text style={styles.closeText}>✕</Text>
+                <FontAwesome name="times" size={16} color="#94A3B8" />
               </TouchableOpacity>
             </View>
-            <View style={styles.profileAvatarWrapper}>
-              <Image source={{ uri: avatar }} style={styles.profileAvatar} />
-              <Text style={styles.profileName}>
-                {user.fullName || "Visitante"}
-              </Text>
-              <Text style={styles.profileEmail}>{user.email}</Text>
-            </View>
-            <View style={styles.profileInfoGroup}>
-              <View style={styles.profileItem}>
-                <FontAwesome name="id-card" size={16} color="#5B3CF0" />
-                <Text style={styles.profileItemText}>
-                  {(user.identificationType || "Documento") +
-                    (user.identificationNumber
-                      ? ` ${user.identificationNumber}`
-                      : "")}
-                </Text>
-              </View>
-              <View style={styles.profileItem}>
-                <FontAwesome name="calendar" size={16} color="#5B3CF0" />
-                <Text style={styles.profileItemText}>
-                  Miembro desde{" "}
-                  {user.createdAt
-                    ? new Date(user.createdAt).toLocaleDateString()
-                    : "—"}
-                </Text>
-              </View>
-              <View style={styles.profileItem}>
-                <FontAwesome name="link" size={16} color="#5B3CF0" />
-                <Text style={styles.profileItemText} numberOfLines={1}>
-                  {avatar}
-                </Text>
-              </View>
-            </View>
-            {user.emailVerified === false ? (
-              <View style={styles.profileVerifyBlock}>
-                <TouchableOpacity
-                  style={styles.profileVerifyToggle}
-                  onPress={() => setEmailVerifyVisible((prev) => !prev)}
-                >
-                  <Text style={styles.profileVerifyToggleText}>
-                    Verificar correo
-                  </Text>
-                  <FontAwesome
-                    name={emailVerifyVisible ? "chevron-up" : "chevron-down"}
-                    size={12}
-                    color="#5B3CF0"
-                  />
-                </TouchableOpacity>
-                {emailVerifyVisible ? (
-                  <View style={styles.profileVerifyPanel}>
-                    <Text style={styles.profileVerifyText}>
-                      Tu correo aún no está verificado. Envía un correo de
-                      verificación para continuar.
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.profileVerifyButton,
-                        emailVerifyLoading && styles.profileVerifyButtonDisabled,
-                      ]}
-                      onPress={handleSendVerificationEmail}
-                      disabled={emailVerifyLoading}
-                    >
-                      {emailVerifyLoading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.profileVerifyButtonText}>
-                          Enviar correo
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                    {emailVerifyStatus ? (
-                      <Text
-                        style={[
-                          styles.profileVerifyStatus,
-                          emailVerifyStatus.type === "error"
-                            ? styles.profileVerifyStatusError
-                            : styles.profileVerifyStatusSuccess,
-                        ]}
-                      >
-                        {emailVerifyStatus.message}
-                      </Text>
-                    ) : null}
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.md }}>
+              
+              {/* ALERTA DE VERIFICACION */}
+              {user.emailVerified === false && (
+                <View style={styles.unverifiedAlert}>
+                  <View style={styles.unverifiedAlertContent}>
+                    <View style={styles.unverifiedAlertIcon}>
+                      <FontAwesome name="envelope-o" size={16} color="#B45309" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.unverifiedAlertTitle}>Correo no verificado</Text>
+                      <Text style={styles.unverifiedAlertText}>Tu cuenta tiene funciones limitadas hasta que confirmes tu email.</Text>
+                    </View>
                   </View>
-                ) : null}
-              </View>
-            ) : null}
-            <View style={styles.profileMenuWrapper}>
-              <TouchableOpacity
-                style={styles.profileMenuToggle}
-                onPress={() => setProfileMenuVisible((prev) => !prev)}
-              >
-                <Text style={styles.profileMenuToggleText}>
-                  Rutas permitidas
-                </Text>
-                <FontAwesome
-                  name={profileMenuVisible ? "chevron-up" : "chevron-down"}
-                  size={12}
-                  color="#5B3CF0"
+                  <TouchableOpacity 
+                    style={styles.unverifiedAlertButton}
+                    onPress={() => {
+                      setProfileVisible(false);
+                      setEmailVerifyVisible(true);
+                    }}
+                  >
+                    <Text style={styles.unverifiedAlertButtonText}>Verificar ahora</Text>
+                    <FontAwesome name="arrow-right" size={10} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Avatar + info */}
+              <View style={styles.profileAvatarWrapper}>
+                <Image 
+                  source={{ uri: avatar }} 
+                  style={styles.profileAvatar}
+                  contentFit="cover"
+                  transition={200}
                 />
-              </TouchableOpacity>
-              {profileMenuVisible ? (
-                <View style={styles.profileMenuList}>
-                  {allowedRoutes.length === 0 ? (
-                    <Text style={styles.profileMenuEmpty}>
-                      No tienes rutas adicionales habilitadas.
-                    </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileName} numberOfLines={1}>{fullDisplayName}</Text>
+                  <Text style={styles.profileEmail} numberOfLines={1}>{user.email}</Text>
+                  {user.emailVerified === false ? (
+                    <View style={styles.profileUnverifiedBadge}>
+                      <FontAwesome name="exclamation-circle" size={12} color="#D97706" />
+                      <Text style={styles.profileUnverifiedText}>Correo sin verificar</Text>
+                    </View>
                   ) : (
-                    allowedRoutes.map((route) => (
-                      <TouchableOpacity
-                        key={route.id}
-                        style={styles.profileMenuItem}
-                        onPress={() => handleRoutePress(route.route)}
-                      >
-                        <View>
-                          <Text style={styles.profileMenuItemTitle}>
-                            {route.label}
-                          </Text>
-                          <Text style={styles.profileMenuItemDesc}>
-                            {route.description}
-                          </Text>
-                        </View>
-                        <FontAwesome
-                          name="angle-right"
-                          size={14}
-                          color="#5B3CF0"
-                        />
-                      </TouchableOpacity>
-                    ))
+                    <View style={styles.profileUnverifiedBadge}>
+                      <FontAwesome name="check-circle" size={12} color="#10B981" />
+                      <Text style={[styles.profileUnverifiedText, { color: "#10B981" }]}>Verificado</Text>
+                    </View>
                   )}
                 </View>
-              ) : null}
-            </View>
+              </View>
+
+              {/* Info items */}
+              <View style={styles.profileInfoGroup}>
+                <Text style={styles.profileItemLabel}>Información personal</Text>
+                
+                <View style={styles.profileItem}>
+                  <FontAwesome name="id-card" size={13} color="#5B3CF0" style={{ width: 20 }} />
+                  <Text style={styles.profileItemText}>
+                    <Text style={{ fontWeight: 'bold' }}>Documento: </Text>
+                    {user.identificationType || 'CC'} {user.identificationNumber || 'No registrado'}
+                  </Text>
+                </View>
+
+
+                <View style={styles.profileItem}>
+                  <FontAwesome name="calendar" size={13} color="#5B3CF0" style={{ width: 20 }} />
+                  <Text style={styles.profileItemText}>
+                    <Text style={{ fontWeight: 'bold' }}>Miembro desde: </Text>
+                    {formatDate(user.createdAt)}
+                  </Text>
+                </View>
+              </View>
+
+
+              {/* Rutas accesibles */}
+              {allowedRoutes && allowedRoutes.length > 0 && (
+                <View style={styles.profileInfoGroup}>
+                  <Text style={styles.profileItemLabel}>Accesos y herramientas</Text>
+                  {allowedRoutes.map((route) => (
+                    <TouchableOpacity
+                      key={route.id}
+                      style={styles.profileRouteItem}
+                      onPress={() => handleRoutePress(route.route)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.profileRouteTitle}>{route.label}</Text>
+                        <Text style={styles.profileRouteDesc}>{route.description}</Text>
+                      </View>
+                      <FontAwesome name="angle-right" size={16} color="#5B3CF0" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Acciones */}
             <View style={styles.profileActions}>
               <TouchableOpacity
                 style={styles.modalSecondary}
                 onPress={() => {
                   setProfileVisible(false);
                   setProfileMenuVisible(false);
-                  setEmailVerifyVisible(false);
-                  setEmailVerifyStatus(null);
                 }}
               >
                 <Text style={styles.modalSecondaryText}>Cerrar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalPrimary} onPress={logout}>
-                <Text style={styles.modalPrimaryText}>Cerrar Sesión</Text>
+                <Text style={styles.modalPrimaryText}>Cerrar sesión</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2779,6 +2691,104 @@ const HomeScreen = ({ navigation }) => {
       </Modal>
     );
   };
+
+  const EmailVerificationModal = () => (
+    <Modal
+      visible={emailVerifyVisible}
+      animationType="fade"
+      transparent
+      statusBarTranslucent
+      onRequestClose={() => setEmailVerifyVisible(false)}
+    >
+      <View style={[styles.modalBackdrop, { backgroundColor: 'rgba(15, 23, 42, 0.4)' }]}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.verificationCard}
+        >
+          <View style={styles.verificationHeader}>
+            <View style={styles.verificationIconBg}>
+              <FontAwesome name="check-shield" size={20} color="#5B3CF0" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verificationTitle}>Verificar Correo</Text>
+              <Text style={styles.verificationSubtitle}>{user?.email}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setEmailVerifyVisible(false)} style={styles.closeBtnSmall}>
+              <FontAwesome name="times" size={14} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.verificationBody} keyboardShouldPersistTaps="handled">
+            <Text style={styles.verificationText}>
+              Para mayor seguridad, necesitamos confirmar que eres el dueño de esta cuenta.
+            </Text>
+
+            <View style={styles.verificationActionRow}>
+              <TouchableOpacity 
+                style={[styles.verificationRequestBtn, emailVerifyLoading && { opacity: 0.7 }]}
+                onPress={handleRequestVerification}
+                disabled={emailVerifyLoading}
+              >
+                <FontAwesome name="paper-plane" size={12} color="#5B3CF0" />
+                <Text style={styles.verificationRequestBtnText}>
+                  {emailVerifyLoading ? "Enviando..." : "Solicitar código"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.tokenInputGroup}>
+              <Text style={styles.tokenInputLabel}>Ingresa el código / token:</Text>
+              <TextInput
+                style={styles.tokenInput}
+                placeholder="Ej: aWdlPmPi..."
+                value={verifyToken}
+                onChangeText={setVerifyToken}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {emailVerifyStatus && (
+              <View style={[
+                styles.verificationStatusBox,
+                emailVerifyStatus.type === "error" ? styles.statusBoxError : styles.statusBoxSuccess
+              ]}>
+                <FontAwesome 
+                  name={emailVerifyStatus.type === "error" ? "exclamation-circle" : "check-circle"} 
+                  size={14} 
+                  color={emailVerifyStatus.type === "error" ? "#ef4444" : "#10b981"} 
+                />
+                <Text style={[
+                  styles.verificationStatusText,
+                  emailVerifyStatus.type === "error" ? { color: "#ef4444" } : { color: "#10b981" }
+                ]}>
+                  {emailVerifyStatus.message}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.verificationFooter}>
+            <TouchableOpacity 
+              style={styles.verifyModalCloseBtn} 
+              onPress={() => setEmailVerifyVisible(false)}
+            >
+              <Text style={styles.verifyModalCloseBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.verifyModalConfirmBtn}
+              onPress={handleConfirmVerificationToken}
+              disabled={emailVerifyLoading || !verifyToken}
+            >
+              <Text style={styles.verifyModalConfirmBtnText}>Verificar</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+
+
 
   return (
     <KeyboardAvoidingView
@@ -2799,24 +2809,12 @@ const HomeScreen = ({ navigation }) => {
         contentInsetAdjustmentBehavior="never"
       >
         <View style={styles.pageHeader}>
-          <ImageBackground
-            source={{ uri: HERO_IMAGE }}
-            style={styles.heroBackground}
-            imageStyle={styles.heroImage}
+          <LinearGradient
+            colors={["#080c1e", "#0f172a", "#1a2240"]}
+            style={styles.heroOverlay}
           >
-            <LinearGradient
-              colors={[
-                "rgba(46, 24, 103, 0.75)",
-                "rgba(23, 102, 172, 0.55)",
-                "rgba(17, 49, 93, 0.8)",
-              ]}
-              style={styles.heroOverlay}
-            >
               <View style={styles.topBar}>
-                <View>
-                  <Text style={styles.locationLabel}>Explora</Text>
-                  <Text style={styles.locationValue}>Cerca de ti</Text>
-                </View>
+                <Text style={styles.locationValue}>Cerca de ti</Text>
                 {user ? (
                   <TouchableOpacity
                     style={styles.profileButton}
@@ -2825,43 +2823,46 @@ const HomeScreen = ({ navigation }) => {
                       setProfileVisible(true);
                     }}
                   >
-                    <FontAwesome name="user" size={16} color="#fff" />
-                    <View>
-                      <Text style={styles.profileButtonLabel}>Hola,</Text>
-                      <Text style={styles.profileButtonName} numberOfLines={1}>
-                        {user.fullName || user.email}
-                      </Text>
+                    <View style={styles.profileAvatarSmall}>
+                      {user.urlAvatar || user.avatar ? (
+                        <Image 
+                          source={{ uri: user.urlAvatar || user.avatar }} 
+                          style={{ width: '100%', height: '100%', borderRadius: 14 }} 
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <FontAwesome name="user" size={14} color="#fff" />
+                      )}
                     </View>
+                    <Text style={styles.profileButtonName} numberOfLines={1}>
+                      {(user.fullName || user.email || "Usuario").split(" ")[0]}
+                    </Text>
+
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={styles.loginButton}
                     onPress={() => navigation.navigate("Auth")}
                   >
-                    <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+                    <Text style={styles.loginButtonText}>Iniciar sesión</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
-              <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeText}>
-                  ⚡ Más de 10,000 viajeros felices
-                </Text>
-              </View>
+              <Text style={styles.heroBadgeText}>✦ +10 mil viajeros felices</Text>
 
-              <Text style={styles.heroTitle}>Descubre la magia del Huila</Text>
+              <Text style={styles.heroTitle}>Descubre{"\n"}el Huila</Text>
               <Text style={styles.heroSubtitle}>
-                Explora paisajes únicos, cultura ancestral y experiencias
-                inolvidables en el corazón de Colombia.
+                Paisajes únicos, cultura ancestral y aventura.
               </Text>
 
               <View style={styles.searchCard}>
                 <View style={styles.searchRow}>
                   <View style={styles.searchInputWrapper}>
-                    <FontAwesome name="map-marker" size={18} color="#7B5BFF" />
+                    <FontAwesome name="search" size={15} color="#8C8FA5" />
                     <TextInput
                       placeholder="¿A dónde quieres ir?"
-                      placeholderTextColor="#8C8FA5"
+                      placeholderTextColor="#9CA3AF"
                       value={query}
                       onChangeText={setQuery}
                       onSubmitEditing={performSearch}
@@ -2875,13 +2876,14 @@ const HomeScreen = ({ navigation }) => {
                     style={styles.filterButton}
                     onPress={() => setFiltersVisible(true)}
                   >
+                    <FontAwesome name="sliders" size={13} color="#5B3CF0" />
                     <Text style={styles.filterButtonText}>Filtros</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.searchButton}
                     onPress={performSearch}
                   >
-                    <Text style={styles.searchButtonText}>Descubrir</Text>
+                    <Text style={styles.searchButtonText}>Buscar</Text>
                   </TouchableOpacity>
                 </View>
                 {searchSuggestions.length ? (
@@ -2896,46 +2898,28 @@ const HomeScreen = ({ navigation }) => {
                         }}
                       >
                         <View style={styles.searchSuggestionRow}>
-                          <FontAwesome
-                            name="map-marker"
-                            size={14}
-                            color="#5B3CF0"
-                          />
-                          <Text
-                            style={styles.searchSuggestionText}
-                            numberOfLines={1}
-                          >
+                          <FontAwesome name="map-marker" size={14} color="#5B3CF0" />
+                          <Text style={styles.searchSuggestionText} numberOfLines={1}>
                             {item.name || "Lugar sin nombre"}
                           </Text>
                         </View>
-                        <FontAwesome
-                          name="chevron-right"
-                          size={12}
-                          color="#94a3b8"
-                        />
+                        <FontAwesome name="chevron-right" size={12} color="#94a3b8" />
                       </TouchableOpacity>
                     ))}
                   </View>
                 ) : null}
               </View>
-            </LinearGradient>
-          </ImageBackground>
+          </LinearGradient>
         </View>
+
 
         <View style={styles.section}>
           <View style={styles.sectionIntro}>
-            <Text style={styles.sectionPill}>Destinos Populares</Text>
-            <Text style={styles.sectionHeroTitle}>
-              Explora Lugares Increíbles
-            </Text>
-            <Text style={styles.sectionDescription}>
-              Descubre los destinos más fascinantes del Huila, desde maravillas
-              naturales hasta tesoros culturales.
-            </Text>
+            <View style={styles.sectionTitleAccent} />
+            <Text style={styles.sectionHeroTitle}>Cerca de ti</Text>
           </View>
 
           <View style={styles.categoriesSection}>
-            <Text style={styles.categoriesLabel}>Categorías</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -2950,7 +2934,6 @@ const HomeScreen = ({ navigation }) => {
                   ]}
                   onPress={() => {
                     setShowAllNearby(false);
-                    // Use InteractionManager to render visual change first before mounting complex list
                     InteractionManager.runAfterInteractions(() => {
                       setSelectedCategory(chip.id);
                     });
@@ -3026,19 +3009,11 @@ const HomeScreen = ({ navigation }) => {
             <View style={{ marginTop: SPACING.xl }}>
               <Text
                 style={[
-                  styles.sectionPillSecondary,
-                  { marginBottom: SPACING.sm, marginHorizontal: SPACING.lg },
+                  styles.sectionHeroTitle,
+                  { fontSize: 18, marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
                 ]}
               >
                 Sugerencias
-              </Text>
-              <Text
-                style={[
-                  styles.sectionHeroTitle,
-                  { fontSize: 20, marginHorizontal: SPACING.lg, marginBottom: SPACING.md },
-                ]}
-              >
-                Top Destinos Huila
               </Text>
               <FlatList
                 horizontal
@@ -3062,13 +3037,9 @@ const HomeScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <View style={styles.sectionAllIntro}>
-            <Text style={styles.sectionPillSecondary}>Exploración</Text>
+            <View style={styles.sectionTitleAccent} />
             <Text style={styles.sectionHeroTitle}>
-              Encuentra Tu Próxima Aventura
-            </Text>
-            <Text style={styles.sectionDescription}>
-              Personaliza tu búsqueda con filtros interactivos y cambia de lugar
-              en el mapa con un solo clic.
+              Tu próxima aventura
             </Text>
           </View>
 
@@ -3161,13 +3132,11 @@ const HomeScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <View style={styles.sectionIntro}>
-            <Text style={styles.sectionPill}>Ofertas Especiales</Text>
-            <Text style={styles.sectionHeroTitle}>Paquetes Turísticos</Text>
-            <Text style={styles.sectionDescription}>
-              Descubre nuestras experiencias diseñadas para que vivas lo mejor
-              del Huila. Incluyen alojamiento, transporte, alimentación y guías
-              especializados.
-            </Text>
+            <View style={styles.sectionTitleAccent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionPill}>Ofertas</Text>
+              <Text style={styles.sectionHeroTitle}>Paquetes turísticos</Text>
+            </View>
           </View>
 
           {loadingPackages ? (
@@ -3208,12 +3177,13 @@ const HomeScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <View style={styles.sectionIntro}>
-            <Text style={styles.sectionPillSecondary}>Agencias</Text>
-            <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
-            <Text style={styles.sectionDescription}>
-              Encuentra agencias confiables y conoce su información antes de
-              reservar.
-            </Text>
+            <View style={styles.sectionTitleAccent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionHeroTitle}>Agencias</Text>
+              <Text style={styles.sectionDescription}>
+                Turismo local de confianza.
+              </Text>
+            </View>
           </View>
 
           {loadingAgencies ? (
@@ -3276,6 +3246,8 @@ const HomeScreen = ({ navigation }) => {
       />
 
       <ProfileModal />
+      <EmailVerificationModal />
+
 
       <Modal
         visible={agencyVisible}
@@ -3349,33 +3321,65 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* Modal filtros */}
       <Modal
         visible={filtersVisible}
         animationType="slide"
         transparent
         statusBarTranslucent
-        presentationStyle="overFullScreen"
         onRequestClose={() => setFiltersVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <View style={styles.filterBottomSheetOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={() => setFiltersVisible(false)} />
+          <View style={styles.filterBottomSheet}>
+            <View style={styles.bottomSheetIndicator} />
             <ScrollView
               contentContainerStyle={styles.modalScroll}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.modalTitle}>Configura tu búsqueda</Text>
-              <Text style={[styles.modalSubtitle, { marginTop: SPACING.xs }]}>
-                Distancia
-              </Text>
-              <View style={styles.quickRow}>
-                {distanceOptions.map((km) => (
+              <View style={styles.filterModalHeader}>
+                <Text style={styles.modalTitle}>Filtros</Text>
+                <TouchableOpacity onPress={() => setFiltersVisible(false)}>
+                  <Ionicons name="close" size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>Radio de búsqueda</Text>
+              
+              <View style={styles.distanceControlRow}>
+                <TouchableOpacity
+                  style={styles.distanceStepButton}
+                  onPress={() => {
+                    setShowAllNearby(false);
+                    setDistanceKm(prev => Math.max(1, prev - 5));
+                  }}
+                  disabled={distanceKm <= 1}
+                >
+                  <FontAwesome name="minus" size={14} color={distanceKm > 1 ? "#5B3CF0" : "#CBD5E1"} />
+                </TouchableOpacity>
+                
+                <View style={styles.distanceValueBox}>
+                  <Text style={styles.distanceValueText}>{distanceKm.toFixed(1)} km</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.distanceStepButton}
+                  onPress={() => {
+                    setShowAllNearby(false);
+                    setDistanceKm(prev => prev + 5);
+                  }}
+                >
+                  <FontAwesome name="plus" size={14} color="#5B3CF0" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.quickDistanceRow}>
+                {[5, 10, 20, 50].map((km) => (
                   <TouchableOpacity
                     key={km}
                     style={[
-                      styles.quickChip,
-                      distanceKm === km && styles.quickChipActive,
+                      styles.distanceChip,
+                      distanceKm === km && styles.distanceChipActive,
                     ]}
                     onPress={() => {
                       setShowAllNearby(false);
@@ -3384,107 +3388,35 @@ const HomeScreen = ({ navigation }) => {
                   >
                     <Text
                       style={[
-                        styles.quickChipText,
-                        distanceKm === km && styles.quickChipTextActive,
+                        styles.distanceChipText,
+                        distanceKm === km && styles.distanceChipTextActive,
                       ]}
                     >
-                      {km} km
+                      {km}k
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: SPACING.lg, marginBottom: SPACING.md }}>
-                <TouchableOpacity
-                  style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: distanceKm > 1 ? '#EEF2FF' : '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}
-                  onPress={() => {
-                    setShowAllNearby(false);
-                    setDistanceKm(prev => Math.max(1, prev - 5));
-                  }}
-                  disabled={distanceKm <= 1}
-                >
-                  <FontAwesome name="minus" size={16} color={distanceKm > 1 ? "#5B3CF0" : "#94A3B8"} />
-                </TouchableOpacity>
-                <View style={{ alignItems: 'center', minWidth: 100 }}>
-                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A' }}>
-                    {distanceKm.toFixed(1)} km
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Radio personalizado</Text>
-                </View>
-                <TouchableOpacity
-                  style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' }}
-                  onPress={() => {
-                    setShowAllNearby(false);
-                    setDistanceKm(prev => prev + 5);
-                  }}
-                >
-                  <FontAwesome name="plus" size={16} color="#5B3CF0" />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.modalHint}>
-                Ajusta la distancia para refinar lugares cercanos. Las
-                categorías se seleccionan arriba.
-              </Text>
-
               <TouchableOpacity
                 style={styles.modalAllButton}
                 onPress={showAllPlaces}
               >
-                <Text style={styles.modalAllButtonText}>
-                  Ver todos los sitios
-                </Text>
+                <Ionicons name="globe-outline" size={18} color="#5B3CF0" />
+                <Text style={styles.modalAllButtonText}>Mostrar todo el departamento</Text>
               </TouchableOpacity>
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.modalSecondary}
-                  onPress={() => setFiltersVisible(false)}
-                >
-                  <Text style={styles.modalSecondaryText}>Cerrar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalPrimary}
-                  onPress={performSearch}
-                >
-                  <Text style={styles.modalPrimaryText}>Aplicar filtros</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.filterApplyButton}
+                onPress={performSearch}
+              >
+                <Text style={styles.filterApplyButtonText}>Aplicar Filtros</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Modal detalle */}
-      <Modal visible={detailVisible} animationType="slide" transparent>
-        <View style={styles.detailOverlay}>
-          <Pressable
-            style={styles.detailDismissArea}
-            onPress={() => setDetailVisible(false)}
-          />
-          <View style={styles.detailSheet}>
-            <ScrollView
-              style={styles.detailContainer}
-              contentContainerStyle={[styles.detailContent, { flexGrow: 1 }]}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-            >
-              <View style={{ flex: 1 }}>
-                {renderImages(
-                  Array.isArray(selectedPlace?.imageUrls)
-                    ? selectedPlace.imageUrls
-                    : [],
-                )}
-                {detailLoading ? (
-                  <View style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, right: 70, backgroundColor: 'rgba(255,255,255,0.85)', padding: 8, borderRadius: 20, zIndex: 200, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
-                    <ActivityIndicator color="#5B3CF0" size="small" />
-                  </View>
-                ) : null}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {/* Modal pasarela de pago */}
       <Modal
@@ -3778,6 +3710,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   locationLabel: {
     color: "rgba(255,255,255,0.7)",
@@ -3807,24 +3741,32 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
   },
   profileButton: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.15)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 22,
+    borderColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
+    gap: 8,
+  },
+  profileAvatarSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   profileButtonLabel: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: FONT_SIZES.xs,
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
   },
   profileButtonName: {
     color: COLORS.white,
     fontWeight: "700",
-    maxWidth: 160,
+    fontSize: 14,
   },
   tabBar: {
     flexDirection: "row",
@@ -3910,7 +3852,7 @@ const styles = StyleSheet.create({
   },
   categoryTabTextActive: {
     color: "#ffffff",
-    fontWeight: "800",
+    fontWeight: "700",
   },
   categoryIndicator: {
     marginTop: 6,
@@ -3921,31 +3863,30 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   heroTitle: {
-    fontSize: FONT_SIZES.xl + 4,
-    fontWeight: "bold",
+    fontSize: 32,
+    fontWeight: "800",
     color: COLORS.white,
     textAlign: "center",
-    lineHeight: 34,
+    lineHeight: 40,
+    letterSpacing: -1,
   },
   heroSubtitle: {
-    color: "rgba(255,255,255,0.9)",
+    color: "rgba(255,255,255,0.72)",
     fontSize: FONT_SIZES.sm,
     marginBottom: SPACING.sm,
-    lineHeight: 22,
+    lineHeight: 21,
     textAlign: "center",
   },
   searchCard: {
-    padding: SPACING.md,
-    borderRadius: 24,
-    gap: SPACING.sm,
-    backgroundColor: "rgba(255,255,255,0.99)",
-    shadowColor: "#4f46e5",
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    padding: SPACING.lg,
+    borderRadius: 28,
+    gap: SPACING.md,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 15 },
+    elevation: 12,
   },
   searchRow: {
     flexDirection: "row",
@@ -4015,25 +3956,32 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#E5E8F0",
-    paddingVertical: SPACING.sm,
-    minHeight: 46,
-    borderRadius: 12,
+    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC",
   },
   filterButtonText: {
-    color: COLORS.text,
-    fontWeight: "600",
+    color: "#475569",
+    fontWeight: "700",
+    fontSize: 14,
   },
   searchButton: {
-    flex: 1,
+    flex: 1.5,
     backgroundColor: "#5B3CF0",
-    paddingVertical: SPACING.sm,
-    minHeight: 46,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#5B3CF0",
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   searchButtonText: {
     color: COLORS.white,
@@ -4116,10 +4064,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   sectionIntro: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    paddingHorizontal: SPACING.xl,
-    paddingBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
   sectionPill: {
     paddingHorizontal: SPACING.md,
@@ -4144,29 +4092,36 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   sectionHeroTitle: {
-    fontSize: 28,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "700",
     color: "#0F172A",
-    textAlign: "center",
-    letterSpacing: -0.5,
+    textAlign: "left",
+    letterSpacing: -0.3,
+  },
+  sectionTitleAccent: {
+    width: 4,
+    height: 22,
+    backgroundColor: "#5B3CF0",
+    borderRadius: 2,
+    marginRight: 12,
   },
   sectionDescription: {
-    color: "#475569",
-    textAlign: "center",
-    lineHeight: 22,
-    fontSize: 15,
+    color: "#64748B",
+    textAlign: "left",
+    lineHeight: 20,
+    fontSize: 14,
   },
   sectionAllIntro: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    paddingHorizontal: SPACING.xl,
-    paddingBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
     paddingTop: SPACING.lg,
   },
   mapCard: {
     width: "100%",
     height: 620,
-    borderRadius: 24,
+    borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#E5E8F0",
     marginTop: SPACING.md,
@@ -4486,17 +4441,11 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: SPACING.lg,
-    borderRadius: 18,
-    borderBottomEndRadius: 0,
-    borderBottomStartRadius: 0,
-    padding: SPACING.lg,
+    backgroundColor: "#0f172a",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
     paddingBottom: SPACING.xl,
     gap: SPACING.md,
-    shadowColor: "#0b1021",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 12,
   },
   footerHeader: {
     flexDirection: "row",
@@ -4504,37 +4453,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   footerLogoBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "rgba(91, 60, 240, 0.9)",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(91, 60, 240, 0.85)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
   },
   footerTitle: {
     color: COLORS.white,
     fontWeight: "700",
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
   },
   footerSubtitle: {
-    color: "#a5b1d6",
-    marginTop: 2,
+    color: "rgba(255,255,255,0.45)",
+    marginTop: 1,
+    fontSize: FONT_SIZES.xs,
   },
   footerSocialRow: {
     flexDirection: "row",
-    gap: SPACING.sm,
+    gap: SPACING.xs,
   },
   footerSocialButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
+    borderColor: "rgba(255,255,255,0.1)",
   },
   footerColumns: {
     flexDirection: "row",
@@ -4563,24 +4511,24 @@ const styles = StyleSheet.create({
   },
   footerDivider: {
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 1,
-    marginTop: SPACING.xs,
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
   footerBottomRow: {
-    gap: SPACING.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   footerBottomText: {
-    color: "#a5b1d6",
+    color: "rgba(255,255,255,0.35)",
     fontSize: FONT_SIZES.xs,
   },
   footerLegalRow: {
     flexDirection: "row",
-    gap: SPACING.md,
-    flexWrap: "wrap",
+    gap: SPACING.xs,
+    alignItems: "center",
   },
   footerLegalText: {
-    color: "#d7def1",
+    color: "rgba(255,255,255,0.35)",
     fontSize: FONT_SIZES.xs,
   },
   arClose: {
@@ -4602,16 +4550,111 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     paddingHorizontal: SPACING.lg,
   },
-  secondaryButton: {
-    backgroundColor: "#7B5BFF",
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    borderRadius: 12,
+  filterBottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
   },
-  secondaryButtonText: {
-    color: COLORS.white,
-    fontWeight: "600",
-    fontSize: FONT_SIZES.md,
+  filterBottomSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl + 20,
+    paddingTop: 12,
+    maxHeight: "85%",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  bottomSheetIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E2E8F0",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  filterModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  distanceControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginVertical: 24,
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 20,
+  },
+  distanceValueBox: {
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  distanceValueText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+  },
+  distanceStepButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  quickDistanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  distanceChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  distanceChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#5B3CF0',
+  },
+  distanceChipText: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  distanceChipTextActive: {
+    color: '#5B3CF0',
+  },
+  filterApplyButton: {
+    backgroundColor: "#0F172A",
+    height: 56,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  filterApplyButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
   modalBackdrop: {
     flex: 1,
@@ -4692,9 +4735,9 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     gap: SPACING.md,
     shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   },
   profileHeaderRow: {
@@ -4712,44 +4755,101 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
   },
-  profileAvatarWrapper: {
+  profileCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
     alignItems: "center",
-    gap: SPACING.xs,
+    justifyContent: "center",
+  },
+  profileAvatarWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
   },
   profileAvatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#eef2ff",
   },
   profileName: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "800",
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
     color: COLORS.text,
   },
   profileEmail: {
     color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+  },
+  profileUnverifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  profileUnverifiedText: {
+    color: "#D97706",
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
   },
   profileInfoGroup: {
-    gap: SPACING.sm,
+    gap: SPACING.xs,
   },
   profileItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.sm,
-    backgroundColor: "#f7f7fb",
-    padding: SPACING.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#eceef5",
+    backgroundColor: "#f8fafc",
+    padding: SPACING.sm,
+    borderRadius: 10,
+  },
+  profileItemLabel: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
   profileItemText: {
     color: COLORS.text,
     flex: 1,
+    fontSize: 14,
   },
+
   profileActions: {
     flexDirection: "row",
     gap: SPACING.sm,
+  },
+  profileAvatarSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileRouteItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    backgroundColor: "#f8fafc",
+    padding: SPACING.sm,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  profileRouteTitle: {
+    color: COLORS.text,
+    fontWeight: "600",
+    fontSize: FONT_SIZES.sm,
+  },
+  profileRouteDesc: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.xs,
+    marginTop: 1,
   },
   profileMenuWrapper: {
     backgroundColor: "#f9f9fe",
@@ -4851,6 +4951,188 @@ const styles = StyleSheet.create({
   },
   profileVerifyStatusError: {
     color: "#ef4444",
+  },
+  unverifiedAlert: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
+    padding: SPACING.md,
+    marginTop: 4,
+    gap: SPACING.md,
+  },
+  unverifiedAlertContent: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  unverifiedAlertIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unverifiedAlertTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#92400E",
+  },
+  unverifiedAlertText: {
+    fontSize: 12,
+    color: "#B45309",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  unverifiedAlertButton: {
+    backgroundColor: "#F59E0B",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  unverifiedAlertButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  verificationCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    width: "90%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+    overflow: "hidden",
+  },
+  verificationHeader: {
+    backgroundColor: "#F8FAFC",
+    padding: SPACING.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  verificationIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verificationTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  verificationSubtitle: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginTop: 1,
+  },
+  verificationBody: {
+    padding: SPACING.lg,
+    gap: SPACING.lg,
+  },
+  verificationText: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    lineHeight: 20,
+  },
+  verificationActionRow: {
+    alignItems: "center",
+  },
+  verificationRequestBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E0E7FF",
+    backgroundColor: "#F5F3FF",
+  },
+  verificationRequestBtnText: {
+    color: "#5B3CF0",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  tokenInputGroup: {
+    gap: 8,
+  },
+  tokenInputLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginLeft: 4,
+  },
+  tokenInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    padding: SPACING.md,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  verificationStatusBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: SPACING.md,
+    borderRadius: 12,
+  },
+  statusBoxError: {
+    backgroundColor: "#FEF2F2",
+  },
+  statusBoxSuccess: {
+    backgroundColor: "#F0FDF4",
+  },
+  verificationStatusText: {
+    fontSize: 13,
+    fontWeight: "500",
+    flex: 1,
+  },
+  verificationFooter: {
+    padding: SPACING.lg,
+    flexDirection: "row",
+    gap: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  verifyModalCloseBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+  },
+  verifyModalCloseBtnText: {
+    color: "#64748B",
+    fontWeight: "600",
+  },
+  verifyModalConfirmBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#5B3CF0",
+  },
+  verifyModalConfirmBtnText: {
+    color: COLORS.white,
+    fontWeight: "700",
+  },
+  closeBtnSmall: {
+    padding: 8,
   },
   detailOverlay: {
     flex: 1,

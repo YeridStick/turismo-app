@@ -1,6 +1,9 @@
 import { Image } from 'expo-image';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
+  ActivityIndicator,
+  Linking,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,10 +12,52 @@ import {
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
-import NativeMap from '../components/NativeMap';
+import { getPlaceArConfig } from '../services/ar';
+import { formatDistance } from '../utils/utils';
+import api from '../services/api';
+import { ENDPOINTS } from '../config/api.config';
+
+const getModelType = (url) => {
+  if (typeof url !== "string") return null;
+  const cleanUrl = url.trim().split("?")[0].toLowerCase();
+  if (cleanUrl.endsWith(".usdz")) return "usdz";
+  if (cleanUrl.endsWith(".glb")) return "glb";
+  if (cleanUrl.endsWith(".gltf")) return "gltf";
+  return null;
+};
+
+const normalizePlace = (place) => {
+  if (!place || typeof place !== "object") return place;
+  const normalized = { ...place };
+  
+  const parseUrlList = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value !== "string") return [];
+    return value
+      .replace(/^\{|\}$/g, "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
+
+  if (normalized.model_3d_urls && !normalized.model3dUrls) {
+    normalized.model3dUrls = parseUrlList(normalized.model_3d_urls);
+  }
+  if (normalized.model3dUrls && !Array.isArray(normalized.model3dUrls)) {
+    normalized.model3dUrls = parseUrlList(normalized.model3dUrls);
+  }
+  if (normalized.image_urls && !normalized.imageUrls) {
+    normalized.imageUrls = parseUrlList(normalized.image_urls);
+  }
+  if (normalized.imageUrls && !Array.isArray(normalized.imageUrls)) {
+    normalized.imageUrls = parseUrlList(normalized.image_urls);
+  }
+  return normalized;
+};
 
 const { width } = Dimensions.get('window');
 
@@ -22,17 +67,51 @@ const IMAGE_PLACEHOLDER =
 const PlaceDetailScreen = ({ route, navigation }) => {
   const { width: windowWidth } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
-  const { place } = route.params;
+  const { place: initialPlace } = route?.params || {};
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const galleryHeight = useMemo(() => (isSmall ? 200 : 220), [isSmall]);
-  const mapHeight = useMemo(() => (isSmall ? 200 : 240), [isSmall]);
+  const [fullPlace, setFullPlace] = useState(null);
 
-  // Imágenes de ejemplo (en producción vendrían del lugar)
-  const images = place.images || [
-    { id: 1, uri: 'https://picsum.photos/400/300?random=1' },
-    { id: 2, uri: 'https://picsum.photos/400/300?random=2' },
-    { id: 3, uri: 'https://picsum.photos/400/300?random=3' },
-  ];
+  // Cargar datos detallados (incluyendo modelos 3D) en segundo plano
+  useEffect(() => {
+    const fetchDetails = async () => {
+      if (!initialPlace?.id) return;
+      try {
+        const response = await api.get(ENDPOINTS.PLACE_DETAIL(initialPlace.id));
+        const data = response.data?.data || response.data;
+        if (data) {
+          const normalized = normalizePlace(data);
+          setFullPlace(normalized);
+        }
+      } catch (err) {
+        console.warn("Silent fetch error:", err);
+      }
+    };
+    fetchDetails();
+  }, [initialPlace?.id]);
+
+  const place = useMemo(() => {
+    if (!fullPlace) return initialPlace;
+    // Combinar para no perder distancias y otros metadatos calculados en el home
+    return { ...initialPlace, ...fullPlace };
+  }, [initialPlace, fullPlace]);
+
+  const arConfig = useMemo(() => {
+    if (!place) return null;
+    return getPlaceArConfig(place);
+  }, [place]);
+
+  if (!place) return null;
+
+  const galleryHeight = isSmall ? 200 : 220;
+  const mapHeight = isSmall ? 200 : 240;
+
+  // Imágenes reales del lugar
+  const images = useMemo(() => {
+    if (Array.isArray(place.imageUrls) && place.imageUrls.length > 0) {
+      return place.imageUrls.map((uri, id) => ({ id, uri }));
+    }
+    return [{ id: 'placeholder', uri: IMAGE_PLACEHOLDER }];
+  }, [place.imageUrls]);
 
   const coordinates = {
     latitude: place.latitude || 2.9273,
@@ -46,6 +125,14 @@ const PlaceDetailScreen = ({ route, navigation }) => {
     const index = Math.floor(event.nativeEvent.contentOffset.x / slideSize);
     setActiveImageIndex(index);
   };
+
+  const infoDetails = useMemo(() => [
+    { icon: "ticket", label: "Entrada/Precio", value: place.price ? `$${place.price}` : "Acceso libre" },
+    { icon: "clock-o", label: "Horario", value: place.openingHours || "08:00 AM - 05:00 PM" },
+    { icon: "info-circle", label: "Servicios", value: place.services || "Guía local, Zona de descanso" },
+    { icon: "map-marker", label: "Distancia", value: formatDistance(place.distanceMeters) || "Cerca de ti" },
+    { icon: "phone", label: "Contacto", value: place.phone || "+57 321 000 0000" },
+  ], [place]);
 
   return (
     <View style={styles.container}>
@@ -105,7 +192,7 @@ const PlaceDetailScreen = ({ route, navigation }) => {
 
           {place.address && (
             <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color={COLORS.primary} />
+              <Ionicons name="location-outline" size={18} color="#5B3CF0" />
               <Text style={styles.infoText}>{place.address}</Text>
             </View>
           )}
@@ -114,30 +201,47 @@ const PlaceDetailScreen = ({ route, navigation }) => {
             <Text style={styles.description}>{place.description}</Text>
           )}
 
-          {/* Mapa interactivo */}
-          <View style={styles.mapSection}>
-            <Text style={styles.sectionTitle}>Ubicación</Text>
-            <View style={[styles.mapContainer, { height: mapHeight }]}>
-              <NativeMap
-                initialRegion={coordinates}
-                markers={[{
-                  id: place.id,
-                  latitude: coordinates.latitude,
-                  longitude: coordinates.longitude,
-                  title: place.name,
-                  description: place.address,
-                  pinColor: 'red'
-                }]}
-                showUserLocation={false}
-              />
-            </View>
+          {/* Sección de Detalles Extendida */}
+          <View style={styles.detailsSection}>
+            <Text style={styles.sectionTitle}>Detalles del sitio</Text>
+            {infoDetails.map((detail, idx) => (
+              <View key={idx} style={styles.detailItem}>
+                <View style={styles.detailIconWrapper}>
+                  <FontAwesome name={detail.icon} size={16} color="#5B3CF0" />
+                </View>
+                <View style={styles.detailTextWrapper}>
+                  <Text style={styles.detailLabel}>{detail.label}</Text>
+                  <Text style={styles.detailValue}>{detail.value}</Text>
+                </View>
+              </View>
+            ))}
           </View>
 
-          {/* Botón de acción */}
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="navigate-outline" size={20} color={COLORS.white} />
-            <Text style={styles.actionButtonText}>Cómo llegar</Text>
-          </TouchableOpacity>
+          {/* Botones de acción */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={[styles.actionButton, { flex: 1 }]} onPress={() => {
+              const url = coordinates ? `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}` : '';
+              if (url) Linking.openURL(url);
+            }}>
+              <Ionicons name="navigate-outline" size={20} color={COLORS.white} />
+              <Text style={styles.actionButtonText}>Cómo llegar</Text>
+            </TouchableOpacity>
+
+            {arConfig?.modelUrl && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.arActionButton]} 
+                onPress={() => {
+                  navigation.navigate('ARView', { 
+                    modelUrl: arConfig.modelUrl,
+                    placeName: place.name 
+                  });
+                }}
+              >
+                <Ionicons name="cube-outline" size={20} color={COLORS.white} />
+                <Text style={styles.actionButtonText}>Ver en AR</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -254,7 +358,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: "#0f172a",
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -266,8 +370,70 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: 'bold',
+  },
+  arSection: {
+    marginTop: SPACING.lg,
+  },
+  arPreviewContainer: {
+    height: 300,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  arWebView: {
+    flex: 1,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    marginTop: SPACING.xl,
+    marginBottom: SPACING.xl,
+  },
+  arActionButton: {
+    backgroundColor: "#5B3CF0",
+    flex: 1,
+  },
+  detailsSection: {
+    marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: SPACING.md,
+    borderRadius: 16,
+    gap: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  detailIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailTextWrapper: {
+    flex: 1,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#1E293B',
+    fontWeight: '700',
+    marginTop: 2,
   },
 });
 

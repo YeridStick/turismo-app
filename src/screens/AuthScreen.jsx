@@ -71,6 +71,15 @@ const AuthScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showRecoveryPassword, setShowRecoveryPassword] = useState(false);
+  const [notification, setNotification] = useState({ visible: false, message: '', type: 'error' });
+
+  const showNotification = (message, type = 'error') => {
+    setNotification({ visible: true, message, type });
+    setTimeout(() => {
+      setNotification((prev) => ({ ...prev, visible: false }));
+    }, 4500);
+  };
+
 
   useEffect(() => {
     if (route.params?.showRecovery) {
@@ -114,35 +123,37 @@ const AuthScreen = () => {
     if (loginMethod === 'password') {
       if (!email || !password) {
         setLoading(false);
-        Alert.alert('Completa los datos', 'Ingresa tu correo y contraseña.');
+        showNotification('Ingresa tu correo y contraseña.', 'error');
         return;
       }
       result = await loginWithPassword(email.trim(), password.trim());
     } else {
       if (!email || !totpCode) {
         setLoading(false);
-        Alert.alert('Completa los datos', 'Ingresa tu correo y el código TOTP.');
+        showNotification('Ingresa tu correo y el código TOTP.', 'error');
         return;
       }
       result = await login(email.trim(), totpCode.trim());
     }
     setLoading(false);
     if (!result.success) {
-      Alert.alert('No se pudo iniciar sesión', result.error || 'Intenta nuevamente.');
+      showNotification(result.error || 'Intenta nuevamente.', 'error');
       return;
     }
-    Alert.alert('Bienvenido', 'Inicio de sesión exitoso.', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
+    showNotification('Inicio de sesión exitoso.', 'success');
+    setTimeout(() => {
+      navigation.goBack();
+    }, 1000);
   };
+
 
   const handleRegister = async () => {
     if (!fullName || !email) {
-      Alert.alert('Campos faltantes', 'Completa nombre y correo.');
+      showNotification('Completa nombre y correo.', 'error');
       return;
     }
     if (password && password !== confirmPassword) {
-      Alert.alert('Contraseña no coincide', 'Repite la contraseña correctamente.');
+      showNotification('Repite la contraseña correctamente.', 'error');
       return;
     }
     setLoading(true);
@@ -157,15 +168,16 @@ const AuthScreen = () => {
     });
     setLoading(false);
     if (!result.success) {
-      Alert.alert('No se pudo crear la cuenta', result.error || 'Intenta nuevamente.');
+      showNotification(result.error || 'Intenta nuevamente.', 'error');
       return;
     }
-    Alert.alert('Cuenta creada', 'Ahora configura tu autenticación TOTP.', [
-      { text: 'Configurar TOTP', onPress: () => handleSetupTotp() },
-    ]);
+    
+    showNotification('Cuenta creada. Ahora configura tu TOTP.', 'success');
     setActiveTab('login');
     setStep('setup');
+    handleSetupTotp();
   };
+
 
   const handleSetupTotp = async () => {
     if (!email) {
@@ -749,7 +761,16 @@ const AuthScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient colors={['#eef0ff', '#f8f9fb']} style={styles.header}>
+        {notification.visible && (
+          <View style={[styles.topNotification, notification.type === 'error' ? styles.notifError : styles.notifSuccess]}>
+            <View style={styles.notifIcon}>
+              <FontAwesome name={notification.type === 'error' ? "exclamation-circle" : "check-circle"} size={14} color="#fff" />
+            </View>
+            <Text style={styles.topNotificationText}>{notification.message}</Text>
+          </View>
+        )}
         <View style={styles.headerRow}>
+
           <View style={styles.headerTitleRow}>
             <FontAwesome name="shield" size={18} color="#5B3CF0" />
             <Text style={styles.headerTitle}>Seguridad</Text>
@@ -770,13 +791,53 @@ const AuthScreen = () => {
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: SPACING.xl,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
+    position: 'relative',
+  },
+  topNotification: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 10,
+    left: SPACING.lg,
+    right: SPACING.lg,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 99,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  notifError: {
+    backgroundColor: '#EF4444',
+  },
+  notifSuccess: {
+    backgroundColor: '#10B981',
+  },
+  notifIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topNotificationText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
   },
   headerRow: {
+
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

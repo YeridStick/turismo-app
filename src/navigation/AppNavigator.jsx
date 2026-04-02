@@ -8,6 +8,7 @@ import CreatePackageScreen from '../screens/CreatePackageScreen';
 import CreatePlaceScreen from '../screens/CreatePlaceScreen';
 import HomeScreen from '../screens/HomeScreen';
 import MapScreen from '../screens/MapScreen';
+import PlaceDetailScreen from '../screens/PlaceDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -19,6 +20,7 @@ const AppNavigator = () => (
       <Stack.Screen name="Auth" component={AuthScreen} />
       <Stack.Screen name="ARView" component={ARScreen} />
       <Stack.Screen name="Map" component={MapScreen} />
+      <Stack.Screen name="PlaceDetail" component={PlaceDetailScreen} />
       <Stack.Screen name="AgencyDashboard" component={AgencyDashboardScreen} />
       <Stack.Screen name="CreatePlace" component={CreatePlaceScreen} />
       <Stack.Screen name="CreatePackage" component={CreatePackageScreen} />

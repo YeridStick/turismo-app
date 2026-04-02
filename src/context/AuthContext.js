@@ -64,21 +64,35 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserInfo = async (email) => {
     try {
+      console.log('[Auth] Fetching info for:', email);
       const response = await api.get('/api/info/user', { params: { userEmail: email } });
+      
       const payload = response.data?.data || response.data || null;
-      if (!payload) return null;
+      if (!payload) {
+        console.warn('[Auth] No data in userInfo response');
+        return null;
+      }
+
       if (payload.user) {
+        console.log('[Auth] User found:', payload.user.fullName);
         return {
           ...payload.user,
           emailVerified: payload.emailVerified,
           passwordEnabled: payload.passwordEnabled,
+          identificationType: payload.user.identificationType || '',
+          identificationNumber: payload.user.identificationNumber || '',
+          urlAvatar: payload.user.urlAvatar || payload.user.avatar || null,
+          fullName: payload.user.fullName || payload.user.name || '',
+          createdAt: payload.user.createdAt || null,
         };
       }
       return payload;
     } catch (err) {
+      console.error('[Auth] Error fetching user info:', err.message);
       return null;
     }
   };
+
 
   const login = async (email, totpCode) => {
     try {
@@ -142,6 +156,25 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const verifyEmailToken = async (token) => {
+    try {
+      // GET /api/auth/email/verify?token=...
+      const response = await api.get(ENDPOINTS.EMAIL_VERIFY, { params: { token } });
+      const userData = await fetchUserInfo(user?.email); // Refrescar info si hay éxito
+      if (userData) {
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+      }
+      return { success: true, data: response.data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Token inválido o expirado',
+      };
+    }
+  };
+
+
   const register = async (userData) => {
     try {
       const response = await registerUser(userData);
@@ -195,10 +228,12 @@ export const AuthProvider = ({ children }) => {
         requestRecovery: requestRecoveryService,
         confirmRecovery,
         requestEmailValidation,
+        verifyEmailToken,
       }}
     >
       {children}
     </AuthContext.Provider>
+
   );
 };
 

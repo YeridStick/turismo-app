@@ -1,6 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
-import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Animated,
+    Easing,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { ARViewer } from '../components/ARViewer';
 
 interface ARScreenProps {
@@ -8,104 +18,215 @@ interface ARScreenProps {
     navigation?: any;
 }
 
+// Badge animado "AR Activo"
+const ARActiveBadge: React.FC = () => {
+    const pulse = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulse, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+                Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+            ])
+        ).start();
+    }, []);
+
+    return (
+        <View style={styles.badge}>
+            <Animated.View style={[styles.badgeDot, { opacity: pulse }]} />
+            <Text style={styles.badgeText}>AR Activo</Text>
+        </View>
+    );
+};
+
+// Pantalla de carga premium
+const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
+    const spinAnim = useRef(new Animated.Value(0)).current;
+    const barWidth = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.timing(spinAnim, {
+                toValue: 1,
+                duration: 1800,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
+        ).start();
+    }, []);
+
+    useEffect(() => {
+        Animated.timing(barWidth, {
+            toValue: progress,
+            duration: 400,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+        }).start();
+    }, [progress]);
+
+    const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+    const label =
+        progress < 20
+            ? 'Activando cámara AR...'
+            : progress < 50
+            ? 'Inicializando escena...'
+            : progress < 70
+            ? 'Cargando modelo 3D...'
+            : progress < 90
+            ? 'Procesando geometría...'
+            : 'Preparando experiencia...';
+
+    return (
+        <View style={styles.loadingOverlay}>
+            <View style={styles.loadingCard}>
+                <Animated.Text style={[styles.loadingIcon, { transform: [{ rotate: spin }] }]}>
+                    🔮
+                </Animated.Text>
+                <Text style={styles.loadingTitle}>Realidad Aumentada</Text>
+                <Text style={styles.loadingLabel}>{label}</Text>
+
+                {/* Barra de progreso */}
+                <View style={styles.progressTrack}>
+                    <Animated.View
+                        style={[
+                            styles.progressBar,
+                            {
+                                width: barWidth.interpolate({
+                                    inputRange: [0, 100],
+                                    outputRange: ['0%', '100%'],
+                                }),
+                            },
+                        ]}
+                    />
+                </View>
+                <Text style={styles.progressPercent}>{Math.round(progress)}%</Text>
+            </View>
+        </View>
+    );
+};
+
 const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const modelUrl = route?.params?.modelUrl;
+    const placeName: string = route?.params?.placeName || 'Modelo 3D';
+
+    const [loadProgress, setLoadProgress] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [modelLoaded, setModelLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeControl, setActiveControl] = useState<'scale' | 'rotate' | null>('scale');
     const [showControls, setShowControls] = useState(true);
     const [showHelpHint, setShowHelpHint] = useState(true);
 
-    // Referencia para controlar el visor AR
     const viewerRef = useRef<any>(null);
-    // Referencia para el intervalo de rotación continua
     const rotationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    // Animación para el hint de ayuda
     const hintOpacity = useRef(new Animated.Value(1)).current;
+    const controlsAnim = useRef(new Animated.Value(0)).current;
 
-    React.useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 2000);
-        return () => clearTimeout(timer);
+    // Simular progreso inicial con pasos visuales
+    useEffect(() => {
+        const steps = [
+            { value: 15, delay: 300 },
+            { value: 40, delay: 900 },
+            { value: 60, delay: 1800 },
+            { value: 75, delay: 3000 },
+        ];
+        const timers = steps.map(({ value, delay }) =>
+            setTimeout(() => setLoadProgress(p => Math.max(p, value)), delay)
+        );
+        return () => timers.forEach(clearTimeout);
     }, []);
 
-    // Auto-ocultar hint de ayuda después de 5 segundos con fade out
-    React.useEffect(() => {
+    // Safety timeout: si en 12s el modelo no carga, ocultar overlay
+    // (evita quedarse atascado si AR no está soportado o el modelo falla)
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            setIsLoading(false);
+        }, 12000);
+        return () => clearTimeout(timeout);
+    }, []);
+
+    // Animar entrada de controles
+    useEffect(() => {
+        if (modelLoaded) {
+            Animated.spring(controlsAnim, {
+                toValue: 1,
+                tension: 60,
+                friction: 9,
+                useNativeDriver: true,
+            }).start();
+        }
+    }, [modelLoaded]);
+
+    // Auto-ocultar hint
+    useEffect(() => {
         if (modelLoaded && showHelpHint) {
-            const timer = setTimeout(() => {
+            const t = setTimeout(() => {
                 Animated.timing(hintOpacity, {
                     toValue: 0,
-                    duration: 500,
+                    duration: 600,
                     useNativeDriver: true,
                 }).start(() => setShowHelpHint(false));
             }, 5000);
-            return () => clearTimeout(timer);
+            return () => clearTimeout(t);
         }
-    }, [modelLoaded, showHelpHint, hintOpacity]);
+    }, [modelLoaded, showHelpHint]);
 
     // Limpiar intervalo al desmontar
-    React.useEffect(() => {
+    useEffect(() => {
         return () => {
-            if (rotationIntervalRef.current) {
-                clearInterval(rotationIntervalRef.current);
-            }
+            if (rotationIntervalRef.current) clearInterval(rotationIntervalRef.current);
         };
     }, []);
 
     const handleModelLoad = () => {
-        setModelLoaded(true);
-        setError(null);
-        console.log('✓ Modelo cargado exitosamente');
+        setLoadProgress(100);
+        setTimeout(() => {
+            setIsLoading(false);
+            setModelLoaded(true);
+            setError(null);
+        }, 400);
     };
 
-    const handleModelError = (err: any) => {
-        console.error('✗ Error en modelo:', err);
-        setError('No se pudo cargar el modelo. Verifica la URL.');
+    const handleModelError = () => {
+        setIsLoading(false);
+        setError('No se pudo cargar el modelo 3D. Verifica la URL del archivo.');
         setModelLoaded(false);
     };
 
-    const handleResetPosition = () => {
-        if (viewerRef.current) {
-            viewerRef.current.resetPosition();
-            setActiveControl(null);
-            console.log('↻ Posición reseteada');
-        }
+    const handleLoadProgress = (p: number) => {
+        setLoadProgress(prev => Math.max(prev, p));
     };
 
-    // Controles de escala
+    // Controles con haptics
+    const handleReset = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        viewerRef.current?.resetPosition();
+    };
+
     const handleIncreaseScale = () => {
-        if (viewerRef.current?.increaseScale) {
-            viewerRef.current.increaseScale();
-        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        viewerRef.current?.increaseScale();
     };
 
     const handleDecreaseScale = () => {
-        if (viewerRef.current?.decreaseScale) {
-            viewerRef.current.decreaseScale();
-        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        viewerRef.current?.decreaseScale();
     };
 
-    // Controles de rotación continua
     const startRotateLeft = () => {
-        if (viewerRef.current?.rotateLeft) {
-            viewerRef.current.rotateLeft();
-        }
+        Haptics.selectionAsync();
+        viewerRef.current?.rotateLeft();
         rotationIntervalRef.current = setInterval(() => {
-            if (viewerRef.current?.rotateLeft) {
-                viewerRef.current.rotateLeft();
-            }
-        }, 100);
+            viewerRef.current?.rotateLeft();
+        }, 80);
     };
 
     const startRotateRight = () => {
-        if (viewerRef.current?.rotateRight) {
-            viewerRef.current.rotateRight();
-        }
+        Haptics.selectionAsync();
+        viewerRef.current?.rotateRight();
         rotationIntervalRef.current = setInterval(() => {
-            if (viewerRef.current?.rotateRight) {
-                viewerRef.current.rotateRight();
-            }
-        }, 100);
+            viewerRef.current?.rotateRight();
+        }, 80);
     };
 
     const stopRotation = () => {
@@ -115,135 +236,155 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
         }
     };
 
+    const controlsTranslateY = controlsAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [120, 0],
+    });
+
     return (
         <View style={styles.container}>
+            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
             <ARViewer
                 modelUrl={modelUrl}
                 onModelLoad={handleModelLoad}
                 onModelError={handleModelError}
+                onLoadProgress={handleLoadProgress}
                 viewerRef={viewerRef}
             />
 
-            {/* Loading Overlay */}
-            {isLoading && (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#5B3CF0" />
-                    <Text style={styles.loadingText}>Inicializando AR...</Text>
-                </View>
-            )}
+            {/* Pantalla de carga premium */}
+            {isLoading && <LoadingOverlay progress={loadProgress} />}
 
-            {/* Error Message */}
+            {/* Error */}
             {error && (
-                <View style={styles.errorContainer}>
+                <View style={styles.errorBanner}>
+                    <Ionicons name="warning" size={18} color="#fff" />
                     <Text style={styles.errorText}>{error}</Text>
-                    <TouchableOpacity
-                        onPress={() => setError(null)}
-                        style={styles.errorDismissButton}
-                    >
-                        <Text style={styles.errorDismissText}>Cerrar</Text>
+                    <TouchableOpacity onPress={() => setError(null)} style={styles.errorClose}>
+                        <Ionicons name="close" size={16} color="#fff" />
                     </TouchableOpacity>
                 </View>
             )}
 
-            {/* Controls - Solo mostrar cuando modelo está cargado */}
+            {/* Controles (solo cuando está cargado) */}
             {!isLoading && !error && modelLoaded && (
                 <>
-                    {/* Cabecera mínima: centrar y salir */}
-                    <View style={styles.headerRow}>
-                        <TouchableOpacity
-                            style={styles.resetButton}
-                            onPress={handleResetPosition}
-                            activeOpacity={0.85}
-                        >
-                            <Ionicons name="locate" size={20} color="#fff" />
-                            <Text style={styles.resetText}>Centrar</Text>
-                        </TouchableOpacity>
+                    {/* Header: nombre del lugar + badge + acciones */}
+                    <View style={styles.header}>
+                        <View style={styles.headerLeft}>
+                            <ARActiveBadge />
+                            <Text style={styles.placeName} numberOfLines={1}>
+                                {placeName}
+                            </Text>
+                        </View>
                         <View style={styles.headerRight}>
                             <TouchableOpacity
-                                style={styles.toggleVisibility}
-                                onPress={() => {
-                                    setShowControls((prev) => {
-                                        const next = !prev;
-                                        if (next) {
-                                            setActiveControl('scale');
-                                        }
-                                        return next;
-                                    });
-                                }}
-                                activeOpacity={0.85}
+                                style={styles.headerBtn}
+                                onPress={() => setShowControls(p => !p)}
+                                activeOpacity={0.8}
                             >
                                 <Ionicons
-                                    name={showControls ? "eye-off" : "eye"}
-                                    size={16}
-                                    color="#0f172a"
+                                    name={showControls ? 'eye-off-outline' : 'eye-outline'}
+                                    size={18}
+                                    color="#fff"
                                 />
-                                <Text style={styles.toggleVisibilityText}>
-                                    {showControls ? "Ocultar" : "Mostrar"}
-                                </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.closeChip}
+                                style={[styles.headerBtn, styles.closeBtn]}
                                 onPress={() => navigation?.goBack?.()}
-                                activeOpacity={0.85}
+                                activeOpacity={0.8}
                             >
-                                <Ionicons name="close" size={16} color="#0f172a" />
-                                <Text style={styles.closeChipText}>Salir</Text>
+                                <Ionicons name="close" size={18} color="#fff" />
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* Panel compacto con visibilidad controlable */}
-                    {showControls && (
-                        <View style={styles.miniPanel}>
-                            <View style={styles.miniRow}>
-                                <TouchableOpacity
-                                    style={styles.miniAction}
-                                    onPress={handleDecreaseScale}
-                                    activeOpacity={0.9}
-                                >
-                                    <Ionicons name="remove" size={18} color="#fff" />
-                                    <Text style={styles.miniActionText}>Reducir</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.miniAction}
-                                    onPress={handleIncreaseScale}
-                                    activeOpacity={0.9}
-                                >
-                                    <Ionicons name="add" size={18} color="#fff" />
-                                    <Text style={styles.miniActionText}>Aumentar</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.miniAction}
-                                    onPressIn={startRotateLeft}
-                                    onPressOut={stopRotation}
-                                    activeOpacity={0.9}
-                                >
-                                    <Ionicons name="refresh" size={18} color="#fff" />
-                                    <Text style={styles.miniActionText}>Rotar izq.</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.miniAction}
-                                    onPressIn={startRotateRight}
-                                    onPressOut={stopRotation}
-                                    activeOpacity={0.9}
-                                >
-                                    <Ionicons name="refresh-outline" size={18} color="#fff" />
-                                    <Text style={styles.miniActionText}>Rotar der.</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
+                    {/* Hint de gestos */}
+                    {showHelpHint && (
+                        <Animated.View style={[styles.gestureHint, { opacity: hintOpacity }]}>
+                            <Text style={styles.gestureHintText}>
+                                ✋ Arrastra  •  🤏 Pellizca  •  🔄 Dos dedos rotan
+                            </Text>
+                        </Animated.View>
                     )}
 
-            {/* Hint de ayuda con auto-hide */}
-            {showHelpHint && (
-                <Animated.View style={[styles.gestureHint, { opacity: hintOpacity }]}>
-                    <Text style={styles.gestureHintText}>
-                        ✋ Desliza | 🤏 Pellizca | 🔄 Dos dedos para rotar
-                    </Text>
-                </Animated.View>
+                    {/* Bottom Sheet de controles */}
+                    {showControls && (
+                        <Animated.View
+                            style={[
+                                styles.bottomSheet,
+                                {
+                                    opacity: controlsAnim,
+                                    transform: [{ translateY: controlsTranslateY }],
+                                },
+                            ]}
+                        >
+                            {/* Handle */}
+                            <View style={styles.sheetHandle} />
+
+                            {/* Sección: Escala */}
+                            <View style={styles.section}>
+                                <Text style={styles.sectionLabel}>Tamaño</Text>
+                                <View style={styles.sectionRow}>
+                                    <TouchableOpacity
+                                        style={styles.controlBtn}
+                                        onPress={handleDecreaseScale}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="remove" size={22} color="#fff" />
+                                        <Text style={styles.controlBtnText}>Reducir</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.controlBtn, styles.controlBtnPrimary]}
+                                        onPress={handleReset}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="locate" size={22} color="#fff" />
+                                        <Text style={styles.controlBtnText}>Centrar</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.controlBtn}
+                                        onPress={handleIncreaseScale}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="add" size={22} color="#fff" />
+                                        <Text style={styles.controlBtnText}>Ampliar</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {/* Separador */}
+                            <View style={styles.separator} />
+
+                            {/* Sección: Rotación */}
+                            <View style={styles.section}>
+                                <Text style={styles.sectionLabel}>Rotación</Text>
+                                <View style={styles.sectionRow}>
+                                    <TouchableOpacity
+                                        style={[styles.controlBtn, styles.controlBtnWide]}
+                                        onPressIn={startRotateLeft}
+                                        onPressOut={stopRotation}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="reload" size={22} color="#fff" style={{ transform: [{ scaleX: -1 }] }} />
+                                        <Text style={styles.controlBtnText}>Izquierda</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.controlBtn, styles.controlBtnWide]}
+                                        onPressIn={startRotateRight}
+                                        onPressOut={stopRotation}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="reload" size={22} color="#fff" />
+                                        <Text style={styles.controlBtnText}>Derecha</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </Animated.View>
+                    )}
+                </>
             )}
-        </>
-    )}
         </View>
     );
 };
@@ -253,174 +394,239 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#000',
     },
-    loadingContainer: {
+    // ─── Loading ───────────────────────────────────────────────
+    loadingOverlay: {
         ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(8, 8, 20, 0.96)',
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        zIndex: 10,
+        zIndex: 20,
     },
-    loadingText: {
-        color: '#fff',
-        marginTop: 15,
-        fontWeight: '600',
-        fontSize: 16,
-    },
-    errorContainer: {
-        position: 'absolute',
-        top: 60,
-        left: 20,
-        right: 20,
-        backgroundColor: '#FF4444',
-        borderRadius: 12,
-        padding: 16,
-        zIndex: 15,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    loadingCard: {
+        backgroundColor: 'rgba(91, 60, 240, 0.15)',
+        borderRadius: 28,
+        padding: 36,
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 5,
+        width: '78%',
+        borderWidth: 1,
+        borderColor: 'rgba(91, 60, 240, 0.35)',
+    },
+    loadingIcon: {
+        fontSize: 52,
+        marginBottom: 18,
+    },
+    loadingTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+        marginBottom: 8,
+    },
+    loadingLabel: {
+        color: '#9B8CFF',
+        fontSize: 14,
+        marginBottom: 24,
+        textAlign: 'center',
+    },
+    progressTrack: {
+        width: '100%',
+        height: 6,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: '#7B6CF0',
+        borderRadius: 3,
+    },
+    progressPercent: {
+        color: '#7B6CF0',
+        fontSize: 13,
+        fontWeight: '600',
+        marginTop: 10,
+    },
+    // ─── Error ─────────────────────────────────────────────────
+    errorBanner: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 60 : 40,
+        left: 16,
+        right: 16,
+        backgroundColor: '#c0392b',
+        borderRadius: 14,
+        padding: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        zIndex: 15,
+        elevation: 6,
     },
     errorText: {
         color: '#fff',
-        fontWeight: '500',
         flex: 1,
-        marginRight: 10,
+        fontSize: 13,
+        fontWeight: '500',
+        lineHeight: 18,
     },
-    errorDismissButton: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 6,
+    errorClose: {
+        padding: 4,
     },
-    errorDismissText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 12,
-    },
-    resetButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#5B3CF0',
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        borderRadius: 18,
-        elevation: 4,
-        shadowColor: '#5B3CF0',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
-    },
-    resetText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        marginLeft: 10,
-        fontSize: 14,
-    },
-    headerRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    toggleVisibility: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 18,
-        elevation: 3,
-    },
-    toggleVisibilityText: {
-        color: '#0f172a',
-        fontWeight: '700',
-        fontSize: 12,
-    },
-    // Cabecera y mini panel
-    headerRow: {
+    // ─── Header ────────────────────────────────────────────────
+    header: {
         position: 'absolute',
-        top: 50,
-        left: 20,
-        right: 20,
+        top: Platform.OS === 'ios' ? 56 : 36,
+        left: 16,
+        right: 16,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         zIndex: 12,
     },
-    closeChip: {
+    headerLeft: {
+        flex: 1,
+        flexDirection: 'column',
+        gap: 4,
+    },
+    headerRight: {
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 18,
-        elevation: 3,
-    },
-    closeChipText: {
-        color: '#0f172a',
-        fontWeight: '700',
-        fontSize: 12,
-    },
-    miniPanel: {
-        position: 'absolute',
-        bottom: 32,
-        left: 16,
-        right: 16,
-        backgroundColor: 'rgba(15, 23, 42, 0.8)',
-        borderRadius: 16,
-        padding: 12,
-        gap: 10,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
-    },
-    miniRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
         gap: 8,
-        justifyContent: 'space-between',
+        marginLeft: 12,
     },
-    miniAction: {
-        flexBasis: '48%',
-        backgroundColor: 'rgba(91, 60, 240, 0.85)',
-        borderRadius: 12,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        alignItems: 'center',
-        gap: 6,
-        elevation: 3,
-    },
-    miniActionText: {
-        color: '#fff',
-        fontWeight: '700',
-        fontSize: 12,
-        textAlign: 'center',
-    },
-    closeButton: {
-        position: 'absolute',
-        top: 50,
-        right: 20,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+    headerBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 20,
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
     },
-    closeText: {
+    closeBtn: {
+        backgroundColor: 'rgba(180,0,0,0.5)',
+        borderColor: 'rgba(255,80,80,0.3)',
+    },
+    badge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+        borderWidth: 1,
+        borderColor: 'rgba(0,220,100,0.3)',
+    },
+    badgeDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+        backgroundColor: '#00dc64',
+    },
+    badgeText: {
+        color: '#00dc64',
+        fontSize: 12,
+        fontWeight: '700',
+        letterSpacing: 0.3,
+    },
+    placeName: {
         color: '#fff',
-        fontSize: 22,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '700',
+        textShadowColor: 'rgba(0,0,0,0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 4,
+        letterSpacing: 0.2,
+    },
+    // ─── Gesture Hint ──────────────────────────────────────────
+    gestureHint: {
+        position: 'absolute',
+        bottom: 185,
+        left: 20,
+        right: 20,
+        alignItems: 'center',
+        zIndex: 11,
+    },
+    gestureHintText: {
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 13,
+        fontWeight: '500',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        textAlign: 'center',
+        letterSpacing: 0.2,
+        overflow: 'hidden',
+    },
+    // ─── Bottom Sheet ──────────────────────────────────────────
+    bottomSheet: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'rgba(10, 10, 25, 0.92)',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingTop: 10,
+        paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+        paddingHorizontal: 20,
+        zIndex: 12,
+        borderTopWidth: 1,
+        borderColor: 'rgba(255,255,255,0.07)',
+    },
+    sheetHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 16,
+    },
+    section: {
+        marginBottom: 4,
+    },
+    sectionLabel: {
+        color: 'rgba(255,255,255,0.45)',
+        fontSize: 11,
+        fontWeight: '600',
+        letterSpacing: 1.2,
+        textTransform: 'uppercase',
+        marginBottom: 10,
+        marginLeft: 2,
+    },
+    sectionRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    separator: {
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        marginVertical: 14,
+    },
+    controlBtn: {
+        flex: 1,
+        backgroundColor: 'rgba(91, 60, 240, 0.25)',
+        borderRadius: 14,
+        paddingVertical: 12,
+        alignItems: 'center',
+        gap: 5,
+        borderWidth: 1,
+        borderColor: 'rgba(91,60,240,0.3)',
+    },
+    controlBtnPrimary: {
+        backgroundColor: '#5B3CF0',
+        borderColor: '#7B6CF0',
+    },
+    controlBtnWide: {
+        flex: 1,
+    },
+    controlBtnText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '600',
+        letterSpacing: 0.2,
     },
 });
 
