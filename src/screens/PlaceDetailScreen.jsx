@@ -59,6 +59,21 @@ const normalizePlace = (place) => {
   if (normalized.services && !Array.isArray(normalized.services)) {
     normalized.services = parseUrlList(normalized.services);
   }
+
+  // Aliases para coordenadas
+  if (normalized.lat != null && normalized.latitude == null) {
+    normalized.latitude = normalized.lat;
+  }
+  if (normalized.lng != null && normalized.longitude == null) {
+    normalized.longitude = normalized.lng;
+  }
+  if (normalized.latitude != null && normalized.lat == null) {
+    normalized.lat = normalized.latitude;
+  }
+  if (normalized.longitude != null && normalized.lng == null) {
+    normalized.lng = normalized.longitude;
+  }
+
   return normalized;
 };
 
@@ -117,8 +132,8 @@ const PlaceDetailScreen = ({ route, navigation }) => {
   }, [place.imageUrls]);
 
   const coordinates = {
-    latitude: place.latitude || 2.9273,
-    longitude: place.longitude || -75.2819,
+    latitude: place.latitude || place.lat || 2.9273,
+    longitude: place.longitude || place.lng || -75.2819,
     latitudeDelta: 0.01,
     longitudeDelta: 0.01,
   };

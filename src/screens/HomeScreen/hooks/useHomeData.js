@@ -61,14 +61,44 @@ const useHomeData = (user) => {
     }
     setError("");
     try {
-      const pageSize = 12;
+      const pageSize = 10;
       const response = await api.get(ENDPOINTS.PLACES_SEARCH, { 
         params: { mode: 'ALL', size: pageSize, page: pageIndex } 
       });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      
+      // Manejar estructura de respuesta: { status, message, data: [...] }
+      const body = response.data;
+      let data = [];
+      let totalPages = 0;
+
+      if (body?.data && Array.isArray(body.data)) {
+        data = body.data;
+        totalPages = body.totalPages || body.total_pages || 0;
+      } else if (body?.content && Array.isArray(body.content)) {
+        data = body.content;
+        totalPages = body.totalPages || 0;
+      } else if (Array.isArray(body)) {
+        data = body;
+        totalPages = 1;
+      } else {
+        data = []; // Fallback total para evitar crashes
+      }
+
       const normalized = data.map(normalizePlace);
 
-      setHasMorePlaces(data.length === pageSize);
+      // Lógica de paginación:
+      // 1. Si el backend nos dice explícitamente cuántas páginas hay
+      if (totalPages > 0) {
+        setHasMorePlaces(pageIndex < totalPages - 1);
+      } 
+      // 2. Si no hay metadatos pero es la pág 0 y trajo algo, permitimos intentar pág 1 para "descubrir"
+      else if (pageIndex === 0 && data.length > 0) {
+        setHasMorePlaces(true); 
+      }
+      // 3. Fallback estándar: si trajo la página completa, asumimos que hay más
+      else {
+        setHasMorePlaces(data.length >= pageSize);
+      }
 
       if (isLoadMore) {
         setPlaces(prev => [...prev, ...normalized]);

@@ -110,6 +110,7 @@ export const cardStyles = {
     fontWeight: "700",
   },
   popularCard: {
+    width: 300,
     borderRadius: 32,
     overflow: "hidden",
     height: 320,
