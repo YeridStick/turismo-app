@@ -267,7 +267,7 @@ const HomeScreen = ({ navigation }) => {
           onOpenProfile={() => setProfileVisible(true)}
           onLogin={() => navigation.navigate("Auth")}
           searchSuggestions={query.trim() ? places.filter(p => (p.name || "").toLowerCase().includes(query.toLowerCase())).slice(0, 5) : []}
-          onSelectSuggestion={(item) => navigation.navigate("PlaceDetail", { place: item })}
+          onSelectSuggestion={(item) => navigation.navigate("PlaceDetail", { places: [item], initialIndex: 0 })}
         />
 
         {/* Nearby Section - Always Visible */}
@@ -284,7 +284,7 @@ const HomeScreen = ({ navigation }) => {
             isInteractingWithMap={isInteractingWithMap}
             onMapTouchStart={() => setIsInteractingWithMap(true)}
             onMapTouchEnd={() => setIsInteractingWithMap(false)}
-            onPlacePress={(item) => navigation.navigate("PlaceDetail", { place: item })}
+            onPlacePress={(item, index) => navigation.navigate("PlaceDetail", { places: nearby, initialIndex: index })}
             onArPress={openAR}
             onIncreaseRadius={handleIncreaseRadius}
             getTopPlaceMeta={getTopPlaceMeta}
@@ -306,7 +306,7 @@ const HomeScreen = ({ navigation }) => {
               horizontal
               data={displayPlaces}
               keyExtractor={(item, idx) => `${item.id || idx}-cat`}
-              renderItem={({ item }) => (
+              renderItem={({ item, index }) => (
                 <PlaceCard 
                   title={item.name}
                   subtitle={item.description}
@@ -315,7 +315,7 @@ const HomeScreen = ({ navigation }) => {
                   rating={item.rating}
                   distance={item.distance}
                   variant="compact" 
-                  onPress={() => navigation.navigate("PlaceDetail", { place: item })} 
+                  onPress={() => navigation.navigate("PlaceDetail", { places: displayPlaces, initialIndex: index })} 
                   onArPress={() => openAR(item)}
                 />
               )}
@@ -420,8 +420,8 @@ const HomeScreen = ({ navigation }) => {
         loadingTopPlaces={loadingTopPlaces}
         getCategoryLabel={getCategoryLabel}
         getTopPlaceMeta={getTopPlaceMeta}
-        onSelectTop={(item) => navigation.navigate("PlaceDetail", { place: item })}
-        onSelectNearby={(item) => navigation.navigate("PlaceDetail", { place: item })}
+        onSelectTop={(item, index) => navigation.navigate("PlaceDetail", { places: topPlaces, initialIndex: index })}
+        onSelectNearby={(item, index) => navigation.navigate("PlaceDetail", { places: [item], initialIndex: 0 })}
         getPlaceKey={(p) => p?.id || p?.name}
       />
 

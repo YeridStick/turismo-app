@@ -104,7 +104,7 @@ const NearbyMapBlock = ({
             keyExtractor={(item, idx) => `nearby-${item.id || idx}`}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.mapCarrouselContent}
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <PlaceCard 
                 title={item.name}
                 subtitle={item.description}
@@ -115,7 +115,7 @@ const NearbyMapBlock = ({
                 variant="compact"
                 cardWidth={250}
                 imageHeight={180} // Increased more for full visibility
-                onPress={() => onPlacePress(item)} 
+                onPress={() => onPlacePress(item, index)} 
                 onArPress={() => onArPress(item)}
               />
             )}

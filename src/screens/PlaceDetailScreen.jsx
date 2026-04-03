@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import {
+  Animated,
   ActivityIndicator,
   Linking,
   Platform,
@@ -11,14 +12,18 @@ import {
   TouchableOpacity,
   Dimensions,
   useWindowDimensions,
+  FlatList,
+  Modal,
 } from 'react-native';
-import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialIcons, Feather } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
 import { getPlaceArConfig } from '../services/ar';
 import { formatDistance } from '../utils/utils';
 import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const getModelType = (url) => {
   if (typeof url !== "string") return null;
@@ -77,26 +82,82 @@ const normalizePlace = (place) => {
   return normalized;
 };
 
-const { width } = Dimensions.get('window');
-
 const IMAGE_PLACEHOLDER =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
 
-const PlaceDetailScreen = ({ route, navigation }) => {
+// --- NUEVO COMPONENTE: GALERÍA HD ---
+const ImageGalleryModal = ({ visible, images, initialIndex, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  
+  useEffect(() => {
+    if (visible) setCurrentIndex(initialIndex);
+  }, [visible, initialIndex]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalBg}>
+        <TouchableOpacity style={styles.modalClose} onPress={onClose}>
+          <Ionicons name="close" size={30} color="#FFF" />
+        </TouchableOpacity>
+        
+        <FlatList
+          horizontal
+          pagingEnabled
+          data={images}
+          keyExtractor={(item, idx) => `full-${idx}`}
+          initialScrollIndex={initialIndex}
+          getItemLayout={(_, index) => ({
+            length: SCREEN_WIDTH,
+            offset: SCREEN_WIDTH * index,
+            index,
+          })}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+            setCurrentIndex(index);
+          }}
+          renderItem={({ item }) => (
+            <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, justifyContent: 'center' }}>
+              <Image 
+                source={{ uri: item.uri }} 
+                style={{ width: '100%', height: '70%' }} 
+                contentFit="contain"
+                placeholder={IMAGE_PLACEHOLDER}
+              />
+            </View>
+          )}
+          showsHorizontalScrollIndicator={false}
+        />
+
+        <View style={styles.modalCounter}>
+          <Text style={styles.modalCounterText}>{currentIndex + 1} / {images.length}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Componente para el contenido de un solo sitio
+const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const { width: windowWidth } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
-  const { place: initialPlace } = route?.params || {};
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [fullPlace, setFullPlace] = useState(null);
+  const [galleryVisible, setGalleryVisible] = useState(false);
+  
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const imageScrollViewRef = useRef(null);
 
-  // Cargar datos detallados (incluyendo modelos 3D) en segundo plano
+  // Cargar datos detallados en segundo plano
   useEffect(() => {
+    let isMounted = true;
     const fetchDetails = async () => {
       if (!initialPlace?.id) return;
       try {
         const response = await api.get(ENDPOINTS.PLACE_DETAIL(initialPlace.id));
         const data = response.data?.data || response.data;
-        if (data) {
+        if (data && isMounted) {
           const normalized = normalizePlace(data);
           setFullPlace(normalized);
         }
@@ -105,31 +166,59 @@ const PlaceDetailScreen = ({ route, navigation }) => {
       }
     };
     fetchDetails();
+    return () => { isMounted = false; };
   }, [initialPlace?.id]);
 
   const place = useMemo(() => {
     if (!fullPlace) return initialPlace;
-    // Combinar para no perder distancias y otros metadatos calculados en el home
     return { ...initialPlace, ...fullPlace };
   }, [initialPlace, fullPlace]);
 
-  const arConfig = useMemo(() => {
-    if (!place) return null;
-    return getPlaceArConfig(place);
-  }, [place]);
-
-  if (!place) return null;
-
-  const galleryHeight = isSmall ? 200 : 220;
-  const mapHeight = isSmall ? 200 : 240;
-
-  // Imágenes reales del lugar
   const images = useMemo(() => {
     if (Array.isArray(place.imageUrls) && place.imageUrls.length > 0) {
       return place.imageUrls.map((uri, id) => ({ id, uri }));
     }
     return [{ id: 'placeholder', uri: IMAGE_PLACEHOLDER }];
   }, [place.imageUrls]);
+
+  // --- LÓGICA DE AUTO-PLAY ---
+  useEffect(() => {
+    if (images.length <= 1 || galleryVisible) return;
+    
+    const interval = setInterval(() => {
+      const nextIndex = (activeImageIndex + 1) % images.length;
+      imageScrollViewRef.current?.scrollTo({ x: nextIndex * windowWidth, animated: true });
+      setActiveImageIndex(nextIndex);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [images.length, activeImageIndex, galleryVisible, windowWidth]);
+
+  const arConfig = useMemo(() => {
+    if (!place) return null;
+    return getPlaceArConfig(place);
+  }, [place]);
+
+  const galleryHeight = isSmall ? 200 : 220;
+  
+  const headerHeight = scrollY.interpolate({
+    inputRange: [-galleryHeight, 0],
+    outputRange: [galleryHeight * 2, galleryHeight],
+    extrapolateLeft: 'extend',
+    extrapolateRight: 'clamp',
+  });
+
+  const imageScale = scrollY.interpolate({
+    inputRange: [-galleryHeight, 0],
+    outputRange: [1.5, 1],
+    extrapolate: 'clamp',
+  });
+
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [-galleryHeight, 0],
+    outputRange: [-galleryHeight / 2, 0],
+    extrapolate: 'clamp',
+  });
 
   const coordinates = {
     latitude: place.latitude || place.lat || 2.9273,
@@ -138,10 +227,25 @@ const PlaceDetailScreen = ({ route, navigation }) => {
     longitudeDelta: 0.01,
   };
 
-  const handleScroll = (event) => {
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: false }
+  );
+
+  const handleHorizontalScroll = useCallback((event) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
-    const index = Math.floor(event.nativeEvent.contentOffset.x / slideSize);
-    setActiveImageIndex(index);
+    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
+    if (index !== activeImageIndex) setActiveImageIndex(index);
+  }, [activeImageIndex]);
+
+  const handleNextImage = () => {
+    const nextIndex = (activeImageIndex + 1) % images.length;
+    imageScrollViewRef.current?.scrollTo({ x: nextIndex * windowWidth, animated: true });
+  };
+
+  const handlePrevImage = () => {
+    const prevIndex = (activeImageIndex - 1 + images.length) % images.length;
+    imageScrollViewRef.current?.scrollTo({ x: prevIndex * windowWidth, animated: true });
   };
 
   const infoDetails = useMemo(() => [
@@ -153,44 +257,56 @@ const PlaceDetailScreen = ({ route, navigation }) => {
   ], [place]);
 
   return (
-    <View style={styles.container}>
-      {/* Header con botón de regreso */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.white} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.favoriteButton}>
-          <Ionicons name="heart-outline" size={24} color={COLORS.white} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.content}>
-        {/* Galería de imágenes */}
-        <View style={[styles.galleryContainer, { height: galleryHeight }]}>
+    <View style={{ width: windowWidth, height: '100%' }}>
+      <Animated.ScrollView 
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
+        style={styles.content}
+        bounces={true}
+        overScrollMode="always"
+        alwaysBounceVertical={true}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        <Animated.View style={[
+          styles.galleryContainer, 
+          { 
+            height: headerHeight,
+            transform: [{ translateY: headerTranslateY }] 
+          }
+        ]}>
           <ScrollView
+            ref={imageScrollViewRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onScroll={handleScroll}
+            onScroll={handleHorizontalScroll}
             scrollEventThrottle={16}
+            scrollEnabled={false} // Desactivamos el swipe manual para evitar conflicto con swipe de sitio
           >
             {images.map((image, index) => (
-              <Image
-                key={image.id || index}
-                source={{ uri: image.uri }}
-                style={[styles.image, { width: windowWidth, height: galleryHeight }]}
-                contentFit="cover"
-                cachePolicy="disk"
-                placeholder={IMAGE_PLACEHOLDER}
-                transition={200}
-              />
+              <TouchableOpacity
+                activeOpacity={0.9}
+                key={image.id || index} 
+                onPress={() => setGalleryVisible(true)}
+                style={{ 
+                  width: windowWidth, 
+                  height: '100%',
+                }}
+              >
+                <Animated.View style={{ flex: 1, transform: [{ scale: imageScale }] }}>
+                  <Image
+                    source={{ uri: image.uri }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    placeholder={IMAGE_PLACEHOLDER}
+                    transition={200}
+                  />
+                </Animated.View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
 
-          {/* Indicadores de página */}
           <View style={styles.pagination}>
             {images.map((_, index) => (
               <View
@@ -202,9 +318,8 @@ const PlaceDetailScreen = ({ route, navigation }) => {
               />
             ))}
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Información del lugar */}
         <View style={styles.infoContainer}>
           <Text style={styles.title}>{place.name || 'Lugar sin nombre'}</Text>
 
@@ -219,7 +334,6 @@ const PlaceDetailScreen = ({ route, navigation }) => {
             <Text style={styles.description}>{place.description}</Text>
           )}
 
-          {/* Sección de Detalles Extendida */}
           <View style={styles.detailsSection}>
             <Text style={styles.sectionTitle}>Detalles del sitio</Text>
             {infoDetails.map((detail, idx) => (
@@ -235,7 +349,6 @@ const PlaceDetailScreen = ({ route, navigation }) => {
             ))}
           </View>
 
-          {/* AMENITIES SECTION (Dynamic from DB) */}
           {Array.isArray(place.services) && place.services.length > 0 && (
             <View style={styles.amenitiesSection}>
               <Text style={styles.sectionTitle}>Servicios y Comodidades</Text>
@@ -257,7 +370,6 @@ const PlaceDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
-          {/* Botones de acción */}
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionButton, { flex: 1 }]} onPress={() => {
               const url = coordinates ? `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}` : '';
@@ -283,7 +395,67 @@ const PlaceDetailScreen = ({ route, navigation }) => {
             )}
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      {/* Visor HD FullScreen */}
+      <ImageGalleryModal 
+        visible={galleryVisible}
+        images={images}
+        initialIndex={activeImageIndex}
+        onClose={() => setGalleryVisible(false)}
+      />
+    </View>
+  );
+});
+
+const PlaceDetailScreen = ({ route, navigation }) => {
+  const { places = [], initialIndex = 0, place } = route?.params || {};
+  
+  const displayPlaces = useMemo(() => {
+    if (places.length > 0) return places;
+    if (place) return [place];
+    return [];
+  }, [places, place]);
+
+  if (displayPlaces.length === 0) return null;
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={COLORS.white} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.favoriteButton}>
+          <Ionicons name="heart-outline" size={24} color={COLORS.white} />
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        horizontal
+        pagingEnabled
+        data={displayPlaces}
+        keyExtractor={(item) => `detail-${item.id || Math.random()}`}
+        initialScrollIndex={initialIndex}
+        initialNumToRender={1}
+        maxToRenderPerBatch={1}
+        windowSize={2}
+        removeClippedSubviews={Platform.OS === 'android'}
+        onScrollToIndexFailed={(info) => {
+          console.warn('Scroll failed:', info);
+        }}
+        getItemLayout={(data, index) => ({
+          length: SCREEN_WIDTH,
+          offset: SCREEN_WIDTH * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <PlaceDetailContent initialPlace={item} navigation={navigation} />
+        )}
+        showsHorizontalScrollIndicator={false}
+      />
     </View>
   );
 };
@@ -302,7 +474,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: SPACING.md,
     paddingTop: SPACING.xl + 10,
-    zIndex: 10,
+    zIndex: 100,
   },
   backButton: {
     width: 40,
@@ -326,10 +498,7 @@ const styles = StyleSheet.create({
   galleryContainer: {
     height: 220,
     position: 'relative',
-  },
-  image: {
-    width: width,
-    height: '100%',
+    overflow: 'hidden',
   },
   pagination: {
     position: 'absolute',
@@ -353,6 +522,7 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     padding: SPACING.lg,
+    backgroundColor: COLORS.background,
   },
   title: {
     fontSize: FONT_SIZES.xxl,
@@ -378,24 +548,11 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     marginBottom: SPACING.lg,
   },
-  mapSection: {
-    marginTop: SPACING.md,
-  },
   sectionTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.md,
-  },
-  mapContainer: {
-    height: 220,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  map: {
-    flex: 1,
   },
   actionButton: {
     backgroundColor: "#0f172a",
@@ -412,20 +569,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: 'bold',
-  },
-  arSection: {
-    marginTop: SPACING.lg,
-  },
-  arPreviewContainer: {
-    height: 300,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  arWebView: {
-    flex: 1,
   },
   actionRow: {
     flexDirection: 'row',
@@ -499,6 +642,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#3730A3',
     fontWeight: '600',
+  },
+  // ESTILOS MODAL HD
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCounter: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  modalCounterText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // ESTILOS FLECHAS SLIDER
+  arrowBtn: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  arrowLeft: {
+    left: 10,
+  },
+  arrowRight: {
+    right: 10,
   },
 });
 
