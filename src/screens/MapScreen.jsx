@@ -1,10 +1,11 @@
 import * as Location from 'expo-location';
 import { getDistance } from 'geolib';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import WebViewMap from '../components/WebViewMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
+import { PremiumModal } from '../components/ui/PremiumModal';
 
 const MapScreen = ({ route }) => {
     const [userLocation, setUserLocation] = useState(null);
@@ -12,6 +13,7 @@ const MapScreen = ({ route }) => {
     const [loading, setLoading] = useState(true);
     const [filterMode, setFilterMode] = useState('all'); // 'all', 'nearby', 'selected'
     const [locationPermission, setLocationPermission] = useState(false);
+    const [modal, setModal] = useState({ visible: false, type: 'info', title: '', message: '' });
 
     // Parámetro opcional: sitio seleccionado desde otra pantalla
     const selectedPlaceId = route?.params?.placeId;
@@ -22,10 +24,12 @@ const MapScreen = ({ route }) => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
-                    Alert.alert(
-                        'Permisos necesarios',
-                        'Necesitamos acceso a tu ubicación para mostrar sitios cercanos.'
-                    );
+                    setModal({
+                        visible: true,
+                        type: 'warning',
+                        title: 'Permisos necesarios',
+                        message: 'Necesitamos acceso a tu ubicación para mostrar sitios cercanos y mejorar tu experiencia.'
+                    });
                     setLocationPermission(false);
                     setLoading(false);
                     return;
@@ -47,7 +51,12 @@ const MapScreen = ({ route }) => {
                 await fetchPlaces();
             } catch (error) {
                 console.error('Error obteniendo ubicación:', error);
-                Alert.alert('Error', 'No se pudo obtener tu ubicación. Intenta nuevamente.');
+                setModal({
+                    visible: true,
+                    type: 'error',
+                    title: 'Error de Ubicación',
+                    message: 'No logramos obtener tu posición actual. Por favor, verifica tu GPS.'
+                });
                 setLoading(false);
             }
         })();
@@ -74,7 +83,12 @@ const MapScreen = ({ route }) => {
             }
         } catch (error) {
             console.error('Error cargando sitios:', error);
-            Alert.alert('Error', 'No se pudieron cargar los sitios turísticos.');
+            setModal({
+                visible: true,
+                type: 'error',
+                title: 'Error de Carga',
+                message: 'No pudimos descargar los sitios turísticos en este momento.'
+            });
         } finally {
             setLoading(false);
         }
@@ -285,11 +299,16 @@ const MapScreen = ({ route }) => {
                     <Text style={styles.infoPanelText}>
                         Lat: {userLocation.latitude.toFixed(6)} · Lon: {userLocation.longitude.toFixed(6)}
                     </Text>
-                    <Text style={styles.infoPanelSubtext}>
-                        Mostrando {filteredPlaces.length} sitio{filteredPlaces.length !== 1 ? 's' : ''}
-                    </Text>
                 </View>
             )}
+
+            <PremiumModal
+                visible={modal.visible}
+                type={modal.type}
+                title={modal.title}
+                message={modal.message}
+                onClose={() => setModal(prev => ({ ...prev, visible: false }))}
+            />
         </View>
     );
 };

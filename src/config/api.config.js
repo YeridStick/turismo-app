@@ -4,7 +4,7 @@ export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com';//https://t
 // O si estás probando localmente en LAN:
 // export const API_BASE_URL = 'http://192.168.1.X:8082'; // Reemplaza X con tu IP local
 
-export const API_TIMEOUT = 30000;
+export const API_TIMEOUT = 60000;
 
 
 export const ENDPOINTS = {
@@ -25,7 +25,9 @@ export const ENDPOINTS = {
   // Places
   PLACES_SEARCH: '/api/places/search',
   PLACE_DETAIL: (id) => `/api/places/${id}`,
+  PLACE_UPDATE: (id) => `/api/places/${id}`,
   PLACES_CREATE: '/api/places',
+  PLACES_MINE: '/api/places/mine',
   PLACES_TOP: '/api/pruebas/analytics/places/top',
 
   // Feedback / Reviews

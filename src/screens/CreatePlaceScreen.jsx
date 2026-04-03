@@ -1,7 +1,6 @@
-import { FontAwesome } from "@expo/vector-icons";
+import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,7 +13,8 @@ import {
 import WebViewMap from "../components/WebViewMap";
 import { ENDPOINTS } from "../config/api.config";
 import api from "../services/api";
-import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
+import { COLORS, FONT_SIZES, SPACING, PLACE_SERVICES } from "../utils/constants";
+import { PremiumModal } from "../components/ui/PremiumModal";
 
 const ACCENT = "#5B3CF0";
 const MAX_GEOCODE_LIMIT = 100;
@@ -27,27 +27,32 @@ const parseList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const CreatePlaceScreen = ({ navigation }) => {
+const CreatePlaceScreen = ({ navigation, route }) => {
+  const editPlace = route.params?.place || null;
+
   const [form, setForm] = useState({
-    name: "",
-    description: "",
-    categoryId: "",
-    lat: "",
-    lng: "",
-    address: "",
-    phone: "",
-    website: "",
-    imageUrls: "",
-    model3dUrls: "",
+    name: editPlace?.name || "",
+    description: editPlace?.description || "",
+    categoryId: editPlace?.categoryId ? String(editPlace.categoryId) : "",
+    lat: editPlace?.lat ? String(editPlace.lat) : "",
+    lng: editPlace?.lng ? String(editPlace.lng) : "",
+    address: editPlace?.address || "",
+    phone: editPlace?.phone || "",
+    website: editPlace?.website || "",
+    imageUrls: Array.isArray(editPlace?.imageUrls) ? editPlace.imageUrls.join(", ") : "",
+    model3dUrls: Array.isArray(editPlace?.model3dUrls) ? editPlace.model3dUrls.join(", ") : "",
+    services: editPlace?.services || [],
   });
+  const [customService, setCustomService] = useState("");
   const [loading, setLoading] = useState(false);
   const [geocodeResults, setGeocodeResults] = useState([]);
   const [geocodeLoading, setGeocodeLoading] = useState(false);
   const [geocodeCooldown, setGeocodeCooldown] = useState(false);
-  const [manualMode, setManualMode] = useState(false);
   const [categories, setCategories] = useState([]);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const [modal, setModal] = useState({ visible: false, type: 'success', title: '', message: '', onConfirm: null });
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -126,7 +131,12 @@ const CreatePlaceScreen = ({ navigation }) => {
   const handleGeocode = async () => {
     const address = form.address.trim();
     if (!address) {
-      Alert.alert("Direccion requerida", "Ingresa una direccion para geocodificar.");
+      setModal({
+        visible: true,
+        type: 'warning',
+        title: 'Dirección requerida',
+        message: 'Por favor, ingresa una dirección para poder geocodificarla.'
+      });
       return;
     }
     if (geocodeCooldown || geocodeLoading) return;
@@ -139,10 +149,20 @@ const CreatePlaceScreen = ({ navigation }) => {
       const payload = response.data?.data || response.data;
       setGeocodeResults(Array.isArray(payload) ? payload : []);
       if (!Array.isArray(payload) || payload.length === 0) {
-        Alert.alert("Sin resultados", "No se encontraron coordenadas para esa direccion.");
+        setModal({
+          visible: true,
+          type: 'info',
+          title: 'Sin resultados',
+          message: 'No logramos encontrar coordenadas para esa dirección. Intenta ser más específico.'
+        });
       }
     } catch (err) {
-      Alert.alert("Error", "No se pudo geocodificar la direccion.");
+      setModal({
+        visible: true,
+        type: 'error',
+        title: 'Error de Geocodificación',
+        message: 'Hubo un problema al conectar con el servicio de mapas.'
+      });
     } finally {
       setGeocodeLoading(false);
       setGeocodeCooldown(true);
@@ -164,9 +184,40 @@ const CreatePlaceScreen = ({ navigation }) => {
     updateField("lng", coords.longitude.toFixed(6));
   };
 
+  const toggleService = (serviceLabel) => {
+    const current = [...form.services];
+    const index = current.indexOf(serviceLabel);
+    if (index > -1) {
+      current.splice(index, 1);
+    } else {
+      current.push(serviceLabel);
+    }
+    updateField("services", current);
+  };
+
+  const addCustomService = () => {
+    const service = customService.trim();
+    if (!service) return;
+    if (form.services.includes(service)) {
+      setCustomService("");
+      return;
+    }
+    updateField("services", [...form.services, service]);
+    setCustomService("");
+  };
+
+  const removeService = (service) => {
+    updateField("services", form.services.filter(s => s !== service));
+  };
+
   const handleSubmit = async () => {
     if (!form.name || !form.description || !form.categoryId || !form.lat || !form.lng) {
-      Alert.alert("Campos requeridos", "Completa nombre, descripcion, categoria y coordenadas.");
+      setModal({
+        visible: true,
+        type: 'warning',
+        title: 'Campos requeridos',
+        message: 'Asegúrate de completar el nombre, descripción, categoría y ubicación en el mapa.'
+      });
       return;
     }
     setLoading(true);
@@ -182,24 +233,50 @@ const CreatePlaceScreen = ({ navigation }) => {
         website: form.website.trim() || undefined,
         imageUrls: form.imageUrls ? parseList(form.imageUrls) : undefined,
         model3dUrls: form.model3dUrls ? parseList(form.model3dUrls) : undefined,
+        services: form.services.length > 0 ? form.services : undefined,
       };
 
-      await api.post(ENDPOINTS.PLACES_CREATE, payload);
-      Alert.alert("Listo", "Lugar creado correctamente.");
-      setForm({
-        name: "",
-        description: "",
-        categoryId: "",
-        lat: "",
-        lng: "",
-        address: "",
-        phone: "",
-        website: "",
-        imageUrls: "",
-        model3dUrls: "",
-      });
+      if (editPlace) {
+        await api.patch(ENDPOINTS.PLACE_UPDATE(editPlace.id), payload);
+        setModal({
+          visible: true,
+          type: 'success',
+          title: '¡Listo!',
+          message: 'El lugar ha sido actualizado correctamente.',
+          onConfirm: () => navigation.goBack()
+        });
+      } else {
+        await api.post(ENDPOINTS.PLACES_CREATE, payload);
+        setModal({
+          visible: true,
+          type: 'success',
+          title: '¡Excelente!',
+          message: 'Tu nuevo lugar mágico ha sido registrado con éxito.',
+          onConfirm: () => {
+             setForm({
+               name: "",
+               description: "",
+               categoryId: "",
+               lat: "",
+               lng: "",
+               address: "",
+               phone: "",
+               website: "",
+               imageUrls: "",
+               model3dUrls: "",
+               services: [],
+             });
+             setModal(prev => ({ ...prev, visible: false }));
+          }
+        });
+      }
     } catch (err) {
-      Alert.alert("Error", "No se pudo crear el lugar. Revisa los datos e intenta de nuevo.");
+      setModal({
+        visible: true,
+        type: 'error',
+        title: 'Error al guardar',
+        message: `No logramos ${editPlace ? 'actualizar' : 'crear'} el lugar en este momento. Revisa tu conexión.`
+      });
     } finally {
       setLoading(false);
     }
@@ -218,8 +295,8 @@ const CreatePlaceScreen = ({ navigation }) => {
           <FontAwesome name="chevron-left" size={16} color={COLORS.text} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>Nuevo Lugar Mágico</Text>
-          <Text style={styles.subtitle}>Completa los detalles para agregarlo</Text>
+          <Text style={styles.title}>{editPlace ? "Editar Lugar Mágico" : "Nuevo Lugar Mágico"}</Text>
+          <Text style={styles.subtitle}>{editPlace ? "Actualiza los datos del sitio" : "Completa los detalles para agregarlo"}</Text>
         </View>
       </View>
 
@@ -326,6 +403,69 @@ const CreatePlaceScreen = ({ navigation }) => {
             placeholderTextColor={COLORS.textLight}
             autoCapitalize="none"
           />
+
+          {/* SERVICES SECTION */}
+          <Text style={styles.sectionLabel}>Servicios / Amenidades</Text>
+          <View style={styles.servicesContainer}>
+            {PLACE_SERVICES.map((s) => {
+              const isSelected = form.services.includes(s.label);
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  style={[
+                    styles.serviceChip,
+                    isSelected && styles.serviceChipSelected,
+                  ]}
+                  onPress={() => toggleService(s.label)}
+                >
+                  <MaterialIcons
+                    name={s.icon}
+                    size={16}
+                    color={isSelected ? COLORS.white : ACCENT}
+                  />
+                  <Text
+                    style={[
+                      styles.serviceChipText,
+                      isSelected && styles.serviceChipTextSelected,
+                    ]}
+                  >
+                    {s.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.customServiceRow}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={customService}
+              onChangeText={setCustomService}
+              placeholder="Otro servicio (ej: Camping)"
+              placeholderTextColor={COLORS.textLight}
+              onSubmitEditing={addCustomService}
+            />
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={addCustomService}
+            >
+              <FontAwesome name="plus" size={16} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Selected Custom Services (those not in PLACE_SERVICES) */}
+          <View style={styles.selectedServicesContainer}>
+            {form.services
+              .filter((s) => !PLACE_SERVICES.some((ps) => ps.label === s))
+              .map((s, idx) => (
+                <View key={`custom-${idx}`} style={styles.customChip}>
+                  <Text style={styles.customChipText}>{s}</Text>
+                  <TouchableOpacity onPress={() => removeService(s)}>
+                    <FontAwesome name="times-circle" size={14} color={COLORS.textLight} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+          </View>
         </View>
 
         {/* LOCATION CARD */}
@@ -471,13 +611,24 @@ const CreatePlaceScreen = ({ navigation }) => {
           activeOpacity={0.8}
         >
           <Text style={styles.submitText}>
-            {loading ? "Registrando Lugar..." : "Guardar e Iniciar Aventura"}
+            {loading 
+              ? (editPlace ? "Actualizando..." : "Registrando Lugar...") 
+              : (editPlace ? "Guardar Cambios" : "Guardar e Iniciar Aventura")}
           </Text>
           {!loading && <FontAwesome name="check-circle" size={18} color={COLORS.white} style={{ marginLeft: 8 }} />}
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <PremiumModal
+        visible={modal.visible}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onConfirm={modal.onConfirm || (() => setModal(prev => ({ ...prev, visible: false })))}
+        onClose={() => setModal(prev => ({ ...prev, visible: false }))}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -741,6 +892,63 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: "700",
+  },
+  servicesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  serviceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EEF2FF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E0E7FF",
+    gap: 6,
+  },
+  serviceChipSelected: {
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
+  },
+  serviceChipText: {
+    fontSize: 12,
+    color: ACCENT,
+    fontWeight: "600",
+  },
+  serviceChipTextSelected: {
+    color: COLORS.white,
+  },
+  customServiceRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  selectedServicesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  customChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  customChipText: {
+    fontSize: 12,
+    color: COLORS.text,
+    fontWeight: "500",
   },
 });
 

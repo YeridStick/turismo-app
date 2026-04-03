@@ -6,7 +6,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,6 +17,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
+import { PremiumModal } from '../components/ui/PremiumModal';
 
 const TabButton = ({ active, label, onPress }) => (
   <TouchableOpacity
@@ -69,15 +69,17 @@ const AuthScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showTotpPassword, setShowTotpPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showRecoveryPassword, setShowRecoveryPassword] = useState(false);
-  const [notification, setNotification] = useState({ visible: false, message: '', type: 'error' });
+  const [modal, setModal] = useState({ visible: false, type: 'error', title: '', message: '', onConfirm: null });
 
-  const showNotification = (message, type = 'error') => {
-    setNotification({ visible: true, message, type });
-    setTimeout(() => {
-      setNotification((prev) => ({ ...prev, visible: false }));
-    }, 4500);
+  const showNotification = (message, type = 'error', title = null) => {
+    setModal({
+      visible: true,
+      type,
+      title: title || (type === 'error' ? 'Error' : 'Éxito'),
+      message,
+      onConfirm: null
+    });
   };
 
 
@@ -181,11 +183,11 @@ const AuthScreen = () => {
 
   const handleSetupTotp = async () => {
     if (!email) {
-      Alert.alert('Correo requerido', 'Ingresa tu correo para generar el código.');
+      showNotification('Ingresa tu correo para generar el código.', 'warning', 'Correo requerido');
       return;
     }
     if (!password) {
-      Alert.alert('Contraseña requerida', 'Necesitamos tu contraseña para generar el código TOTP.');
+      showNotification('Necesitamos tu contraseña para generar el código TOTP.', 'warning', 'Contraseña requerida');
       return;
     }
     setLoading(true);
@@ -207,9 +209,9 @@ const AuthScreen = () => {
         setStatusMessage(err.response?.data?.message || 'TOTP ya habilitado para este usuario.');
         setStep('success');
       } else if (err.response?.status === 400) {
-        Alert.alert('Credenciales requeridas', err.response?.data?.message || 'Verifica tu contraseña.');
+        showNotification(err.response?.data?.message || 'Verifica tu contraseña.', 'error', 'Credenciales requeridas');
       } else {
-        Alert.alert('No se pudo generar el QR', err.response?.data?.message || 'Intenta de nuevo.');
+        showNotification(err.response?.data?.message || 'Intenta de nuevo.', 'error', 'No se pudo generar el QR');
       }
     } finally {
       setLoading(false);
@@ -218,7 +220,7 @@ const AuthScreen = () => {
 
   const handleConfirmTotp = async () => {
     if (!verifyCode || !email) {
-      Alert.alert('Datos requeridos', 'Ingresa el código de 6 dígitos.');
+      showNotification('Ingresa el código de 6 dígitos.', 'warning', 'Datos requeridos');
       return;
     }
     setLoading(true);
@@ -226,7 +228,7 @@ const AuthScreen = () => {
       await confirmTotp({ email: email.trim(), code: verifyCode.trim() });
       setStep('success');
     } catch (err) {
-      Alert.alert('Código inválido', err.response?.data?.message || 'Intenta nuevamente.');
+      showNotification(err.response?.data?.message || 'Intenta nuevamente.', 'error', 'Código inválido');
     } finally {
       setLoading(false);
     }
@@ -234,7 +236,7 @@ const AuthScreen = () => {
 
   const handleRecoveryValidate = async (silent = false) => {
     if (!recoveryEmail) {
-      Alert.alert('Correo requerido', 'Ingresa tu correo para validar y recuperar la cuenta.');
+      showNotification('Ingresa tu correo para validar y recuperar la cuenta.', 'warning', 'Correo requerido');
       return;
     }
     setLoading(true);
@@ -247,7 +249,7 @@ const AuthScreen = () => {
       setRecoveryStep(status === 'already_verified' ? 'request' : 'pending');
     } catch (err) {
       if (!silent) {
-        Alert.alert('No se pudo validar', err.response?.data?.message || 'Intenta nuevamente.');
+        showNotification(err.response?.data?.message || 'Intenta nuevamente.', 'error', 'No se pudo validar');
       }
     } finally {
       setLoading(false);
@@ -256,7 +258,7 @@ const AuthScreen = () => {
 
   const handleRecoveryRequest = async () => {
     if (!recoveryEmail) {
-      Alert.alert('Correo requerido', 'Ingresa tu correo para recuperar la cuenta.');
+      showNotification('Ingresa tu correo para recuperar la cuenta.', 'warning', 'Correo requerido');
       return;
     }
     setLoading(true);
@@ -276,7 +278,7 @@ const AuthScreen = () => {
 
   const handleRecoveryConfirm = async () => {
     if (!recoveryEmail || !recoveryCode || !recoveryPassword) {
-      Alert.alert('Datos requeridos', 'Ingresa el código y la nueva contraseña.');
+      showNotification('Ingresa el código y la nueva contraseña.', 'warning', 'Datos requeridos');
       return;
     }
     setLoading(true);
@@ -288,7 +290,7 @@ const AuthScreen = () => {
       setRecoveryStep('sent');
       setRecoveryMessage('Listo. Tu contraseña fue actualizada, inicia sesión con tu nueva clave.');
     } catch (err) {
-      Alert.alert('No se pudo confirmar', err.response?.data?.message || 'Intenta nuevamente.');
+      showNotification(err.response?.data?.message || 'Intenta nuevamente.', 'error', 'No se pudo confirmar');
     } finally {
       setLoading(false);
     }
@@ -558,7 +560,7 @@ const AuthScreen = () => {
           style={styles.manualBox}
           onPress={async () => {
             await Clipboard.setStringAsync(manualCode);
-            Alert.alert('Copiado', 'Código manual copiado al portapapeles');
+            showNotification('Código manual copiado al portapapeles', 'success', 'Copiado');
           }}
           activeOpacity={0.8}
         >
@@ -761,14 +763,6 @@ const AuthScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <LinearGradient colors={['#eef0ff', '#f8f9fb']} style={styles.header}>
-        {notification.visible && (
-          <View style={[styles.topNotification, notification.type === 'error' ? styles.notifError : styles.notifSuccess]}>
-            <View style={styles.notifIcon}>
-              <FontAwesome name={notification.type === 'error' ? "exclamation-circle" : "check-circle"} size={14} color="#fff" />
-            </View>
-            <Text style={styles.topNotificationText}>{notification.message}</Text>
-          </View>
-        )}
         <View style={styles.headerRow}>
 
           <View style={styles.headerTitleRow}>
@@ -785,6 +779,15 @@ const AuthScreen = () => {
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {showRecovery ? renderRecovery() : activeTab === 'login' ? renderLogin() : renderRegister()}
       </ScrollView>
+
+      <PremiumModal
+        visible={modal.visible}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onConfirm={modal.onConfirm || (() => setModal(prev => ({ ...prev, visible: false })))}
+        onClose={() => setModal(prev => ({ ...prev, visible: false }))}
+      />
     </KeyboardAvoidingView>
   );
 };

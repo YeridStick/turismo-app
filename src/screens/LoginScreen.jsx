@@ -3,7 +3,6 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
+import { PremiumModal } from '../components/ui/PremiumModal';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -22,6 +22,7 @@ const LoginScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginMethod, setLoginMethod] = useState('password');
   const [loading, setLoading] = useState(false);
+  const [modal, setModal] = useState({ visible: false, type: 'error', title: '', message: '' });
   const navigation = useNavigation();
   const { login, loginWithPassword } = useAuth();
 
@@ -31,14 +32,24 @@ const LoginScreen = () => {
     if (loginMethod === 'password') {
       if (!email || !password) {
         setLoading(false);
-        Alert.alert('Error', 'Por favor ingresa correo y contraseña');
+        setModal({
+          visible: true,
+          type: 'warning',
+          title: 'Datos requeridos',
+          message: 'Por favor ingresa tu correo y contraseña para continuar.'
+        });
         return;
       }
       result = await loginWithPassword(email.trim(), password.trim());
     } else {
       if (!email || !totpCode) {
         setLoading(false);
-        Alert.alert('Error', 'Por favor ingresa correo y código TOTP');
+        setModal({
+          visible: true,
+          type: 'warning',
+          title: 'Datos de seguridad',
+          message: 'Por favor ingresa tu correo y el código TOTP de 6 dígitos.'
+        });
         return;
       }
       result = await login(email.trim(), totpCode.trim());
@@ -46,7 +57,12 @@ const LoginScreen = () => {
     setLoading(false);
 
     if (!result.success) {
-      Alert.alert('Error', result.error);
+      setModal({
+        visible: true,
+        type: 'error',
+        title: 'Error de acceso',
+        message: result.error || 'Verifica tus credenciales e intenta de nuevo.'
+      });
     }
   };
 
@@ -146,6 +162,14 @@ const LoginScreen = () => {
           <Text style={styles.linkText}>Crear cuenta</Text>
         </TouchableOpacity>
       </View>
+
+      <PremiumModal
+        visible={modal.visible}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onClose={() => setModal(prev => ({ ...prev, visible: false }))}
+      />
     </KeyboardAvoidingView>
   );
 };

@@ -52,4 +52,8 @@ export const getAgencies = () => api.get(ENDPOINTS.AGENCIES);
 export const getNearbyContext = (lat, lng) => 
   api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, { params: { lat, lng } });
 
+export const getMyPlaces = () => api.get(ENDPOINTS.PLACES_MINE);
+export const createPlace = (data) => api.post(ENDPOINTS.PLACES_CREATE, data);
+export const updatePlace = (id, data) => api.patch(ENDPOINTS.PLACE_UPDATE(id), data);
+
 export default api;

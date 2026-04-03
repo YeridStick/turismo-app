@@ -2,7 +2,6 @@ import { FontAwesome } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -17,6 +16,7 @@ import {
 import { ENDPOINTS } from "../config/api.config";
 import api from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
+import { PremiumModal } from "../components/ui/PremiumModal";
 
 const ACCENT = "#5B3CF0";
 
@@ -111,10 +111,12 @@ const CreatePackageScreen = ({ navigation }) => {
       !form.nights ||
       selectedPlaceIds.length === 0
     ) {
-      Alert.alert(
-        "Campos requeridos",
-        "Por favor completa título, descripción, precio, ciudad, días, noches y selecciona al menos un lugar."
-      );
+      setModal({
+        visible: true,
+        type: 'warning',
+        title: 'Campos requeridos',
+        message: 'Asegúrate de completar el título, descripción, precio, ciudad y seleccionar al menos un lugar para lanzar el paquete.'
+      });
       return;
     }
     setLoading(true);
@@ -138,26 +140,39 @@ const CreatePackageScreen = ({ navigation }) => {
       };
 
       await api.post(ENDPOINTS.PACKAGES, payload);
-      Alert.alert("Listo", "Paquete creado correctamente.");
-      setForm({
-        title: "",
-        description: "",
-        price: "",
-        city: "",
-        days: "",
-        nights: "",
-        people: "",
-        rating: "",
-        reviews: "",
-        originalPrice: "",
-        discount: "",
-        tag: "",
-        includes: "",
-        image: "",
+      setModal({
+        visible: true,
+        type: 'success',
+        title: '¡Paquete Lanzado!',
+        message: 'Tu nuevo paquete turístico ha sido creado correctamente.',
+        onConfirm: () => {
+          setForm({
+            title: "",
+            description: "",
+            price: "",
+            city: "",
+            days: "",
+            nights: "",
+            people: "",
+            rating: "",
+            reviews: "",
+            originalPrice: "",
+            discount: "",
+            tag: "",
+            includes: "",
+            image: "",
+          });
+          setSelectedPlaceIds([]);
+          setModal(prev => ({ ...prev, visible: false }));
+        }
       });
-      setSelectedPlaceIds([]);
     } catch (err) {
-      Alert.alert("Error", "No se pudo crear el paquete. Revisa los datos.");
+      setModal({
+        visible: true,
+        type: 'error',
+        title: 'Error al crear',
+        message: 'No pudimos registrar el paquete en este momento. Revisa los datos e intenta de nuevo.'
+      });
     } finally {
       setLoading(false);
     }
@@ -385,6 +400,15 @@ const CreatePackageScreen = ({ navigation }) => {
         {/* Espacio extra al fondo para el teclado */}
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      <PremiumModal
+        visible={modal.visible}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+        onConfirm={modal.onConfirm || (() => setModal(prev => ({ ...prev, visible: false })))}
+        onClose={() => setModal(prev => ({ ...prev, visible: false }))}
+      />
 
       {/* PLACES MODAL */}
       <Modal

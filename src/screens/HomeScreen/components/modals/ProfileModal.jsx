@@ -185,6 +185,9 @@ const ProfileModal = ({
                     style={styles.profileRouteItem}
                     onPress={() => onRoutePress(route.route)}
                   >
+                    <View style={styles.profileRouteIconWrapper}>
+                      <FontAwesome name={route.icon || "circle-o"} size={16} color="#5B3CF0" />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.profileRouteTitle}>{route.label}</Text>
                       <Text style={styles.profileRouteDesc}>

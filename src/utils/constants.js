@@ -49,3 +49,16 @@ export const CATEGORIES = [
   { id: 5, name: 'Cultural', icon: 'library', color: '#AA96DA' },
   { id: 6, name: 'Gastronómico', icon: 'restaurant', color: '#FCBAD3' },
 ];
+
+export const PLACE_SERVICES = [
+  { id: 'wifi', label: 'WiFi Gratis', icon: 'wifi' },
+  { id: 'parking', label: 'Parqueadero', icon: 'local-parking' },
+  { id: 'rest', label: 'Restaurante', icon: 'restaurant' },
+  { id: 'pet', label: 'Pet Friendly', icon: 'pets' },
+  { id: 'wc', label: 'Baños Públicos', icon: 'wc' },
+  { id: 'access', label: 'Accesibilidad', icon: 'accessible' },
+  { id: 'guide', label: 'Guía Turístico', icon: 'person' },
+  { id: 'ba', label: 'Bar / Café', icon: 'local-cafe' },
+  { id: 'pool', label: 'Piscina', icon: 'pool' },
+  { id: 'ac', label: 'Aire Acondicionado', icon: 'ac-unit' }
+];

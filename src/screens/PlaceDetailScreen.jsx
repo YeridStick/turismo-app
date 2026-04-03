@@ -12,8 +12,8 @@ import {
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
-import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
+import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
 import { getPlaceArConfig } from '../services/ar';
 import { formatDistance } from '../utils/utils';
@@ -55,6 +55,9 @@ const normalizePlace = (place) => {
   }
   if (normalized.imageUrls && !Array.isArray(normalized.imageUrls)) {
     normalized.imageUrls = parseUrlList(normalized.image_urls);
+  }
+  if (normalized.services && !Array.isArray(normalized.services)) {
+    normalized.services = parseUrlList(normalized.services);
   }
   return normalized;
 };
@@ -129,7 +132,7 @@ const PlaceDetailScreen = ({ route, navigation }) => {
   const infoDetails = useMemo(() => [
     { icon: "ticket", label: "Entrada/Precio", value: place.price ? `$${place.price}` : "Acceso libre" },
     { icon: "clock-o", label: "Horario", value: place.openingHours || "08:00 AM - 05:00 PM" },
-    { icon: "info-circle", label: "Servicios", value: place.services || "Guía local, Zona de descanso" },
+    { icon: "info-circle", label: "Servicios", value: Array.isArray(place.services) ? `${place.services.length} disponibles` : "No especificados" },
     { icon: "map-marker", label: "Distancia", value: formatDistance(place.distanceMeters) || "Cerca de ti" },
     { icon: "phone", label: "Contacto", value: place.phone || "+57 321 000 0000" },
   ], [place]);
@@ -216,6 +219,28 @@ const PlaceDetailScreen = ({ route, navigation }) => {
               </View>
             ))}
           </View>
+
+          {/* AMENITIES SECTION (Dynamic from DB) */}
+          {Array.isArray(place.services) && place.services.length > 0 && (
+            <View style={styles.amenitiesSection}>
+              <Text style={styles.sectionTitle}>Servicios y Comodidades</Text>
+              <View style={styles.amenitiesGrid}>
+                {place.services.map((service, idx) => {
+                  const serviceInfo = PLACE_SERVICES.find(ps => ps.label.toLowerCase() === service.toLowerCase());
+                  return (
+                    <View key={`amenity-${idx}`} style={styles.amenityChip}>
+                      <MaterialIcons 
+                        name={serviceInfo?.icon || 'check-circle'} 
+                        size={18} 
+                        color="#5B3CF0" 
+                      />
+                      <Text style={styles.amenityText}>{service}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {/* Botones de acción */}
           <View style={styles.actionRow}>
@@ -434,6 +459,31 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     fontWeight: '700',
     marginTop: 2,
+  },
+  amenitiesSection: {
+    marginTop: SPACING.xl,
+  },
+  amenitiesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  amenityChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 99,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+  },
+  amenityText: {
+    fontSize: 13,
+    color: '#3730A3',
+    fontWeight: '600',
   },
 });
 

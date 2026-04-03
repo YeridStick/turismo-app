@@ -199,14 +199,47 @@ const HomeScreen = ({ navigation }) => {
   }), [sidePanelOpen, sidePanelWidth, sidePanelTranslateX]);
 
   // Roles-based routes
+  // Roles-based routes with enhanced metadata
   const allowedRoutes = useMemo(() => {
     const norm = (roles || []).map(r => r.toLowerCase());
-    const has = (n) => norm.includes("admin") || n.some(r => norm.includes(r));
+    const isAdmin = norm.includes("admin");
+    const has = (n) => isAdmin || n.some(r => norm.includes(r));
+    
     const routes = [
-      { id: "create-place", label: "Crear lugar", route: "CreatePlace", roles: ["owner"] },
-      { id: "agency-dashboard", label: "Dashboard", route: "AgencyDashboard", roles: ["agency"] },
+      { 
+        id: "manage-places", 
+        label: "Mis Lugares", 
+        route: "ManagePlaces", 
+        roles: ["owner"], 
+        icon: "map-marker", 
+        description: "Gestiona, edita y publica tus sitios turísticos." 
+      },
+      { 
+        id: "agency-dashboard", 
+        label: "Dashboard", 
+        route: "AgencyDashboard", 
+        roles: ["agency"], 
+        icon: "dashboard", 
+        description: "Gestiona tus paquetes y servicios turísticos." 
+      },
+      { 
+        id: "admin-tools", 
+        label: "Panel de Administración", 
+        route: "AgencyDashboard", // Placeholder for admin dashboard
+        roles: ["admin"], 
+        icon: "shield", 
+        description: "Herramientas globales de gestión y control." 
+      },
     ];
-    return routes.filter(r => has(r.roles));
+
+    // Unique routes (in case multiple roles share the same route)
+    const seen = new Set();
+    return routes.filter(r => {
+      if (seen.has(r.id)) return false;
+      const canAccess = has(r.roles);
+      if (canAccess) seen.add(r.id);
+      return canAccess;
+    });
   }, [roles]);
 
   const openAgency = (agency) => {
