@@ -10,6 +10,8 @@ import HomeScreen from '../screens/HomeScreen';
 import MapScreen from '../screens/MapScreen';
 import PlaceDetailScreen from '../screens/PlaceDetailScreen';
 import ManagePlacesScreen from '../screens/ManagePlacesScreen';
+import ManagePackagesScreen from '../screens/ManagePackagesScreen';
+import AdminPanelScreen from '../screens/AdminPanelScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,6 +28,8 @@ const AppNavigator = () => (
       <Stack.Screen name="CreatePlace" component={CreatePlaceScreen} />
       <Stack.Screen name="CreatePackage" component={CreatePackageScreen} />
       <Stack.Screen name="ManagePlaces" component={ManagePlacesScreen} />
+      <Stack.Screen name="ManagePackages" component={ManagePackagesScreen} />
+      <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
     </Stack.Navigator>
   </NavigationContainer>
 );

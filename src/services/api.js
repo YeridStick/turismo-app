@@ -48,7 +48,13 @@ export const getPopularPlaces = () =>
   api.get(ENDPOINTS.PLACES_SEARCH, { params: { limit: 10, sort: 'rating,desc' } });
 export const getTopPlaces = () => api.get(ENDPOINTS.PLACES_TOP);
 export const getPackages = () => api.get(ENDPOINTS.PACKAGES);
+export const createPackage = (data) => api.post(ENDPOINTS.PACKAGES, data);
+export const getPackageById = (id) => api.get(`${ENDPOINTS.PACKAGES}/${id}`);
 export const getAgencies = () => api.get(ENDPOINTS.AGENCIES);
+export const createAgency = (data) => api.post(ENDPOINTS.AGENCIES, data);
+export const getAgencyByEmail = (email) => 
+  api.get(ENDPOINTS.AGENCY_BY_USER, { params: { email, userEmail: email } });
+
 export const getNearbyContext = (lat, lng) => 
   api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, { params: { lat, lng } });
 

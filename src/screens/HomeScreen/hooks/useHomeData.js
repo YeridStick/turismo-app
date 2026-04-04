@@ -38,6 +38,7 @@ const useHomeData = (user) => {
   const [selectedCategory, setSelectedCategory] = useState("todos");
   const [distanceKm, setDistanceKm] = useState(5);
   const [query, setQuery] = useState("");
+  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState(null);
 
   const getTopPlaceMeta = useCallback((item) => {
     if (item?._metric != null) return `${item._metric} visitas`;
@@ -51,6 +52,17 @@ const useHomeData = (user) => {
     data: [],
     categoryId: null,
   });
+
+  // Derived data: Filtered packages
+  const filteredPackages = useMemo(() => {
+    if (!selectedAgencyFilter) return packages;
+    return packages.filter(pkg => 
+      pkg.agencyId === selectedAgencyFilter.id || 
+      String(pkg.agencyName).toLowerCase() === String(selectedAgencyFilter.name).toLowerCase()
+    );
+  }, [packages, selectedAgencyFilter]);
+
+  const clearAgencyFilter = useCallback(() => setSelectedAgencyFilter(null), []);
 
   const loadAll = useCallback(async (pageIndex = 0, isLoadMore = false) => {
     if (isLoadMore) {
@@ -326,7 +338,7 @@ const useHomeData = (user) => {
     recommended,
     searchResults,
     topPlaces,
-    packages,
+    packages: filteredPackages, // Retornamos la lista ya filtrada dinámicamente
     agencies,
     nearbyContext,
     
@@ -356,6 +368,8 @@ const useHomeData = (user) => {
     setQuery,
     coords,
     setCoords,
+    selectedAgencyFilter,
+    setSelectedAgencyFilter,
     
     // Actions
     loadAll,
@@ -365,6 +379,7 @@ const useHomeData = (user) => {
     handleRefresh,
     ensureLocation,
     getTopPlaceMeta,
+    clearAgencyFilter,
   };
 };
 

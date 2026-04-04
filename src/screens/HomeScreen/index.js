@@ -83,6 +83,9 @@ const HomeScreen = ({ navigation }) => {
     performSearch,
     handleRefresh,
     getTopPlaceMeta,
+    selectedAgencyFilter,
+    setSelectedAgencyFilter,
+    clearAgencyFilter,
   } = useHomeData(user);
 
   // Verification Logic Hook
@@ -226,7 +229,7 @@ const HomeScreen = ({ navigation }) => {
       { 
         id: "admin-tools", 
         label: "Panel de Administración", 
-        route: "AgencyDashboard", // Placeholder for admin dashboard
+        route: "AdminPanel", 
         roles: ["admin"], 
         icon: "shield", 
         description: "Herramientas globales de gestión y control." 
@@ -246,6 +249,7 @@ const HomeScreen = ({ navigation }) => {
   const openAgency = (agency) => {
     setSelectedAgency(agency);
     setAgencyVisible(true);
+    setSelectedAgencyFilter(agency);
   };
 
   return (
@@ -348,36 +352,58 @@ const HomeScreen = ({ navigation }) => {
         )}
 
         {/* Packages Section */}
-        {packages.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionIntro}>
-              <View style={styles.sectionTitleAccent} />
-              <Text style={styles.sectionHeroTitle}>Paquetes turísticos</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionIntro}>
+            <View style={styles.sectionTitleAccent} />
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={styles.sectionHeroTitle}>
+                {selectedAgencyFilter ? `Paquetes de ${selectedAgencyFilter.name}` : "Paquetes turísticos"}
+              </Text>
+              {selectedAgencyFilter && (
+                <TouchableOpacity onPress={clearAgencyFilter} style={styles.clearFilterBtn}>
+                  <Text style={styles.clearFilterText}>Ver todos</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            
-            {loadingPackages ? <ActivityIndicator color={COLORS.primary} /> : (
-              <FlatList
-                horizontal
-                data={packages}
-                keyExtractor={(item, idx) => `${item.id || idx}-pkg`}
-                renderItem={({ item }) => (
-                  <PackageCard 
-                    pkg={item} 
-                    width={300} 
-                    onPress={() => {
-                      setSelectedPackage(item);
-                      setPaymentVisible(true);
-                    }}
-                    getImage={getPackageImage}
-                    getGradient={getPackageGradient}
-                  />
-                )}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalList}
-              />
-            )}
           </View>
-        )}
+          
+          {loadingPackages ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 40 }} />
+          ) : packages.length > 0 ? (
+            <FlatList
+              horizontal
+              data={packages}
+              keyExtractor={(item, idx) => `${item.id || idx}-pkg`}
+              renderItem={({ item }) => (
+                <PackageCard 
+                  pkg={item} 
+                  width={300} 
+                  onPress={() => {
+                    setSelectedPackage(item);
+                    setPaymentVisible(true);
+                  }}
+                  getImage={getPackageImage}
+                  getGradient={getPackageGradient}
+                />
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            />
+          ) : selectedAgencyFilter ? (
+            <View style={styles.emptyAgencyState}>
+              <View style={styles.emptyAgencyIcon}>
+                <Ionicons name="briefcase-outline" size={32} color={COLORS.textLight} />
+              </View>
+              <Text style={styles.emptyAgencyTitle}>Sin paquetes disponibles</Text>
+              <Text style={styles.emptyAgencySub}>
+                Esta agencia aún no ha publicado ofertas. Cambia de agencia o regresa al catálogo completo.
+              </Text>
+              <TouchableOpacity style={styles.restoreButton} onPress={clearAgencyFilter}>
+                <Text style={styles.restoreButtonText}>Regresar a ver todos</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
 
         {/* Agencies Section */}
         {agencies.length > 0 && (
