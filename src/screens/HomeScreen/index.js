@@ -1,52 +1,50 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  View,
-  ScrollView,
-  RefreshControl,
   ActivityIndicator,
+  Animated,
+  Easing,
+  FlatList,
+  KeyboardAvoidingView,
+  PanResponder,
+  Platform,
+  RefreshControl,
+  ScrollView,
   Text,
   TouchableOpacity,
-  FlatList,
-  Platform,
-  StatusBar,
-  Animated,
-  PanResponder,
-  Easing,
-  KeyboardAvoidingView,
-  InteractionManager,
+  View
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 // Modular Components
-import HomeHeader from "./components/HomeHeader";
 import HomeFooter from "./components/HomeFooter";
-import PlaceCard from "./components/PlaceCard";
-import PackageCard from "./components/PackageCard";
+import HomeHeader from "./components/HomeHeader";
 import NearbyMapBlock from "./components/NearbyMapBlock";
+import PackageCard from "./components/PackageCard";
+import PlaceCard from "./components/PlaceCard";
 import SidePanel from "./components/SidePanel";
 
 // Modals
+import AgencyModal from "./components/modals/AgencyModal";
+import ArWebViewModal from "./components/modals/ArWebViewModal";
+import FilterModal from "./components/modals/FilterModal";
+import PaymentModal from "./components/modals/PaymentModal";
 import ProfileModal from "./components/modals/ProfileModal";
 import VerificationModal from "./components/modals/VerificationModal";
-import AgencyModal from "./components/modals/AgencyModal";
-import PaymentModal from "./components/modals/PaymentModal";
-import FilterModal from "./components/modals/FilterModal";
-import ArWebViewModal from "./components/modals/ArWebViewModal";
 
 // Hooks
-import useHomeData from "./hooks/useHomeData";
-import useVerification from "./hooks/useVerification";
-import usePayment from "./hooks/usePayment";
 import useAR from "./hooks/useAR";
+import useHomeData from "./hooks/useHomeData";
+import usePayment from "./hooks/usePayment";
+import useVerification from "./hooks/useVerification";
 
 // Constants & Helpers
-import { SPACING, COLORS } from "./utils/constants";
-import { formatPrice, getCategoryLabel, getPackageImage, getPackageGradient } from "./utils/helpers";
-import styles from "./styles";
 import AnimatedBackground from "../../components/ui/AnimatedBackground";
+import styles from "./styles";
+import { COLORS } from "./utils/constants";
+import { formatPrice, getCategoryLabel, getPackageGradient, getPackageImage } from "./utils/helpers";
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
-  
+
   // Data Logic Hook
   const {
     places,
@@ -137,7 +135,7 @@ const HomeScreen = ({ navigation }) => {
     if (distanceKm >= 50) nextDist = 100;
     else if (distanceKm >= 15) nextDist = 50;
     else if (distanceKm >= 5) nextDist = 15;
-    
+
     setDistanceKm(nextDist);
     loadNearby(nextDist);
   }, [distanceKm, setDistanceKm, loadNearby]);
@@ -192,7 +190,7 @@ const HomeScreen = ({ navigation }) => {
       const startX = sidePanelOpen ? 0 : -sidePanelWidth;
       const nextX = startX + gesture.dx;
       const shouldOpen = nextX > -sidePanelWidth / 2 || gesture.vx > 0.5;
-      
+
       Animated.timing(sidePanelTranslateX, {
         toValue: shouldOpen ? 0 : -sidePanelWidth,
         duration: 240,
@@ -208,31 +206,31 @@ const HomeScreen = ({ navigation }) => {
     const norm = (roles || []).map(r => r.toLowerCase());
     const isAdmin = norm.includes("admin");
     const has = (n) => isAdmin || n.some(r => norm.includes(r));
-    
+
     const routes = [
-      { 
-        id: "manage-places", 
-        label: "Mis Lugares", 
-        route: "ManagePlaces", 
-        roles: ["owner"], 
-        icon: "map-marker", 
-        description: "Gestiona, edita y publica tus sitios turísticos." 
+      {
+        id: "manage-places",
+        label: "Mis Lugares",
+        route: "ManagePlaces",
+        roles: ["owner"],
+        icon: "map-marker",
+        description: "Gestiona, edita y publica tus sitios turísticos."
       },
-      { 
-        id: "agency-dashboard", 
-        label: "Dashboard", 
-        route: "AgencyDashboard", 
-        roles: ["agency"], 
-        icon: "dashboard", 
-        description: "Gestiona tus paquetes y servicios turísticos." 
+      {
+        id: "agency-dashboard",
+        label: "Dashboard",
+        route: "AgencyDashboard",
+        roles: ["agency"],
+        icon: "dashboard",
+        description: "Gestiona tus paquetes y servicios turísticos."
       },
-      { 
-        id: "admin-tools", 
-        label: "Panel de Administración", 
-        route: "AdminPanel", 
-        roles: ["admin"], 
-        icon: "shield", 
-        description: "Herramientas globales de gestión y control." 
+      {
+        id: "admin-tools",
+        label: "Panel de Administración",
+        route: "AdminPanel",
+        roles: ["admin"],
+        icon: "shield",
+        description: "Herramientas globales de gestión y control."
       },
     ];
 
@@ -264,7 +262,7 @@ const HomeScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isInteractingWithMap}
       >
-        <HomeHeader 
+        <HomeHeader
           user={user}
           query={query}
           setQuery={setQuery}
@@ -282,8 +280,8 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.sectionTitleAccent} />
             <Text style={styles.sectionHeroTitle}>Cerca de ti</Text>
           </View>
-          
-          <NearbyMapBlock 
+
+          <NearbyMapBlock
             coords={coords}
             filteredNearby={nearby}
             distanceKm={distanceKm}
@@ -307,21 +305,21 @@ const HomeScreen = ({ navigation }) => {
                 {query.trim() || selectedCategory !== "todos" ? "Resultados de búsqueda" : "Tu próxima aventura"}
               </Text>
             </View>
-            
+
             <FlatList
               horizontal
               data={displayPlaces}
               keyExtractor={(item, idx) => `${item.id || idx}-cat`}
               renderItem={({ item, index }) => (
-                <PlaceCard 
+                <PlaceCard
                   title={item.name}
                   subtitle={item.description}
                   meta={getTopPlaceMeta(item)}
                   image={item.image}
                   rating={item.rating}
                   distance={item.distance}
-                  variant="compact" 
-                  onPress={() => navigation.navigate("PlaceDetail", { places: displayPlaces, initialIndex: index })} 
+                  variant="compact"
+                  onPress={() => navigation.navigate("PlaceDetail", { places: displayPlaces, initialIndex: index })}
                   onArPress={() => openAR(item)}
                 />
               )}
@@ -329,8 +327,8 @@ const HomeScreen = ({ navigation }) => {
               contentContainerStyle={styles.horizontalList}
               ListFooterComponent={() => (
                 hasMorePlaces && !(query.trim() || selectedCategory !== "todos") ? (
-                  <TouchableOpacity 
-                    style={styles.loadMoreCard} 
+                  <TouchableOpacity
+                    style={styles.loadMoreCard}
                     onPress={handleLoadMore}
                     disabled={loadingMorePlaces}
                   >
@@ -351,13 +349,36 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
+        {/* Agencies Section */}
+        {agencies.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionIntro}>
+              <View style={styles.sectionTitleAccent} />
+              <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
+            </View>
+
+            <FlatList
+              horizontal
+              data={agencies}
+              keyExtractor={(item, idx) => `${item.id || idx}-age`}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.agencyChip} onPress={() => openAgency(item)}>
+                  <Text style={styles.agencyChipText}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+            />
+          </View>
+        )}
+
         {/* Packages Section */}
         <View style={styles.section}>
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={styles.sectionHeroTitle}>
-                {selectedAgencyFilter ? `Paquetes de ${selectedAgencyFilter.name}` : "Paquetes turísticos"}
+              <Text style={[styles.sectionHeroTitle, { marginRight: 10 }]}>
+                {selectedAgencyFilter ? `${selectedAgencyFilter.name}` : "Paquetes turísticos"}
               </Text>
               {selectedAgencyFilter && (
                 <TouchableOpacity onPress={clearAgencyFilter} style={styles.clearFilterBtn}>
@@ -366,7 +387,7 @@ const HomeScreen = ({ navigation }) => {
               )}
             </View>
           </View>
-          
+
           {loadingPackages ? (
             <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 40 }} />
           ) : packages.length > 0 ? (
@@ -375,9 +396,9 @@ const HomeScreen = ({ navigation }) => {
               data={packages}
               keyExtractor={(item, idx) => `${item.id || idx}-pkg`}
               renderItem={({ item }) => (
-                <PackageCard 
-                  pkg={item} 
-                  width={300} 
+                <PackageCard
+                  pkg={item}
+                  width={300}
                   onPress={() => {
                     setSelectedPackage(item);
                     setPaymentVisible(true);
@@ -405,35 +426,12 @@ const HomeScreen = ({ navigation }) => {
           ) : null}
         </View>
 
-        {/* Agencies Section */}
-        {agencies.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionIntro}>
-              <View style={styles.sectionTitleAccent} />
-              <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
-            </View>
-
-            <FlatList
-              horizontal
-              data={agencies}
-              keyExtractor={(item, idx) => `${item.id || idx}-age`}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.agencyChip} onPress={() => openAgency(item)}>
-                  <Text style={styles.agencyChipText}>{item.name}</Text>
-                </TouchableOpacity>
-              )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-            />
-          </View>
-        )}
-
         <HomeFooter />
         <View style={{ height: 40 }} />
       </ScrollView>
 
       {/* Overlays */}
-      <SidePanel 
+      <SidePanel
         sidePanelOpen={sidePanelOpen}
         sidePanelTranslateX={sidePanelTranslateX}
         sidePanelWidth={sidePanelWidth}
@@ -454,7 +452,7 @@ const HomeScreen = ({ navigation }) => {
       />
 
       {/* Modals */}
-      <ProfileModal 
+      <ProfileModal
         visible={profileVisible}
         onClose={() => setProfileVisible(false)}
         user={user}
@@ -464,7 +462,7 @@ const HomeScreen = ({ navigation }) => {
         onOpenVerification={() => { setProfileVisible(false); setEmailVerifyVisible(true); }}
       />
 
-      <VerificationModal 
+      <VerificationModal
         visible={emailVerifyVisible}
         onClose={() => setEmailVerifyVisible(false)}
         email={user?.email}
@@ -476,13 +474,13 @@ const HomeScreen = ({ navigation }) => {
         onVerifyToken={handleConfirmVerificationToken}
       />
 
-      <AgencyModal 
+      <AgencyModal
         visible={agencyVisible}
         onClose={() => setAgencyVisible(false)}
         agency={selectedAgency}
       />
 
-      <PaymentModal 
+      <PaymentModal
         visible={paymentVisible}
         onClose={closePayment}
         selectedPackage={selectedPackage}
@@ -491,7 +489,7 @@ const HomeScreen = ({ navigation }) => {
         formatPrice={formatPrice}
       />
 
-      <FilterModal 
+      <FilterModal
         visible={filtersVisible}
         onClose={() => setFiltersVisible(false)}
         selectedCategory={selectedCategory}
@@ -501,7 +499,7 @@ const HomeScreen = ({ navigation }) => {
         onApply={() => { setFiltersVisible(false); performSearch(); }}
       />
 
-      <ArWebViewModal 
+      <ArWebViewModal
         visible={arVisible}
         onClose={() => setArVisible(false)}
         html={generateArHtml()}
