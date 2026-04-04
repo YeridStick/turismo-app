@@ -797,13 +797,27 @@ export const modalStyles = {
     overflow: "hidden",
     marginTop: 4,
   },
-  inputGroup: {
+   inputGroup: {
     gap: 6,
+    marginBottom: 12,
   },
   inputLabel: {
-    fontWeight: "600",
-    color: COLORS.text,
-    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748B",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginLeft: 4,
+  },
+  fieldInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    height: 48,
+    fontSize: 14,
+    color: "#1E293B",
   },
   // ── Filter Modal extras ──────────────────────────────
   quickRow: {

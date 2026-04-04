@@ -1,16 +1,16 @@
 import { responsiveFont } from './responsive';
 
 export const COLORS = {
-  primary: '#FF6B6B',
+  primary: '#5B3CF0',
   secondary: '#4ECDC4',
   accent: '#FFE66D',
-  background: '#F7F7F7',
+  background: '#FFFFFF',
   white: '#FFFFFF',
-  text: '#333333',
-  textLight: '#666666',
-  error: '#E74C3C',
-  success: '#2ECC71',
-  border: '#E0E0E0',
+  text: '#0F172A',
+  textLight: '#64748B',
+  error: '#EF4444',
+  success: '#10B981',
+  border: '#E2E8F0',
 };
 
 export const SPACING_STEPS = {

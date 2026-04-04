@@ -43,4 +43,9 @@ export const ENDPOINTS = {
   AGENCY_DASHBOARD: "/api/agencies/dashboard",
   GEOCODE: "/api/tools/geocode",
   CATEGORIES: "/api/categories",
+
+  // User Management
+  USERS_ME: '/api/users/me',
+  USERS_ME_PASSWORD: '/api/users/me/password',
+  ADMIN_USERS: '/api/admin/all/user',
 };

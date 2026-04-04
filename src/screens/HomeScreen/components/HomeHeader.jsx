@@ -19,7 +19,7 @@ const HomeHeader = ({
   return (
     <View style={styles.pageHeader}>
       <LinearGradient
-        colors={["#080c1e", "#0f172a", "#1a2240"]}
+        colors={["#FFFFFF", "#F9FAFB", "#F3F4F6"]}
         style={styles.heroOverlay}
       >
         <View style={styles.topBar}>

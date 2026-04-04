@@ -219,6 +219,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUser = async (newUserData) => {
+    try {
+      const updatedUser = { ...user, ...newUserData };
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser)); 
+      setUser(updatedUser); 
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating user in context:', error);
+      return { success: false, error: 'Error al actualizar el estado local' };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -229,6 +241,7 @@ export const AuthProvider = ({ children }) => {
         loginWithPassword,
         register,
         logout,
+        updateUser,
         setupTotp: setupTotpService,
         confirmTotp: confirmTotpService,
         totpStatus: totpStatusService,
