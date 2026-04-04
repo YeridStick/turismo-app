@@ -10,7 +10,7 @@ export const baseStyles = {
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: "hidden",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "transparent",
   },
   heroBackground: {
     width: "100%",
@@ -25,6 +25,7 @@ export const baseStyles = {
     paddingBottom: SPACING.xl,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   heroBadge: {
     alignSelf: "center",
@@ -145,7 +146,7 @@ export const baseStyles = {
   },
   footer: {
     marginTop: SPACING.lg,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "transparent",
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
     paddingBottom: SPACING.xl,
@@ -181,14 +182,14 @@ export const baseStyles = {
     gap: SPACING.xs,
   },
   footerSocialButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(15, 23, 42, 0.05)",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(91, 60, 240, 0.07)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.1)",
+    borderColor: "rgba(91, 60, 240, 0.15)",
   },
   footerColumns: {
     flexDirection: "row",

@@ -42,6 +42,7 @@ import useAR from "./hooks/useAR";
 import { SPACING, COLORS } from "./utils/constants";
 import { formatPrice, getCategoryLabel, getPackageImage, getPackageGradient } from "./utils/helpers";
 import styles from "./styles";
+import AnimatedBackground from "../../components/ui/AnimatedBackground";
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -253,6 +254,7 @@ const HomeScreen = ({ navigation }) => {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       {...panResponder.panHandlers}
     >
+      <AnimatedBackground />
       <ScrollView
         refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={handleRefresh} />}
         showsVerticalScrollIndicator={false}

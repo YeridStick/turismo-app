@@ -25,6 +25,7 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.19",
     "expo": "~54.0.25",
+    "expo-blur": "~15.0.8",
     "expo-camera": "~17.0.9",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.10",

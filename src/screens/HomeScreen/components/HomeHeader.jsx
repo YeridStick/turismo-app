@@ -1,8 +1,8 @@
 import React from "react";
 import { View, Text, TextInput, TouchableOpacity, Image } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
 import { FontAwesome } from "@expo/vector-icons";
-import { HERO_IMAGE } from "../utils/constants";
+import { HERO_IMAGE, COLORS } from "../utils/constants";
 import styles from "../styles";
 
 const HomeHeader = ({
@@ -18,8 +18,9 @@ const HomeHeader = ({
 }) => {
   return (
     <View style={styles.pageHeader}>
-      <LinearGradient
-        colors={["#FFFFFF", "#F9FAFB", "#F3F4F6"]}
+      <BlurView
+        intensity={80}
+        tint="light"
         style={styles.heroOverlay}
       >
         <View style={styles.topBar}>
@@ -60,7 +61,7 @@ const HomeHeader = ({
         <View style={styles.searchCard}>
           <View style={styles.searchRow}>
             <View style={styles.searchInputWrapper}>
-              <FontAwesome name="search" size={15} color="#8C8FA5" />
+              <FontAwesome name="search" size={15} color={COLORS.primary} />
               <TextInput
                 placeholder="¿A dónde quieres ir?"
                 placeholderTextColor="#9CA3AF"
@@ -101,7 +102,7 @@ const HomeHeader = ({
             </View>
           ) : null}
         </View>
-      </LinearGradient>
+      </BlurView>
     </View>
   );
 };
