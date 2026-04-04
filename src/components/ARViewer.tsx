@@ -3,6 +3,7 @@ import {
     ViroAmbientLight,
     ViroARScene,
     ViroARSceneNavigator,
+    ViroDirectionalLight,
     ViroOmniLight,
 } from '@reactvision/react-viro';
 import React, { useRef, useState } from 'react';
@@ -20,14 +21,14 @@ interface ARSceneProps {
 
 const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRef }: ARSceneProps) => {
     // Estados tipados correctamente
-    const [scale, setScale] = useState<[number, number, number]>([0.3, 0.3, 0.3]);
+    const [scale, setScale] = useState<[number, number, number]>([0.05, 0.05, 0.05]);
     const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
     // Posición inicial ajustada - Y en -0.3 para que esté a nivel del suelo
     const [position, setPosition] = useState<[number, number, number]>([0, -0.3, -1.2]);
     const [modelVisible, setModelVisible] = useState(true);
 
     // Referencias para guardar el estado base durante los gestos
-    const baseScale = useRef<[number, number, number]>([0.3, 0.3, 0.3]);
+    const baseScale = useRef<[number, number, number]>([0.05, 0.05, 0.05]);
     const baseRotation = useRef(0);
     const lastGestureTime = useRef(0);
 
@@ -71,11 +72,11 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
 
                 setPosition(newPos);
                 setRotation([0, 0, 0]);
-                setScale([0.3, 0.3, 0.3]);
+                setScale([0.05, 0.05, 0.05]);
 
                 // Resetear referencias base
                 baseRotation.current = 0;
-                baseScale.current = [0.3, 0.3, 0.3];
+                baseScale.current = [0.05, 0.05, 0.05];
 
                 setModelVisible(true);
                 console.log('↻ Modelo reseteado frente a la cámara');
@@ -90,7 +91,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             decreaseScale: () => {
                 setScale(prev => {
                     const newScale = prev[0] * 0.8;
-                    const clampedScale = Math.max(newScale, 0.1);
+                    const clampedScale = Math.max(newScale, 0.005);
                     return [clampedScale, clampedScale, clampedScale];
                 });
             },
@@ -125,7 +126,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
 
             const currentScale = baseScale.current[0];
             const newScale = currentScale * scaleFactor;
-            const clampedScale = Math.max(0.1, Math.min(newScale, 3.5));
+            const clampedScale = Math.max(0.005, Math.min(newScale, 3.5));
 
             setScale([clampedScale, clampedScale, clampedScale]);
         }
@@ -171,10 +172,20 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
 
     return (
         <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
-            {/* ILUMINACIÓN */}
-            <ViroAmbientLight color="#ffffff" intensity={1000} />
-            <ViroOmniLight color="#ffffff" intensity={800} position={[0, 5, 0]} />
-            <ViroOmniLight color="#ffffff" intensity={600} position={[5, 2, -2]} />
+            {/* ILUMINACIÓN OPTIMIZADA: Intensidad reducida para resaltar relieves y evitar sobreexposición */}
+            <ViroAmbientLight color="#ffffff" intensity={400} />
+            <ViroDirectionalLight
+                color="#ffffff"
+                direction={[0, -1, -0.5]}
+                shadowOrthographicPosition={[0, 8, -5]}
+                shadowOrthographicSize={10}
+                shadowNearZ={2}
+                shadowFarZ={20}
+                castsShadow={true}
+                intensity={800}
+            />
+            <ViroOmniLight color="#ffffff" intensity={400} position={[0, 5, 0]} />
+            <ViroOmniLight color="#ffffff" intensity={300} position={[5, 2, -2]} />
 
             {/* 
                 ESTRATEGIA DE GESTOS SIMPLIFICADA:

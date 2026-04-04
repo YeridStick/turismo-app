@@ -41,17 +41,15 @@ const ARActiveBadge: React.FC = () => {
 
 // Pantalla de carga premium
 const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
-    const spinAnim = useRef(new Animated.Value(0)).current;
+    const pulse = useRef(new Animated.Value(1)).current;
     const barWidth = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         Animated.loop(
-            Animated.timing(spinAnim, {
-                toValue: 1,
-                duration: 1800,
-                easing: Easing.linear,
-                useNativeDriver: true,
-            })
+            Animated.sequence([
+                Animated.timing(pulse, { toValue: 0.8, duration: 900, useNativeDriver: true }),
+                Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+            ])
         ).start();
     }, []);
 
@@ -64,7 +62,7 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
         }).start();
     }, [progress]);
 
-    const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+    // ... spinAnim interpolator removed as we use pulse now
 
     const label =
         progress < 20
@@ -80,9 +78,9 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
     return (
         <View style={styles.loadingOverlay}>
             <View style={styles.loadingCard}>
-                <Animated.Text style={[styles.loadingIcon, { transform: [{ rotate: spin }] }]}>
-                    🔮
-                </Animated.Text>
+                <Animated.View style={[styles.loadingIconContainer, { transform: [{ scale: pulse }] }]}>
+                    <Ionicons name="globe-outline" size={48} color="#5B3CF0" />
+                </Animated.View>
                 <Text style={styles.loadingTitle}>Realidad Aumentada</Text>
                 <Text style={styles.loadingLabel}>{label}</Text>
 
@@ -105,6 +103,8 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
         </View>
     );
 };
+
+// ... actualizando estilos más abajo ...
 
 const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const modelUrl = route?.params?.modelUrl;
@@ -410,6 +410,17 @@ const styles = StyleSheet.create({
         width: '78%',
         borderWidth: 1,
         borderColor: 'rgba(91, 60, 240, 0.35)',
+    },
+    loadingIconContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(91, 60, 240, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(91, 60, 240, 0.2)',
     },
     loadingIcon: {
         fontSize: 52,
