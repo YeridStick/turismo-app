@@ -4,6 +4,7 @@ import {
     ViroARScene,
     ViroARSceneNavigator,
     ViroDirectionalLight,
+    ViroLightingEnvironment,
     ViroOmniLight,
 } from '@reactvision/react-viro';
 import React, { useRef, useState } from 'react';
@@ -172,20 +173,15 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
 
     return (
         <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
-            {/* ILUMINACIÓN OPTIMIZADA: Intensidad reducida para resaltar relieves y evitar sobreexposición */}
-            <ViroAmbientLight color="#ffffff" intensity={400} />
+            {/* ILUMINACIÓN OPTIMIZADA (SILK): Solo 2 fuentes para máximo rendimiento sin perder calidad */}
+            <ViroAmbientLight color="#ffffff" intensity={300} />
             <ViroDirectionalLight
                 color="#ffffff"
-                direction={[0, -1, -0.5]}
-                shadowOrthographicPosition={[0, 8, -5]}
-                shadowOrthographicSize={10}
-                shadowNearZ={2}
-                shadowFarZ={20}
+                direction={[0.3, -1, -0.5]}
                 castsShadow={true}
-                intensity={800}
+                intensity={1200}
             />
-            <ViroOmniLight color="#ffffff" intensity={400} position={[0, 5, 0]} />
-            <ViroOmniLight color="#ffffff" intensity={300} position={[5, 2, -2]} />
+            {/* OmniLights eliminadas para liberar CPU/GPU */}
 
             {/* 
                 ESTRATEGIA DE GESTOS SIMPLIFICADA:
