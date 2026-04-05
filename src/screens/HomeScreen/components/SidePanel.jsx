@@ -1,5 +1,6 @@
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { BlurView } from "expo-blur";
 import React, { useCallback } from "react";
 import {
   ActivityIndicator,
@@ -33,6 +34,7 @@ const SidePanel = ({
   onSelectNearby,
   onSelectTop,
   getPlaceKey,
+  categories = [],
 }) => {
   const renderTopPlaceItem = useCallback(
     ({ item }) => {
@@ -42,7 +44,11 @@ const SidePanel = ({
       const meta = getTopPlaceMeta(item);
       const address = item?.address || item?.location || "";
       const description = item?.description || "";
-      const categoryLabel = getCategoryLabel(item);
+      
+      const resolvedCatId = item?.categoryId ?? item?.category_id;
+      const foundCat = categories?.find((c) => String(c.id) === String(resolvedCatId));
+      const categoryLabel = foundCat ? foundCat.name : getCategoryLabel(item);
+      
       const categoryText =
         categoryLabel ||
         (item?.categoryId != null ? `Categoria ${item.categoryId}` : "");
@@ -99,7 +105,7 @@ const SidePanel = ({
         </TouchableOpacity>
       );
     },
-    [closeSidePanel, getCategoryLabel, getTopPlaceMeta, onSelectTop],
+    [closeSidePanel, getCategoryLabel, getTopPlaceMeta, onSelectTop, categories],
   );
 
   return (
@@ -157,6 +163,7 @@ const SidePanel = ({
           },
         ]}
       >
+        <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFillObject} />
         {nearbyContext ? (
           <View style={styles.sidePanelWelcome}>
             <Text style={styles.sidePanelWelcomeTitle}>Bienvenido</Text>
@@ -211,6 +218,7 @@ const SidePanel = ({
             </Text>
             <Text style={styles.sidePanelNearbyMeta} numberOfLines={1}>
               {nearbyDisplayPlace.address ||
+                (categories?.find(c => String(c.id) === String(nearbyDisplayPlace.categoryId ?? nearbyDisplayPlace.category_id))?.name) ||
                 getCategoryLabel(nearbyDisplayPlace) ||
                 "Lugar cercano"}
             </Text>

@@ -41,6 +41,7 @@ import AnimatedBackground from "../../components/ui/AnimatedBackground";
 import styles from "./styles";
 import { COLORS } from "./utils/constants";
 import { formatPrice, getCategoryLabel, getPackageGradient, getPackageImage } from "./utils/helpers";
+import { Ionicons } from "@expo/vector-icons";
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -84,6 +85,7 @@ const HomeScreen = ({ navigation }) => {
     selectedAgencyFilter,
     setSelectedAgencyFilter,
     clearAgencyFilter,
+    categories,
   } = useHomeData(user);
 
   // Verification Logic Hook
@@ -449,6 +451,7 @@ const HomeScreen = ({ navigation }) => {
         onSelectTop={(item, index) => navigation.navigate("PlaceDetail", { places: topPlaces, initialIndex: index })}
         onSelectNearby={(item, index) => navigation.navigate("PlaceDetail", { places: [item], initialIndex: 0 })}
         getPlaceKey={(p) => p?.id || p?.name}
+        categories={categories}
       />
 
       {/* Modals */}
@@ -496,6 +499,7 @@ const HomeScreen = ({ navigation }) => {
         setSelectedCategory={setSelectedCategory}
         distanceKm={distanceKm}
         setDistanceKm={setDistanceKm}
+        categories={categories}
         onApply={() => { setFiltersVisible(false); performSearch(); }}
       />
 

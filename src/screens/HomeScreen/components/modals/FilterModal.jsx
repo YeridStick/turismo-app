@@ -19,7 +19,10 @@ const FilterModal = ({
   distanceKm,
   setDistanceKm,
   onApply,
+  categories = [],
 }) => {
+  const displayCategories = [{ id: "todos", name: "Todos" }, ...categories];
+
   return (
     <Modal
       visible={visible}
@@ -44,7 +47,7 @@ const FilterModal = ({
             <View style={styles.section}>
               <Text style={styles.modalSubtitle}>Categoría</Text>
               <View style={styles.quickRow}>
-                {CATEGORIES_LIST.map((cat) => (
+                {displayCategories.map((cat) => (
                   <TouchableOpacity
                     key={cat.id}
                     style={[

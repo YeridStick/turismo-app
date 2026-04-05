@@ -18,6 +18,7 @@ const useHomeData = (user) => {
   const [packages, setPackages] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [nearbyContext, setNearbyContext] = useState(null);
+  const [categories, setCategories] = useState([]);
   
   // Loading & Error States
   const [loadingAll, setLoadingAll] = useState(true);
@@ -42,8 +43,18 @@ const useHomeData = (user) => {
 
   const getTopPlaceMeta = useCallback((item) => {
     if (item?._metric != null) return `${item._metric} visitas`;
+    
+    // Dynamic category resolution
+    if (item?.categoryName) return item.categoryName;
+    if (item?.category?.name) return item.category?.name;
+    const catId = item?.categoryId ?? item?.category_id;
+    if (catId) {
+      const match = categories.find(c => String(c.id) === String(catId));
+      if (match?.name) return match.name;
+    }
+    
     return getCategoryLabel(item) || "Top visitado";
-  }, []);
+  }, [categories]);
   
   // Cache for nearby search to avoid redundant API calls
   const nearbyCacheRef = useRef({
@@ -185,6 +196,16 @@ const useHomeData = (user) => {
     }
   }, []);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await api.get(ENDPOINTS.CATEGORIES);
+      const data = Array.isArray(response.data?.data) ? response.data.data : (Array.isArray(response.data) ? response.data : []);
+      setCategories(data);
+    } catch (err) {
+      console.warn("loadCategories error", err);
+    }
+  }, []);
+
   const loadNearby = useCallback(async (forcedDistance, forcedCategory) => {
     const currentDistance = forcedDistance ?? distanceKm;
     const currentCategory = forcedCategory ?? selectedCategory;
@@ -322,8 +343,9 @@ const useHomeData = (user) => {
       loadTopPlaces(),
       loadNearby(),
       loadNearbyContext(),
+      loadCategories(),
     ]);
-  }, [loadAll, loadPopular, loadPackages, loadAgencies, loadTopPlaces, loadNearby, loadNearbyContext]);
+  }, [loadAll, loadPopular, loadPackages, loadAgencies, loadTopPlaces, loadNearby, loadNearbyContext, loadCategories]);
 
   // Initial load
   useEffect(() => {
@@ -341,6 +363,7 @@ const useHomeData = (user) => {
     packages: filteredPackages, // Retornamos la lista ya filtrada dinámicamente
     agencies,
     nearbyContext,
+    categories,
     
     // UI State
     loadingAll,
