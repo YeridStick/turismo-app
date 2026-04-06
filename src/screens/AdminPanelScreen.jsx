@@ -10,9 +10,10 @@ import {
     Modal,
     TextInput,
 } from 'react-native';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { getAgencies, createAgency } from '../services/api';
+import { getAgencies, createAgency, updateAgency, deleteAgency } from '../services/api';
+import api from '../services/api';
 
 const ACCENT = "#5B3CF0";
 const COLORS = {
@@ -22,21 +23,78 @@ const COLORS = {
     card: "#F8FAFC",
 };
 
-const CreateAgencyModal = ({ visible, onClose, onSuccess }) => {
+const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [logoUrl, setLogoUrl] = useState('');
     const [loading, setLoading] = useState(false);
+    const [repEmails, setRepEmails] = useState(['']);
+    const [repError, setRepError] = useState('');
+
+    useEffect(() => {
+        if (initialData) {
+            setName(initialData.name || '');
+            setEmail(initialData.email || '');
+            setPhone(initialData.phone || '');
+            setLogoUrl(initialData.logoUrl || '');
+        } else {
+            setName('');
+            setEmail('');
+            setPhone('');
+            setLogoUrl('');
+        }
+        setRepEmails(['']);
+        setRepError('');
+    }, [initialData, visible]);
+
+    const updateRepEmail = (value, idx) => {
+        setRepEmails(prev => prev.map((e, i) => i === idx ? value : e));
+    };
+
+    const addRepEmail = () => {
+        setRepEmails(prev => [...prev, '']);
+    };
+
+    const removeRepEmail = (idx) => {
+        if (repEmails.length === 1) return; // siempre al menos uno
+        setRepEmails(prev => prev.filter((_, i) => i !== idx));
+    };
 
     const handleSubmit = async () => {
         if (!name || !email) return;
+
+        // Validar que el primer correo representante esté completo
+        const filledEmails = repEmails.map(e => e.trim()).filter(Boolean);
+        if (filledEmails.length === 0) {
+            setRepError('Debes ingresar al menos un correo de representante.');
+            return;
+        }
+        setRepError('');
         setLoading(true);
         try {
-            await createAgency({ name, email, phone, logoUrl });
+            let agencyData;
+            if (initialData?.id) {
+                const res = await updateAgency(initialData.id, { name, email, phone, logoUrl });
+                agencyData = res.data?.data || res.data;
+            } else {
+                const res = await createAgency({ name, email, phone, logoUrl });
+                agencyData = res.data?.data || res.data;
+            }
+
+            // Asociar representantes: POST /api/agencies/users por cada correo
+            await Promise.allSettled(
+                filledEmails.map(repEmail =>
+                    api.post('/api/agencies/users', { email: repEmail })
+                )
+            );
+
             onSuccess();
             onClose();
-            setName(''); setEmail(''); setPhone(''); setLogoUrl('');
+            if (!initialData) {
+                setName(''); setEmail(''); setPhone(''); setLogoUrl('');
+                setRepEmails(['']);
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -49,7 +107,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess }) => {
             <BlurView intensity={20} style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Nueva Agencia</Text>
+                        <Text style={styles.modalTitle}>{initialData ? 'Editar Agencia' : 'Nueva Agencia'}</Text>
                         <TouchableOpacity onPress={onClose}>
                             <Ionicons name="close" size={24} color={COLORS.text} />
                         </TouchableOpacity>
@@ -63,9 +121,45 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess }) => {
                         <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="300 123 4567" keyboardType="phone-pad" />
                         <Text style={styles.inputLabel}>URL del Logo</Text>
                         <TextInput style={styles.input} value={logoUrl} onChangeText={setLogoUrl} placeholder="https://..." />
+
+                        {/* ─── SECCIÓN REPRESENTANTES ─────────────────── */}
+                        <View style={styles.repSection}>
+                            <View style={styles.repSectionHeader}>
+                                <Ionicons name="people" size={16} color={ACCENT} />
+                                <Text style={styles.repSectionTitle}>Representantes de la Agencia</Text>
+                            </View>
+                            <Text style={styles.repSectionHint}>Al menos un correo registrado en la plataforma es requerido.</Text>
+
+                            {repEmails.map((repEmail, idx) => (
+                                <View key={idx} style={styles.repRow}>
+                                    <TextInput
+                                        style={[styles.input, styles.repInput]}
+                                        value={repEmail}
+                                        onChangeText={(v) => updateRepEmail(v, idx)}
+                                        placeholder={`Correo representante ${idx + 1}`}
+                                        keyboardType="email-address"
+                                        autoCapitalize="none"
+                                    />
+                                    {repEmails.length > 1 && (
+                                        <TouchableOpacity onPress={() => removeRepEmail(idx)} style={styles.repRemoveBtn}>
+                                            <Ionicons name="close-circle" size={22} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ))}
+
+                            {repError ? <Text style={styles.repError}>{repError}</Text> : null}
+
+                            <TouchableOpacity style={styles.addRepBtn} onPress={addRepEmail}>
+                                <Ionicons name="add-circle-outline" size={18} color={ACCENT} />
+                                <Text style={styles.addRepText}>¿Desea agregar otro representante?</Text>
+                            </TouchableOpacity>
+                        </View>
+
                         <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} disabled={loading}>
-                            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>Crear Agencia</Text>}
+                            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>{initialData ? 'Guardar Cambios' : 'Crear Agencia'}</Text>}
                         </TouchableOpacity>
+                        <View style={{ height: 40 }} />
                     </ScrollView>
                 </View>
             </BlurView>
@@ -77,6 +171,7 @@ const AdminPanelScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [agencies, setAgencies] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [editingAgency, setEditingAgency] = useState(null);
 
     const loadAgencies = async () => {
         setLoading(true);
@@ -94,6 +189,28 @@ const AdminPanelScreen = ({ navigation }) => {
         loadAgencies();
     }, []);
 
+    const handleDeleteAgency = (id) => {
+        import('react-native').then(({ Alert }) => {
+            Alert.alert(
+                "Eliminar Agencia",
+                "¿Estás seguro que deseas eliminar esta agencia? Los paquetes asociados también serán eliminados.",
+                [
+                    { text: "Cancelar", style: "cancel" },
+                    { text: "Eliminar", style: "destructive", onPress: async () => {
+                        setLoading(true);
+                        try {
+                            await deleteAgency(id);
+                            loadAgencies();
+                        } catch (err) {
+                            console.error(err);
+                            setLoading(false);
+                        }
+                    }}
+                ]
+            );
+        });
+    };
+
     const renderAgencyCard = (item) => (
         <View key={item.id} style={styles.agencyCard}>
             <View style={styles.agencyCardLogo}>
@@ -110,6 +227,17 @@ const AdminPanelScreen = ({ navigation }) => {
                     <Text style={styles.cardPhone}>{item.phone || "Sin teléfono"}</Text>
                 </View>
             </View>
+            <View style={styles.cardActions}>
+                <TouchableOpacity onPress={() => {
+                    setEditingAgency(item);
+                    setShowCreateModal(true);
+                }} style={styles.iconButton}>
+                    <MaterialIcons name="edit" size={22} color={COLORS.textLight} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDeleteAgency(item.id)} style={styles.iconButton}>
+                    <MaterialIcons name="delete-outline" size={24} color="#EF4444" />
+                </TouchableOpacity>
+            </View>
         </View>
     );
 
@@ -123,7 +251,10 @@ const AdminPanelScreen = ({ navigation }) => {
                     <Text style={styles.headerTitle}>Centro de Control</Text>
                     <Text style={styles.headerSubtitle}>Gestión global de agencias</Text>
                 </View>
-                <TouchableOpacity style={styles.addBtnHeader} onPress={() => setShowCreateModal(true)}>
+                <TouchableOpacity style={styles.addBtnHeader} onPress={() => {
+                    setEditingAgency(null);
+                    setShowCreateModal(true);
+                }}>
                     <Ionicons name="add" size={28} color="#FFF" />
                 </TouchableOpacity>
             </View>
@@ -154,6 +285,7 @@ const AdminPanelScreen = ({ navigation }) => {
                 visible={showCreateModal} 
                 onClose={() => setShowCreateModal(false)} 
                 onSuccess={loadAgencies}
+                initialData={editingAgency}
             />
         </View>
     );
@@ -233,14 +365,33 @@ const styles = StyleSheet.create({
     agencyCardInfo: { flex: 1 },
     agencyCardName: { fontSize: 16, fontWeight: "700", color: "#0F172A" },
     agencyCardEmail: { fontSize: 12, color: "#64748B", marginBottom: 4 },
+    badgeRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    roleBadge: {
+        backgroundColor: "#F1F5F9",
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    roleBadgeText: {
+        fontSize: 10,
+        fontWeight: "700",
+        color: "#475569",
+        textTransform: "uppercase",
+    },
     cardPhone: { fontSize: 11, color: "#94A3B8" },
+    cardActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 10 },
+    iconButton: { padding: 4 },
     modalOverlay: { flex: 1, justifyContent: "flex-end" },
     modalContent: {
         backgroundColor: "#FFF",
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
         padding: 24,
-        maxHeight: "80%",
+        maxHeight: "90%",
     },
     modalHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
     modalTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
@@ -252,6 +403,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: "#E2E8F0",
         marginBottom: 20,
+        fontSize: 14,
+        color: "#0F172A",
     },
     submitButton: {
         backgroundColor: ACCENT,
@@ -264,6 +417,62 @@ const styles = StyleSheet.create({
     centered: { flex: 1, alignItems: "center", justifyCenter: "center" },
     emptyContainer: { alignItems: "center", paddingVertical: 60 },
     emptyText: { marginTop: 10, color: "#94A3B8" },
+    repSection: {
+        backgroundColor: "rgba(91,60,240,0.04)",
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: "rgba(91,60,240,0.12)",
+    },
+    repSectionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 4,
+    },
+    repSectionTitle: {
+        fontSize: 14,
+        fontWeight: "800",
+        color: ACCENT,
+    },
+    repSectionHint: {
+        fontSize: 12,
+        color: "#64748B",
+        marginBottom: 14,
+        lineHeight: 18,
+    },
+    repRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    repInput: {
+        flex: 1,
+        marginBottom: 10,
+    },
+    repRemoveBtn: {
+        paddingBottom: 10,
+        paddingLeft: 4,
+    },
+    repError: {
+        color: "#EF4444",
+        fontSize: 12,
+        fontWeight: "600",
+        marginBottom: 8,
+    },
+    addRepBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 4,
+    },
+    addRepText: {
+        color: ACCENT,
+        fontSize: 13,
+        fontWeight: "700",
+    },
 });
 
 export default AdminPanelScreen;

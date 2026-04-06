@@ -13,8 +13,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRoute } from "@react-navigation/native";
 import { ENDPOINTS } from "../config/api.config";
-import api from "../services/api";
+import api, { getPackageById, updatePackage } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
@@ -50,8 +51,56 @@ const CreatePackageScreen = ({ navigation }) => {
     image: "",
   });
 
+  const route = useRoute();
+  const packageId = route.params?.packageId;
+
   const [selectedPlaceIds, setSelectedPlaceIds] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [modal, setModal] = useState({ visible: false, type: 'error', title: '', message: '', onConfirm: null });
+
+  React.useEffect(() => {
+    if (packageId) {
+      loadExistingPackage(packageId);
+    }
+  }, [packageId]);
+
+  const loadExistingPackage = async (id) => {
+    setLoading(true);
+    try {
+      const res = await getPackageById(id);
+      const pkg = res.data?.data || res.data;
+      if (pkg) {
+        setForm({
+          title: pkg.title || "",
+          description: pkg.description || "",
+          price: pkg.price?.toString() || "",
+          city: pkg.city || "",
+          days: pkg.days?.toString() || "",
+          nights: pkg.nights?.toString() || "",
+          people: pkg.people || "",
+          rating: pkg.rating?.toString() || "",
+          reviews: pkg.reviews?.toString() || "",
+          originalPrice: pkg.originalPrice?.toString() || "",
+          discount: pkg.discount || "",
+          tag: pkg.tag || "",
+          includes: pkg.includes ? pkg.includes.join(", ") : "",
+          image: pkg.image || "",
+        });
+        if (pkg.places) {
+          setSelectedPlaceIds(pkg.places.map((p) => p.place_id || p.id));
+        }
+      }
+    } catch (err) {
+      setModal({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: 'No se pudo cargar la información del paquete',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Modal & Pagination State for Places
   const [modalVisible, setModalVisible] = useState(false);
@@ -139,30 +188,37 @@ const CreatePackageScreen = ({ navigation }) => {
         image: form.image.trim() || undefined,
       };
 
-      await api.post(ENDPOINTS.PACKAGES, payload);
+      if (packageId) {
+        await updatePackage(packageId, payload);
+      } else {
+        await api.post(ENDPOINTS.PACKAGES, payload);
+      }
+
       setModal({
         visible: true,
         type: 'success',
-        title: '¡Paquete Lanzado!',
-        message: 'Tu nuevo paquete turístico ha sido creado correctamente.',
+        title: packageId ? '¡Paquete Actualizado!' : '¡Paquete Lanzado!',
+        message: packageId ? 'Los cambios han sido guardados.' : 'Tu nuevo paquete turístico ha sido creado correctamente.',
         onConfirm: () => {
-          setForm({
-            title: "",
-            description: "",
-            price: "",
-            city: "",
-            days: "",
-            nights: "",
-            people: "",
-            rating: "",
-            reviews: "",
-            originalPrice: "",
-            discount: "",
-            tag: "",
-            includes: "",
-            image: "",
-          });
-          setSelectedPlaceIds([]);
+          if (!packageId) {
+            setForm({
+              title: "",
+              description: "",
+              price: "",
+              city: "",
+              days: "",
+              nights: "",
+              people: "",
+              rating: "",
+              reviews: "",
+              originalPrice: "",
+              discount: "",
+              tag: "",
+              includes: "",
+              image: "",
+            });
+            setSelectedPlaceIds([]);
+          }
           setModal(prev => ({ ...prev, visible: false }));
         }
       });
@@ -192,8 +248,8 @@ const CreatePackageScreen = ({ navigation }) => {
           <FontAwesome name="chevron-left" size={16} color={COLORS.text} />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>Nuevo Paquete</Text>
-          <Text style={styles.subtitle}>Diseña una experiencia única</Text>
+          <Text style={styles.title}>{packageId ? 'Editar Paquete' : 'Nuevo Paquete'}</Text>
+          <Text style={styles.subtitle}>{packageId ? 'Modifica tu experiencia' : 'Diseña una experiencia única'}</Text>
         </View>
       </View>
 
@@ -392,9 +448,9 @@ const CreatePackageScreen = ({ navigation }) => {
           activeOpacity={0.8}
         >
           <Text style={styles.submitText}>
-            {loading ? "Creando..." : "Lanzar Paquete"}
+            {loading ? "Guardando..." : packageId ? "Guardar Cambios" : "Lanzar Paquete"}
           </Text>
-          {!loading && <FontAwesome name="rocket" size={18} color={COLORS.white} style={{ marginLeft: 8 }} />}
+          {!loading && <FontAwesome name={packageId ? "save" : "rocket"} size={18} color={COLORS.white} style={{ marginLeft: 8 }} />}
         </TouchableOpacity>
 
         {/* Espacio extra al fondo para el teclado */}

@@ -13,7 +13,7 @@ import {
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { getPackages } from '../services/api';
+import { getPackages, deletePackage } from '../services/api';
 
 const COLORS = {
     primary: '#5B3CF0',
@@ -70,6 +70,28 @@ const ManagePackagesScreen = ({ navigation }) => {
         pkg.city.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const handleDeletePackage = (id) => {
+        import('react-native').then(({ Alert }) => {
+            Alert.alert(
+                "Eliminar Paquete",
+                "¿Estás seguro que deseas eliminar este paquete turístico?",
+                [
+                    { text: "Cancelar", style: "cancel" },
+                    { text: "Eliminar", style: "destructive", onPress: async () => {
+                        setLoading(true);
+                        try {
+                            await deletePackage(id);
+                            loadPackages();
+                        } catch (err) {
+                            console.error(err);
+                            setLoading(false);
+                        }
+                    }}
+                ]
+            );
+        });
+    };
+
     const formatCurrency = (value) => {
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
@@ -125,8 +147,13 @@ const ManagePackagesScreen = ({ navigation }) => {
                     </View>
                     <Text style={styles.pkgStatReviews}>({pkg.reviews} reseñas)</Text>
                 </View>
-                <View style={styles.editBtn}>
-                    <MaterialIcons name="edit" size={18} color={COLORS.accent} />
+                <View style={styles.cardActions}>
+                    <TouchableOpacity style={styles.editBtn} onPress={() => navigation.navigate("CreatePackage", { packageId: pkg.id })}>
+                        <MaterialIcons name="edit" size={18} color={COLORS.accent} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeletePackage(pkg.id)}>
+                        <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                 </View>
             </View>
         </TouchableOpacity>
@@ -419,11 +446,24 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: COLORS.textLight,
     },
+    cardActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     editBtn: {
         width: 36,
         height: 36,
         borderRadius: 18,
         backgroundColor: 'rgba(91, 60, 240, 0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    deleteBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
         alignItems: 'center',
         justifyContent: 'center',
     },

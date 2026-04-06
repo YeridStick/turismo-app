@@ -62,4 +62,10 @@ export const getMyPlaces = () => api.get(ENDPOINTS.PLACES_MINE);
 export const createPlace = (data) => api.post(ENDPOINTS.PLACES_CREATE, data);
 export const updatePlace = (id, data) => api.patch(ENDPOINTS.PLACE_UPDATE(id), data);
 
+// New features: Edit / Delete Agencies and Packages
+export const updateAgency = (id, data) => api.patch(`${ENDPOINTS.AGENCIES}/${id}`, data);
+export const deleteAgency = (id) => api.delete(`${ENDPOINTS.AGENCIES}/${id}`);
+export const updatePackage = (id, data) => api.patch(`${ENDPOINTS.PACKAGES}/${id}`, data);
+export const deletePackage = (id) => api.delete(`${ENDPOINTS.PACKAGES}/${id}`);
+
 export default api;
