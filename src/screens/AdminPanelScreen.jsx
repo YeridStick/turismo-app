@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { getAgencies, createAgency, updateAgency, deleteAgency } from '../services/api';
+import { getAgencies, createAgency, updateAgency, deleteAgency, getAgencyUsers, addAgencyUser, updateAgencyUser, deleteAgencyUser } from '../services/api';
 import api from '../services/api';
+import { PremiumModal } from '../components/ui/PremiumModal';
 
 const ACCENT = "#5B3CF0";
 const COLORS = {
@@ -29,74 +30,130 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
     const [phone, setPhone] = useState('');
     const [logoUrl, setLogoUrl] = useState('');
     const [loading, setLoading] = useState(false);
-    const [repEmails, setRepEmails] = useState(['']);
+    const [repEmails, setRepEmails] = useState([{ id: null, email: '', isNew: true }]);
+    const [originalReps, setOriginalReps] = useState([]);
+    const [deletedRepIds, setDeletedRepIds] = useState([]);
     const [repError, setRepError] = useState('');
+    const [statusModal, setStatusModal] = useState({ visible: false, type: 'success', title: '', message: '' });
+
+    const loadUsers = async (agencyId) => {
+        try {
+            console.log(`[DEBUG] Cargando usuarios para agencia ${agencyId}...`);
+            const res = await getAgencyUsers(agencyId);
+            const users = res.data?.data || res.data || [];
+            console.log("[DEBUG] Usuarios recibidos:", JSON.stringify(users, null, 2));
+            
+            // Normalizar usuarios a objetos { id, email }
+            const normalized = users.map(u => {
+                if (typeof u === 'string') return { id: null, email: u };
+                return { id: u.id || null, email: u.email || u };
+            });
+            
+            setOriginalReps(normalized);
+            setRepEmails(normalized.length > 0 ? normalized : [{ id: null, email: '', isNew: true }]);
+        } catch (err) {
+            console.error("Error loading agency users:", err);
+        }
+    };
 
     useEffect(() => {
-        if (initialData) {
-            setName(initialData.name || '');
-            setEmail(initialData.email || '');
-            setPhone(initialData.phone || '');
-            setLogoUrl(initialData.logoUrl || '');
-        } else {
-            setName('');
-            setEmail('');
-            setPhone('');
-            setLogoUrl('');
+        if (visible) {
+            if (initialData) {
+                setName(initialData.name || '');
+                setEmail(initialData.email || '');
+                setPhone(initialData.phone || '');
+                setLogoUrl(initialData.logoUrl || '');
+                loadUsers(initialData.id);
+            } else {
+                setName('');
+                setEmail('');
+                setPhone('');
+                setLogoUrl('');
+                setRepEmails([{ id: null, email: '', isNew: true }]);
+                setOriginalReps([]);
+            }
+            setDeletedRepIds([]);
+            setRepError('');
         }
-        setRepEmails(['']);
-        setRepError('');
     }, [initialData, visible]);
 
     const updateRepEmail = (value, idx) => {
-        setRepEmails(prev => prev.map((e, i) => i === idx ? value : e));
+        setRepEmails(prev => prev.map((item, i) => i === idx ? { ...item, email: value } : item));
     };
 
     const addRepEmail = () => {
-        setRepEmails(prev => [...prev, '']);
+        setRepEmails(prev => [...prev, { id: null, email: '', isNew: true }]);
     };
 
     const removeRepEmail = (idx) => {
-        if (repEmails.length === 1) return; // siempre al menos uno
+        const target = repEmails[idx];
+        if (target.id) {
+            setDeletedRepIds(prev => [...prev, target.id]);
+        }
         setRepEmails(prev => prev.filter((_, i) => i !== idx));
     };
 
     const handleSubmit = async () => {
         if (!name || !email) return;
 
-        // Validar que el primer correo representante esté completo
-        const filledEmails = repEmails.map(e => e.trim()).filter(Boolean);
-        if (filledEmails.length === 0) {
+        const filledEmails = repEmails.filter(r => r.email.trim() !== '');
+        if (filledEmails.length === 0 && !initialData) {
             setRepError('Debes ingresar al menos un correo de representante.');
             return;
         }
+
         setRepError('');
         setLoading(true);
         try {
-            let agencyData;
-            if (initialData?.id) {
-                const res = await updateAgency(initialData.id, { name, email, phone, logoUrl });
-                agencyData = res.data?.data || res.data;
+            let agencyId = initialData?.id;
+            if (agencyId) {
+                await updateAgency(agencyId, { name, email, phone, logoUrl });
             } else {
                 const res = await createAgency({ name, email, phone, logoUrl });
-                agencyData = res.data?.data || res.data;
+                agencyId = (res.data?.data || res.data)?.id;
             }
 
-            // Asociar representantes: POST /api/agencies/users por cada correo
-            await Promise.allSettled(
-                filledEmails.map(repEmail =>
-                    api.post('/api/agencies/users', { email: repEmail })
-                )
-            );
+            if (agencyId) {
+                // 1. Eliminar los desvinculados (solo si tienen ID)
+                for (const userId of deletedRepIds) {
+                    if (userId) {
+                        await deleteAgencyUser(agencyId, userId);
+                    }
+                }
 
+                // 2. Procesar los representantes actuales
+                for (const rep of filledEmails) {
+                    if (rep.isNew) {
+                        // Nuevo: POST (Enviamos el correo de la agencia y el nuevo correo para vincularlos)
+                        await addAgencyUser({ emailAgencia: email, email: rep.email });
+                    } else if (rep.id) {
+                        // Existente y con ID: Ver si cambió (PATCH)
+                        const original = originalReps.find(o => o.id === rep.id);
+                        if (original && original.email !== rep.email) {
+                            await updateAgencyUser(agencyId, rep.id, { email: rep.email });
+                        }
+                    } else {
+                        // Caso: Existente pero sin ID (error en GET)
+                        console.warn(`[WARN] No se puede editar el usuario ${rep.email} porque no tiene ID. Saltando...`);
+                    }
+                }
+            }
+
+            setStatusModal({
+                visible: true,
+                type: 'success',
+                title: 'Agencia Actualizada',
+                message: initialData ? 'Los datos y representantes se han actualizado correctamente.' : 'La agencia ha sido creada exitosamente.',
+            });
             onSuccess();
-            onClose();
-            if (!initialData) {
-                setName(''); setEmail(''); setPhone(''); setLogoUrl('');
-                setRepEmails(['']);
-            }
         } catch (err) {
             console.error(err);
+            setStatusModal({
+                visible: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudieron guardar todos los cambios. Por favor revisa los datos.',
+            });
         } finally {
             setLoading(false);
         }
@@ -130,21 +187,19 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
                             </View>
                             <Text style={styles.repSectionHint}>Al menos un correo registrado en la plataforma es requerido.</Text>
 
-                            {repEmails.map((repEmail, idx) => (
+                            {repEmails.map((rep, idx) => (
                                 <View key={idx} style={styles.repRow}>
                                     <TextInput
                                         style={[styles.input, styles.repInput]}
-                                        value={repEmail}
+                                        value={rep.email}
                                         onChangeText={(v) => updateRepEmail(v, idx)}
                                         placeholder={`Correo representante ${idx + 1}`}
                                         keyboardType="email-address"
                                         autoCapitalize="none"
                                     />
-                                    {repEmails.length > 1 && (
-                                        <TouchableOpacity onPress={() => removeRepEmail(idx)} style={styles.repRemoveBtn}>
-                                            <Ionicons name="close-circle" size={22} color="#EF4444" />
-                                        </TouchableOpacity>
-                                    )}
+                                    <TouchableOpacity onPress={() => removeRepEmail(idx)} style={styles.repRemoveBtn}>
+                                        <Ionicons name="close-circle" size={22} color="#EF4444" />
+                                    </TouchableOpacity>
                                 </View>
                             ))}
 
@@ -163,6 +218,13 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
                     </ScrollView>
                 </View>
             </BlurView>
+            <PremiumModal 
+                {...statusModal} 
+                onClose={() => {
+                    setStatusModal({ ...statusModal, visible: false });
+                    if (statusModal.type === 'success') onClose();
+                }} 
+            />
         </Modal>
     );
 };

@@ -638,6 +638,7 @@ const AuthScreen = () => {
               <ScrollView
                 style={styles.dropdownScroll}
                 contentContainerStyle={styles.dropdownContent}
+                nestedScrollEnabled={true}
               >
                 {docTypeOptions.map((opt) => (
                   <TouchableOpacity
@@ -1209,12 +1210,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dropdown: {
+    position: "absolute",
+    top: 50,
+    left: 0,
+    right: 0,
     backgroundColor: "#fff",
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: "#ddd6fe",
-    marginTop: 4,
     maxHeight: 200,
+    zIndex: 1000,
     shadowColor: "#4a2fb0",
     shadowOpacity: 0.1,
     shadowRadius: 12,

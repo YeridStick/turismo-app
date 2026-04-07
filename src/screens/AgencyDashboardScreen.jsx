@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { ENDPOINTS } from "../config/api.config";
 import { useAuth } from "../context/AuthContext";
-import api, { createAgency, getAgencies, getAgencyByEmail, getPackages } from "../services/api";
+import api, { createAgency, getAgencies, getAgencyByEmail, getMyAgencies, getPackages, getAgencyPackages } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { RefreshControl } from "react-native";
 
@@ -137,15 +137,13 @@ const formatCurrency = (value) => {
 const AgencyDashboardScreen = ({ navigation }) => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-    
-    // Estados para Admin
-    const [agencies, setAgencies] = useState([]);
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    
-    // Estados para Agency/Owner
-    const [agency, setAgency] = useState(null);
+    const [fetchingDashboard, setFetchingDashboard] = useState(false);
+    const [agencies, setAgencies] = useState([]); // Todas las agencias vinculadas
+    const [activeAgency, setActiveAgency] = useState(null); // Agencia seleccionada actualmente
     const [dashboard, setDashboard] = useState(null);
+    const [error, setError] = useState("");
+    const [refreshing, setRefreshing] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     const isAdmin = useMemo(() => {
         return user?.roles?.map(r => r.toLowerCase()).includes('admin');
@@ -156,52 +154,14 @@ const AgencyDashboardScreen = ({ navigation }) => {
         setLoading(true);
         setError("");
         try {
-            // 1. Siempre intentamos validar el correo contra una agencia
-            const agencyResp = await getAgencyByEmail(user.email);
-            const myAgency = agencyResp.data?.data || null;
-            setAgency(myAgency);
+            const agenciesResp = await getMyAgencies(user.email);
+            const myAgencies = agenciesResp.data?.data || [];
+            setAgencies(myAgencies);
 
-            if (myAgency) {
-                const now = new Date();
-                const from = new Date(now);
-                from.setDate(now.getDate() - 30);
-                
-                // 2. Cargar dashboard de estadísticas
-                const dResp = await api.get(ENDPOINTS.AGENCY_DASHBOARD, {
-                    params: {
-                        email: user.email,
-                        userEmail: user.email,
-                        from: from.toISOString().slice(0, 10),
-                        to: now.toISOString().slice(0, 10),
-                    },
-                });
-                
-                let dData = dResp.data?.data || dResp.data || null;
-
-                // FALLBACK DE ORO: Si el dashboard no trae paquetes, los buscamos en el catálogo general
-                if (!dData?.packages || dData.packages.length === 0) {
-                    try {
-                        const allPkgsResp = await getPackages();
-                        const allPkgs = allPkgsResp.data?.data || [];
-                        const myPkgs = allPkgs.filter(p => 
-                            p.agencyId === myAgency.id || 
-                            String(p.agencyName).toLowerCase() === String(myAgency.name).toLowerCase()
-                        );
-                        
-                        if (!dData) dData = { packages: [], salesSummary: { totalSold: 0, totalRevenue: 0 } };
-                        dData.packages = myPkgs;
-                    } catch (pkgErr) {
-                        console.error("Error in fallback package load:", pkgErr);
-                    }
-                }
-                
-                setDashboard(dData);
-            }
-
-            // 3. Si eres ADMIN, cargar además la lista global de agencias
-            if (isAdmin) {
-                const response = await getAgencies();
-                setAgencies(response.data?.data || []);
+            if (myAgencies.length > 0) {
+                const defaultAgency = activeAgency || myAgencies[0];
+                setActiveAgency(defaultAgency);
+                await loadAgencyDashboard(defaultAgency);
             }
         } catch (err) {
             console.error("Error loading dashboard data:", err);
@@ -211,41 +171,61 @@ const AgencyDashboardScreen = ({ navigation }) => {
         }
     };
 
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await loadData();
+        setRefreshing(false);
+    };
+
+    const loadAgencyDashboard = async (targetAgency) => {
+        if (!targetAgency) return;
+        setFetchingDashboard(true);
+        try {
+            const now = new Date();
+            const from = new Date(now);
+            from.setDate(now.getDate() - 30);
+            
+            const dResp = await api.get(ENDPOINTS.AGENCY_DASHBOARD, {
+                params: {
+                    email: user.email,
+                    agencyId: targetAgency.id,
+                    from: from.toISOString().slice(0, 10),
+                    to: now.toISOString().slice(0, 10),
+                },
+            });
+            
+            let dData = dResp.data?.data || dResp.data || null;
+
+            if (!dData?.packages || dData.packages.length === 0) {
+                try {
+                    const pkgsResp = await getAgencyPackages(targetAgency.id);
+                    const agencyPkgs = pkgsResp.data?.data || [];
+                    if (!dData) dData = { packages: [], salesSummary: { totalSold: 0, totalRevenue: 0 } };
+                    dData.packages = agencyPkgs;
+                } catch (pkgErr) {
+                    console.error("Error fetching agency packages:", pkgErr);
+                }
+            }
+            
+            setDashboard(dData);
+        } catch (err) {
+            console.error("Error loading agency dashboard:", err);
+        } finally {
+            setFetchingDashboard(false);
+        }
+    };
+
+    const switchAgency = (target) => {
+        setActiveAgency(target);
+        loadAgencyDashboard(target);
+    };
+
     useEffect(() => {
         loadData();
     }, [user?.email, isAdmin]);
 
-    const topPackages = dashboard?.topPackages || [];
-    const topPlaces = dashboard?.topPlaces || [];
-    const maxSold = Math.max(1, ...topPackages.map((item) => item.sold || 0));
-    const maxVisits = Math.max(1, ...topPlaces.map((item) => item.visits || 0));
-
-    const renderAgencyCard = (item) => (
-        <TouchableOpacity key={item.id} style={styles.agencyCard}>
-            <View style={styles.agencyCardLogo}>
-                {item.logoUrl ? (
-                    <Image source={{ uri: item.logoUrl }} style={styles.logoImage} />
-                ) : (
-                    <FontAwesome name="building" size={24} color={ACCENT} />
-                )}
-            </View>
-            <View style={styles.agencyCardInfo}>
-                <Text style={styles.agencyCardName}>{item.name}</Text>
-                <Text style={styles.agencyCardEmail} numberOfLines={1}>{item.email}</Text>
-                <View style={styles.badgeRow}>
-                    <View style={styles.roleBadge}>
-                        <Text style={styles.roleBadgeText}>Agencia</Text>
-                    </View>
-                    {item.phone && <Text style={styles.cardPhone}>{item.phone}</Text>}
-                </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
-        </TouchableOpacity>
-    );
-
     return (
         <View style={styles.container}>
-            {/* Header Branded */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={24} color={COLORS.text} />
@@ -258,128 +238,127 @@ const AgencyDashboardScreen = ({ navigation }) => {
 
             {loading ? (
                 <View style={styles.centered}>
-                    <ActivityIndicator color={ACCENT} size="large" />
-                    <Text style={styles.loadingText}>Sincronizando con el servidor...</Text>
+                    <ActivityIndicator size="large" color={ACCENT} />
+                    <Text style={styles.loadingText}>Sincronizando agencias...</Text>
                 </View>
             ) : (
-                <ScrollView 
-                    contentContainerStyle={styles.scrollContent} 
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl refreshing={loading} onRefresh={loadData} colors={[ACCENT]} />
-                    }
-                >
-                    
-                    {/* SECCIÓN MI AGENCIA: Visible si el usuario tiene una agencia vinculada */}
-                    {agency ? (
-                        <>
-                            <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>Impacto de {agency.name}</Text>
-                            </View>
-                            
-                            <LinearGradient
-                                colors={[ACCENT, "#7B5BFF"]}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.heroCard}
-                            >
-                                <View style={styles.heroLogoWrap}>
-                                    {agency.logoUrl ? (
-                                        <Image source={{ uri: agency.logoUrl }} style={styles.heroLogo} />
-                                    ) : (
-                                        <FontAwesome name="briefcase" size={32} color="rgba(255,255,255,0.3)" />
-                                    )}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.heroPretitle}>MI AGENCIA</Text>
-                                    <Text style={styles.heroTitle} numberOfLines={1}>{agency.name}</Text>
-                                    <View style={styles.heroRow}>
-                                        <Ionicons name="mail-outline" size={12} color="rgba(255,255,255,0.7)" />
-                                        <Text style={styles.heroDetail} numberOfLines={1}>{agency.email}</Text>
-                                    </View>
-                                </View>
-                            </LinearGradient>
-
-                            {/* Estadísticas Reales */}
-                            <View style={styles.statsGrid}>
-                                <View style={styles.statBox}>
-                                    <Text style={styles.statLabel}>Ventas del Mes</Text>
-                                    <Text style={styles.statValue}>{dashboard?.salesSummary?.totalSold || 0}</Text>
-                                </View>
-                                <View style={styles.statBox}>
-                                    <Text style={styles.statLabel}>Ingresos BR</Text>
-                                    <Text style={styles.statValue}>{formatCurrency(dashboard?.salesSummary?.totalRevenue)}</Text>
-                                </View>
-                            </View>
-
-                            {/* Rankings Reales */}
-                            {topPackages.length > 0 && (
-                                <View style={styles.cardRank}>
-                                    <View style={styles.cardHeaderRank}>
-                                        <FontAwesome name="star" size={16} color="#F39C12" />
-                                        <Text style={styles.rankTitle}>Misión Cumplida (Tops)</Text>
-                                    </View>
-                                    {topPackages.map((item, i) => (
-                                        <View key={`pkg-${item.packageId}`} style={styles.barRow}>
-                                            <Text style={styles.barRank}>{i + 1}</Text>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={styles.barLabel} numberOfLines={1}>{item.title}</Text>
-                                                <View style={styles.barTrack}>
-                                                    <View style={[styles.barFill, { width: `${((item.sold || 0) / maxSold) * 100}%` }]} />
-                                                </View>
-                                            </View>
-                                            <Text style={styles.barValue}>{item.sold || 0}</Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
-                            
-                            {/* Catálogo Activo -> Ahora Gestión de Paquetes y Servicios */}
-                            <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionTitle}>Paquetes y Servicios</Text>
-                                <TouchableOpacity 
-                                    style={styles.addPackageBtn} 
-                                    onPress={() => navigation.navigate("ManagePackages")}
-                                >
-                                    <Ionicons name="settings-outline" size={18} color={ACCENT} />
-                                    <Text style={styles.addPackageText}>Gestionar</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {(dashboard?.packages || []).length === 0 ? (
-                                <Text style={styles.emptyTextCatalog}>Aún no has publicado paquetes.</Text>
-                            ) : (
-                                dashboard.packages.slice(0, 3).map((pkg) => (
-                                    <View key={`pkg-real-${pkg.id}`} style={styles.packageItemCard}>
-                                        <View style={styles.packageIcon}>
-                                            <FontAwesome name="suitcase" size={18} color={ACCENT} />
-                                        </View>
-                                        <View style={styles.packageInfo}>
-                                            <Text style={styles.packageTitleLine} numberOfLines={1}>{pkg.title}</Text>
-                                            <Text style={styles.packageSubtitleLine}>{pkg.city} • {pkg.days} días</Text>
-                                        </View>
-                                        <Text style={styles.packagePriceLine}>{formatCurrency(pkg.price)}</Text>
-                                    </View>
-                                ))
-                            )}
-                            
-                            {dashboard?.packages?.length > 3 && (
-                                <TouchableOpacity 
-                                    style={styles.viewMoreBtn}
-                                    onPress={() => navigation.navigate("ManagePackages")}
-                                >
-                                    <Text style={styles.viewMoreText}>Ver todos los paquetes ({dashboard.packages.length})</Text>
-                                </TouchableOpacity>
-                            )}
-                        </>
-                    ) : (
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="alert-circle-outline" size={64} color="rgba(0,0,0,0.05)" />
-                            <Text style={styles.emptyText}>No tienes una agencia vinculada aún.</Text>
-                            <Text style={styles.emptySubtext}>Contacta con el Administrador para registrar tu agencia.</Text>
+                <View style={{ flex: 1 }}>
+                    {agencies.length > 1 && (
+                        <View style={styles.agencySelectorRow}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+                                {agencies.map(item => (
+                                    <TouchableOpacity 
+                                        key={item.id} 
+                                        onPress={() => switchAgency(item)}
+                                        style={[
+                                            styles.agencyTab, 
+                                            activeAgency?.id === item.id && styles.activeAgencyTab
+                                        ]}
+                                    >
+                                        <Image source={{ uri: item.logoUrl }} style={styles.tabLogo} />
+                                        <Text style={[styles.tabName, activeAgency?.id === item.id && styles.activeTabName]}>
+                                            {item.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
                         </View>
                     )}
-                </ScrollView>
+
+                    <ScrollView 
+                        contentContainerStyle={styles.scrollContent}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[ACCENT]} />}
+                    >
+                        {activeAgency ? (
+                            <>
+                                <Text style={styles.sectionHeader}>Impacto de {activeAgency.name}</Text>
+                                
+                                <LinearGradient 
+                                    colors={[ACCENT, "#7B5BFF"]} 
+                                    start={{ x: 0, y: 0 }} 
+                                    end={{ x: 1, y: 1 }} 
+                                    style={styles.heroCard}
+                                >
+                                    <View style={styles.heroLogoWrap}>
+                                        {activeAgency.logoUrl ? (
+                                            <Image source={{ uri: activeAgency.logoUrl }} style={styles.heroLogo} />
+                                        ) : (
+                                            <FontAwesome name="briefcase" size={32} color="rgba(255,255,255,0.3)" />
+                                        )}
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.heroPretitle}>MI AGENCIA</Text>
+                                        <Text style={styles.heroTitle} numberOfLines={1}>{activeAgency.name}</Text>
+                                        <View style={styles.heroRow}>
+                                            <Ionicons name="mail-outline" size={12} color="rgba(255,255,255,0.7)" />
+                                            <Text style={styles.heroDetail} numberOfLines={1}>{activeAgency.email}</Text>
+                                        </View>
+                                    </View>
+                                </LinearGradient>
+
+                                {fetchingDashboard ? (
+                                    <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
+                                ) : (
+                                    <>
+                                        <View style={styles.statsGrid}>
+                                            <View style={styles.statBox}>
+                                                <Text style={styles.statLabel}>Ventas del Mes</Text>
+                                                <Text style={styles.statValue}>{dashboard?.salesSummary?.totalSold || 0}</Text>
+                                            </View>
+                                            <View style={styles.statBox}>
+                                                <Text style={styles.statLabel}>Ingresos BR</Text>
+                                                <Text style={styles.statValue}>{formatCurrency(dashboard?.salesSummary?.totalRevenue)}</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.sectionHeader}>
+                                            <Text style={styles.sectionTitle}>Paquetes y Servicios</Text>
+                                            <TouchableOpacity 
+                                                style={styles.addPackageBtn} 
+                                                onPress={() => navigation.navigate("ManagePackages", { agencyId: activeAgency.id })}
+                                            >
+                                                <Ionicons name="settings-outline" size={18} color={ACCENT} />
+                                                <Text style={styles.addPackageText}>Gestionar</Text>
+                                            </TouchableOpacity>
+                                        </View>
+
+                                        {(dashboard?.packages || []).length === 0 ? (
+                                            <Text style={styles.emptyTextCatalog}>Aún no has publicado paquetes.</Text>
+                                        ) : (
+                                            dashboard.packages.slice(0, 3).map((pkg) => (
+                                                <View key={`pkg-real-${pkg.id}`} style={styles.packageItemCard}>
+                                                    <View style={styles.packageIcon}>
+                                                        <FontAwesome name="suitcase" size={18} color={ACCENT} />
+                                                    </View>
+                                                    <View style={styles.packageInfo}>
+                                                        <Text style={styles.packageTitleLine} numberOfLines={1}>{pkg.title}</Text>
+                                                        <Text style={styles.packageSubtitleLine}>{pkg.city} • {pkg.days} días</Text>
+                                                    </View>
+                                                    <Text style={styles.packagePriceLine}>{formatCurrency(pkg.price)}</Text>
+                                                </View>
+                                            ))
+                                        )}
+                                        
+                                        {dashboard?.packages?.length > 3 && (
+                                            <TouchableOpacity 
+                                                style={styles.viewMoreBtn}
+                                                onPress={() => navigation.navigate("ManagePackages", { agencyId: activeAgency.id })}
+                                            >
+                                                <Text style={styles.viewMoreText}>Ver todos los paquetes ({dashboard.packages.length})</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </>
+                                )}
+                            </>
+                        ) : (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="alert-circle-outline" size={64} color="rgba(0,0,0,0.05)" />
+                                <Text style={styles.emptyText}>No tienes una agencia vinculada aún.</Text>
+                                <Text style={styles.emptySubtext}>Contacta con el Administrador para registrar tu agencia.</Text>
+                            </View>
+                        )}
+                    </ScrollView>
+                </View>
             )}
 
             <CreateAgencyModal 
@@ -448,6 +427,41 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "700",
         color: "#1E293B",
+    },
+    agencySelectorRow: {
+        paddingVertical: 15,
+        backgroundColor: "#FFFFFF",
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(0,0,0,0.03)",
+    },
+    agencyTab: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F8FAFC",
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: "transparent",
+    },
+    activeAgencyTab: {
+        backgroundColor: "rgba(91, 60, 240, 0.08)",
+        borderColor: ACCENT,
+    },
+    tabLogo: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        marginRight: 8,
+    },
+    tabName: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: "#64748B",
+    },
+    activeTabName: {
+        color: ACCENT,
     },
     sectionCount: {
         fontSize: 12,

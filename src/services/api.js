@@ -54,6 +54,17 @@ export const getAgencies = () => api.get(ENDPOINTS.AGENCIES);
 export const createAgency = (data) => api.post(ENDPOINTS.AGENCIES, data);
 export const getAgencyByEmail = (email) => 
   api.get(ENDPOINTS.AGENCY_BY_USER, { params: { email, userEmail: email } });
+export const getMyAgencies = (email) => api.get(ENDPOINTS.AGENCY_MY, { params: { email } });
+export const getAgencyPackages = (id) => api.get(ENDPOINTS.AGENCY_PACKAGES(id));
+
+// Agency User Management
+export const getAgencyUsers = (id) => api.get(ENDPOINTS.AGENCY_USERS(id));
+export const updateAgencyUser = (agencyId, userId, data) => 
+  api.patch(ENDPOINTS.AGENCY_USER_DETAIL(agencyId, userId), data);
+export const deleteAgencyUser = (agencyId, userId) => 
+  api.delete(ENDPOINTS.AGENCY_USER_DETAIL(agencyId, userId));
+export const addAgencyUser = (data) => 
+  api.post(`/api/agencies/users`, data);
 
 export const getNearbyContext = (lat, lng) => 
   api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, { params: { lat, lng } });

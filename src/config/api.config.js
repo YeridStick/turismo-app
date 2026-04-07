@@ -40,9 +40,15 @@ export const ENDPOINTS = {
   PACKAGES: "/api/packages",
   AGENCIES: "/api/agencies",
   AGENCY_BY_USER: "/api/agencies/by-user",
+  AGENCY_MY: "/api/agencies/by-user",
+  AGENCY_PACKAGES: (id) => `/api/agencies/${id}/packages`,
   AGENCY_DASHBOARD: "/api/agencies/dashboard",
   GEOCODE: "/api/tools/geocode",
   CATEGORIES: "/api/categories",
+  
+  // Agency User Management
+  AGENCY_USERS: (id) => `/api/agencies/${id}/users`,
+  AGENCY_USER_DETAIL: (agencyId, userId) => `/api/agencies/${agencyId}/users/${userId}`,
 
   // User Management
   USERS_ME: '/api/users/me',

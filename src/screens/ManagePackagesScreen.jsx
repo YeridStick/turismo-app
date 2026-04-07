@@ -13,7 +13,8 @@ import {
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { getPackages, deletePackage } from '../services/api';
+import { getPackages, deletePackage, getAgencyPackages } from '../services/api';
+import { useRoute } from '@react-navigation/native';
 
 const COLORS = {
     primary: '#5B3CF0',
@@ -28,6 +29,9 @@ const COLORS = {
 
 const ManagePackagesScreen = ({ navigation }) => {
     const { user } = useAuth();
+    const route = useRoute();
+    const agencyId = route.params?.agencyId;
+    
     const [loading, setLoading] = useState(true);
     const [packages, setPackages] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -41,18 +45,20 @@ const ManagePackagesScreen = ({ navigation }) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await getPackages();
-            const allPkgs = response.data?.data || [];
-            
-            // Si no es admin, filtrar solo los de su agencia
-            if (!isAdmin) {
-                // Aquí deberíamos filtrar por el agencyId si lo tenemos en el user, 
-                // o confiar en que el backend ya filtró si enviamos el token.
-                // Por ahora mostramos los que coincidan con la agencia del usuario (placeholder logic)
-                setPackages(allPkgs);
+            let response;
+            if (agencyId) {
+                // Caso: Venimos de una agencia específica en el Dashboard
+                response = await getAgencyPackages(agencyId);
             } else {
-                setPackages(allPkgs);
+                // Caso: Acceso general (ej. Admin o Menú lateral)
+                response = await getPackages();
             }
+            
+            const allPkgs = response.data?.data || response.data || [];
+            
+            // Si no es admin y no hay agencyId, podrías filtrar o mostrar vacío
+            // Pero con los nuevos endpoints, getMyAgencies + getAgencyPackages es el flujo ideal
+            setPackages(allPkgs);
         } catch (err) {
             console.error("Error loading packages:", err);
             setError("No se pudieron cargar los servicios.");
