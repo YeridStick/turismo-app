@@ -24,7 +24,7 @@ export default StyleSheet.create({
     height: 84,
     marginTop: -42,
     borderRadius: 999,
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
   },
   sidePanelOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -56,7 +56,7 @@ export default StyleSheet.create({
   sidePanelTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: "800",
-    color: "#5B3CF0",
+    color: "#0E7490",
   },
   sidePanelSubtitle: {
     marginTop: 4,
@@ -121,17 +121,17 @@ export default StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: "#E0F7FA",
   },
   sidePanelMetaPillOutline: {
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#C7D2FE",
+    borderColor: "#99F6E4",
   },
   sidePanelMetaPillText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: "600",
-    color: "#4338CA",
+    color: "#0F766E",
   },
   sidePanelBadgeRow: {
     flexDirection: "row",
@@ -143,20 +143,20 @@ export default StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
   },
   sidePanelBadgeOutline: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#C7D2FE",
-    backgroundColor: "#EEF2FF",
+    borderColor: "#99F6E4",
+    backgroundColor: "#E0F7FA",
   },
   sidePanelBadgeText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: "600",
-    color: "#4338CA",
+    color: "#0F766E",
   },
   sidePanelBadgeTextLight: {
     fontSize: FONT_SIZES.xs,
@@ -167,7 +167,7 @@ export default StyleSheet.create({
     minWidth: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: "#E0F7FA",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: SPACING.xs,
@@ -175,11 +175,11 @@ export default StyleSheet.create({
   sidePanelCountText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: "700",
-    color: "#5B3CF0",
+    color: "#0E7490",
   },
   sidePanelWelcome: {
     padding: SPACING.md,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: "#E0F7FA",
     borderRadius: 18,
     marginBottom: SPACING.lg,
   },

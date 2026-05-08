@@ -26,6 +26,13 @@ export const cardStyles = {
   cardImageWrapper: {
     position: "relative",
   },
+  cardTopTint: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 110,
+  },
   cardImage: {
     width: "100%",
     height: 240,
@@ -41,7 +48,7 @@ export const cardStyles = {
     alignItems: "center",
   },
   cardBadge: {
-    backgroundColor: "rgba(91, 60, 240, 0.9)",
+    backgroundColor: "rgba(14, 116, 144, 0.9)",
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
     borderRadius: 16,
@@ -106,7 +113,7 @@ export const cardStyles = {
     gap: 4,
   },
   cardDistance: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontWeight: "700",
   },
   popularCard: {
@@ -143,8 +150,24 @@ export const cardStyles = {
     left: SPACING.md,
     right: SPACING.md,
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
+  },
+  compactBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(14, 116, 144, 0.92)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  compactBadgeText: {
+    color: "#fff",
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
   },
   popularTextBlock: {
     position: "absolute",
@@ -209,7 +232,7 @@ export const cardStyles = {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: "#FFF7ED",
     justifyContent: "center",
     alignItems: "center",
   },

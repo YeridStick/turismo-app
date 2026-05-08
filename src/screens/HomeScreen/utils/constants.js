@@ -41,8 +41,8 @@ export const NAV_TABS = [
 ];
 
 export const PACKAGE_GRADIENTS = [
-  ["#6366F1", "#A855F7"],
-  ["#10B981", "#3B82F6"],
-  ["#F59E0B", "#EF4444"],
-  ["#6366F1", "#EC4899"],
+  ["#0EA5A4", "#14B8A6"],
+  ["#38BDF8", "#0EA5A4"],
+  ["#FB923C", "#F59E0B"],
+  ["#0E7490", "#38BDF8"],
 ];

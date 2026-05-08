@@ -82,10 +82,15 @@ const normalizePlace = (place) => {
   return normalized;
 };
 
+const parseFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const IMAGE_PLACEHOLDER =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
 
-// --- NUEVO COMPONENTE: GALERÍA HD ---
+// --- NUEVO COMPONENTE: GALERÃƒÆ’Ã‚ÂA HD ---
 const ImageGalleryModal = ({ visible, images, initialIndex, onClose }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   
@@ -181,7 +186,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     return [{ id: 'placeholder', uri: IMAGE_PLACEHOLDER }];
   }, [place.imageUrls]);
 
-  // --- LÓGICA DE AUTO-PLAY ---
+  // --- LÃƒÆ’Ã¢â‚¬Å“GICA DE AUTO-PLAY ---
   useEffect(() => {
     if (images.length <= 1 || galleryVisible) return;
     
@@ -220,12 +225,17 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     extrapolate: 'clamp',
   });
 
-  const coordinates = {
-    latitude: place.latitude || place.lat || 2.9273,
-    longitude: place.longitude || place.lng || -75.2819,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  };
+  const latitude = parseFiniteNumber(place?.latitude ?? place?.lat);
+  const longitude = parseFiniteNumber(place?.longitude ?? place?.lng);
+  const hasValidCoordinates = latitude != null && longitude != null;
+  const coordinates = hasValidCoordinates
+    ? {
+        latitude,
+        longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }
+    : null;
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -248,13 +258,28 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     imageScrollViewRef.current?.scrollTo({ x: prevIndex * windowWidth, animated: true });
   };
 
-  const infoDetails = useMemo(() => [
-    { icon: "ticket", label: "Entrada/Precio", value: place.price ? `$${place.price}` : "Acceso libre" },
-    { icon: "clock-o", label: "Horario", value: place.openingHours || "08:00 AM - 05:00 PM" },
-    { icon: "info-circle", label: "Servicios", value: Array.isArray(place.services) ? `${place.services.length} disponibles` : "No especificados" },
-    { icon: "map-marker", label: "Distancia", value: formatDistance(place.distanceMeters) || "Cerca de ti" },
-    { icon: "phone", label: "Contacto", value: place.phone || "+57 321 000 0000" },
-  ], [place]);
+  const infoDetails = useMemo(() => {
+    const details = [];
+    const price = place?.price;
+    const openingHours = place?.openingHours || place?.opening_hours;
+    const distance = formatDistance(place?.distanceMeters);
+    const phone = place?.phone || place?.contactPhone || place?.contact_phone;
+
+    if (price != null && String(price).trim() !== "") {
+      details.push({ icon: "ticket", label: "Entrada/Precio", value: `$${price}` });
+    }
+    if (openingHours && String(openingHours).trim() !== "") {
+      details.push({ icon: "clock-o", label: "Horario", value: String(openingHours) });
+    }
+    if (distance && String(distance).trim() !== "") {
+      details.push({ icon: "map-marker", label: "Distancia", value: String(distance) });
+    }
+    if (phone && String(phone).trim() !== "") {
+      details.push({ icon: "phone", label: "Contacto", value: String(phone) });
+    }
+
+    return details;
+  }, [place]);
 
   return (
     <View style={{ width: windowWidth, height: '100%' }}>
@@ -325,7 +350,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
 
           {place.address && (
             <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color="#5B3CF0" />
+              <Ionicons name="location-outline" size={18} color="#0E7490" />
               <Text style={styles.infoText}>{place.address}</Text>
             </View>
           )}
@@ -333,22 +358,22 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
           {place.description && (
             <Text style={styles.description}>{place.description}</Text>
           )}
-
-          <View style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>Detalles del sitio</Text>
-            {infoDetails.map((detail, idx) => (
-              <View key={idx} style={styles.detailItem}>
-                <View style={styles.detailIconWrapper}>
-                  <FontAwesome name={detail.icon} size={16} color="#5B3CF0" />
+          {infoDetails.length > 0 && (
+            <View style={styles.detailsSection}>
+              <Text style={styles.sectionTitle}>Detalles del sitio</Text>
+              {infoDetails.map((detail, idx) => (
+                <View key={idx} style={styles.detailItem}>
+                  <View style={styles.detailIconWrapper}>
+                    <FontAwesome name={detail.icon} size={16} color="#0E7490" />
+                  </View>
+                  <View style={styles.detailTextWrapper}>
+                    <Text style={styles.detailLabel}>{detail.label}</Text>
+                    <Text style={styles.detailValue}>{detail.value}</Text>
+                  </View>
                 </View>
-                <View style={styles.detailTextWrapper}>
-                  <Text style={styles.detailLabel}>{detail.label}</Text>
-                  <Text style={styles.detailValue}>{detail.value}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-
+              ))}
+            </View>
+          )}
           {Array.isArray(place.services) && place.services.length > 0 && (
             <View style={styles.amenitiesSection}>
               <Text style={styles.sectionTitle}>Servicios y Comodidades</Text>
@@ -360,7 +385,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                       <MaterialIcons 
                         name={serviceInfo?.icon || 'check-circle'} 
                         size={18} 
-                        color="#5B3CF0" 
+                        color="#0E7490" 
                       />
                       <Text style={styles.amenityText}>{service}</Text>
                     </View>
@@ -369,31 +394,34 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               </View>
             </View>
           )}
+          {(hasValidCoordinates || arConfig?.modelUrl) && (
+            <View style={styles.actionRow}>
+              {hasValidCoordinates && (
+                <TouchableOpacity style={[styles.actionButton, { flex: 1 }]} onPress={() => {
+                  const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
+                  Linking.openURL(url);
+                }}>
+                  <Ionicons name="navigate-outline" size={20} color={COLORS.white} />
+                  <Text style={styles.actionButtonText}>Cómo llegar</Text>
+                </TouchableOpacity>
+              )}
 
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionButton, { flex: 1 }]} onPress={() => {
-              const url = coordinates ? `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}` : '';
-              if (url) Linking.openURL(url);
-            }}>
-              <Ionicons name="navigate-outline" size={20} color={COLORS.white} />
-              <Text style={styles.actionButtonText}>Cómo llegar</Text>
-            </TouchableOpacity>
-
-            {arConfig?.modelUrl && (
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.arActionButton]} 
-                onPress={() => {
-                  navigation.navigate('ARView', { 
-                    modelUrl: arConfig.modelUrl,
-                    placeName: place.name 
-                  });
-                }}
-              >
-                <Ionicons name="cube-outline" size={20} color={COLORS.white} />
-                <Text style={styles.actionButtonText}>Ver en AR</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+              {arConfig?.modelUrl && (
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.arActionButton]} 
+                  onPress={() => {
+                    navigation.navigate('ARView', { 
+                      modelUrl: arConfig.modelUrl,
+                      placeName: place.name 
+                    });
+                  }}
+                >
+                  <Ionicons name="cube-outline" size={20} color={COLORS.white} />
+                  <Text style={styles.actionButtonText}>Ver en AR</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       </Animated.ScrollView>
 
@@ -407,6 +435,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     </View>
   );
 });
+PlaceDetailContent.displayName = 'PlaceDetailContent';
 
 const PlaceDetailScreen = ({ route, navigation }) => {
   const { places = [], initialIndex = 0, place } = route?.params || {};
@@ -577,7 +606,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   arActionButton: {
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
     flex: 1,
   },
   detailsSection: {

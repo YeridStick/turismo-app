@@ -87,7 +87,7 @@ export const detailStyles = {
     gap: SPACING.xs,
   },
   actionButtonPrimary: {
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
     elevation: 5,
   },
   actionButtonPrimaryText: {
@@ -147,7 +147,7 @@ export const detailStyles = {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(91, 60, 240, 0.12)",
+    backgroundColor: "rgba(14, 116, 144, 0.14)",
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
     borderRadius: 14,
@@ -172,7 +172,7 @@ export const detailStyles = {
   },
   infoSlideCard: {
     width: "48%",
-    backgroundColor: "#F7F8FD",
+    backgroundColor: "#F0FDFA",
     borderRadius: 14,
     padding: SPACING.md,
     gap: 6,
@@ -220,8 +220,8 @@ export const detailStyles = {
     backgroundColor: "#F8F8FD",
   },
   modelChipActive: {
-    backgroundColor: "#5B3CF0",
-    borderColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
+    borderColor: "#0E7490",
   },
   modelChipText: {
     color: COLORS.text,
@@ -244,7 +244,7 @@ export const detailStyles = {
     gap: SPACING.sm,
   },
   imageBadge: {
-    backgroundColor: "rgba(91, 60, 240, 0.95)",
+    backgroundColor: "rgba(14, 116, 144, 0.95)",
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 20,
@@ -262,7 +262,7 @@ export const detailStyles = {
     alignItems: "center",
   },
   moreInfoText: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontSize: FONT_SIZES.md,
     fontWeight: "700",
   },
@@ -299,7 +299,7 @@ export const detailStyles = {
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.xs,
-    backgroundColor: "#F7F8FD",
+    backgroundColor: "#F0FDFA",
     padding: SPACING.md,
     borderRadius: 16,
   },

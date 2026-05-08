@@ -104,6 +104,28 @@ export const packageStyles = {
     padding: SPACING.lg,
     gap: SPACING.sm,
   },
+  packageVibeRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 2,
+  },
+  packageVibeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "rgba(251, 146, 60, 0.3)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  packageVibeText: {
+    color: "#9A3412",
+    fontWeight: "700",
+    fontSize: FONT_SIZES.xs,
+  },
   packageTitle: {
     fontSize: 20,
     fontWeight: "800",
@@ -121,7 +143,7 @@ export const packageStyles = {
     fontSize: FONT_SIZES.sm,
   },
   packageAgency: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontWeight: "600",
     fontSize: FONT_SIZES.sm,
   },
@@ -191,7 +213,7 @@ export const packageStyles = {
     fontSize: 24,
   },
   packageButtonClean: {
-    backgroundColor: "#111827",
+    backgroundColor: "#0E7490",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -199,6 +221,11 @@ export const packageStyles = {
     paddingVertical: 12,
     borderRadius: 14,
     gap: 8,
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
   },
   packageButtonCleanText: {
     color: COLORS.white,
@@ -232,13 +259,13 @@ export const packageStyles = {
   
   // Filtering & Empty Agency States
   clearFilterBtn: {
-    backgroundColor: "rgba(91, 60, 240, 0.08)",
+    backgroundColor: "rgba(14, 116, 144, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
   },
   clearFilterText: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontWeight: "700",
     fontSize: FONT_SIZES.sm,
   },
@@ -279,7 +306,7 @@ export const packageStyles = {
     paddingHorizontal: 10,
   },
   restoreButton: {
-    backgroundColor: "#0F172A",
+    backgroundColor: "#FB923C",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 14,

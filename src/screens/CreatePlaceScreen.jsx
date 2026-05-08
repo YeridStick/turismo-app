@@ -16,7 +16,7 @@ import api from "../services/api";
 import { COLORS, FONT_SIZES, SPACING, PLACE_SERVICES } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
-const ACCENT = "#5B3CF0";
+const ACCENT = "#0E7490";
 const MAX_GEOCODE_LIMIT = 100;
 const COOLDOWN_MS = 3000;
 const FALLBACK_CENTER = { latitude: 2.9386, longitude: -75.2811 };

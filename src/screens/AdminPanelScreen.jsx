@@ -16,7 +16,7 @@ import { getAgencies, createAgency, updateAgency, deleteAgency, getAgencyUsers, 
 import api from '../services/api';
 import { PremiumModal } from '../components/ui/PremiumModal';
 
-const ACCENT = "#5B3CF0";
+const ACCENT = "#0E7490";
 const COLORS = {
     bg: "#FFFFFF",
     text: "#0F172A",
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: "600",
         color: ACCENT,
-        backgroundColor: "rgba(91, 60, 240, 0.1)",
+        backgroundColor: "rgba(14, 116, 144, 0.1)",
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 20,
@@ -480,12 +480,12 @@ const styles = StyleSheet.create({
     emptyContainer: { alignItems: "center", paddingVertical: 60 },
     emptyText: { marginTop: 10, color: "#94A3B8" },
     repSection: {
-        backgroundColor: "rgba(91,60,240,0.04)",
+        backgroundColor: "rgba(14,116,144,0.08)",
         borderRadius: 20,
         padding: 16,
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: "rgba(91,60,240,0.12)",
+        borderColor: "rgba(14,116,144,0.2)",
     },
     repSectionHeader: {
         flexDirection: "row",

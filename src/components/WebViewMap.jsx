@@ -221,8 +221,8 @@ const WebViewMap = ({
                             if (show) {
                                 window.circleLayer = L.circle([lat, lng], {
                                     radius: radius,
-                                    color: '#007AFF',
-                                    fillColor: '#007AFF',
+                                    color: '#0E7490',
+                                    fillColor: '#0E7490',
                                     fillOpacity: 0.1,
                                     weight: 2,
                                     opacity: 0.5
@@ -444,7 +444,7 @@ const WebViewMap = ({
                 startInLoadingState={true}
                 renderLoading={() => (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#007AFF" />
+                        <ActivityIndicator size="large" color="#0E7490" />
                         <Text style={styles.loadingText}>Cargando mapa OpenStreetMap...</Text>
                     </View>
                 )}

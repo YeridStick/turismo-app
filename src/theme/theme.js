@@ -1,18 +1,18 @@
 export const theme = {
     colors: {
         // Primary brand colors
-        primary: '#6366f1', // Indigo 500
-        primaryLight: '#818cf8',
-        primaryDark: '#4f46e5',
+        primary: '#0EA5A4',
+        primaryLight: '#2DD4BF',
+        primaryDark: '#0F766E',
 
         // Secondary brand colors
-        secondary: '#ec4899', // Pink 500
-        secondaryLight: '#f472b6',
+        secondary: '#FB923C',
+        secondaryLight: '#FDBA74',
 
         // Backgrounds
-        background: '#f8fafc', // Slate 50
+        background: '#f7fcfe',
         surface: '#ffffff',
-        surfaceDarker: '#f1f5f9',
+        surfaceDarker: '#ecfeff',
 
         // Text
         text: '#0f172a', // Slate 900
@@ -26,11 +26,11 @@ export const theme = {
         info: '#3b82f6',
 
         // UI elements
-        border: '#e2e8f0', // Slate 200
+        border: '#d9eaf0',
         divider: '#f1f5f9', // Slate 100
 
         // Gradients
-        gradientPrimary: ['#6366f1', '#a855f7', '#ec4899'], // Indigo to Purple to Pink
+        gradientPrimary: ['#0EA5A4', '#14B8A6', '#FB923C'],
         gradientOverlay: ['transparent', 'rgba(0,0,0,0.8)'],
     },
 
@@ -96,7 +96,7 @@ export const theme = {
             elevation: 8,
         },
         primary: {
-            shadowColor: '#6366f1',
+            shadowColor: '#0EA5A4',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,

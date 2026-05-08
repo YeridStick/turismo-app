@@ -191,7 +191,7 @@ const MapScreen = ({ route }) => {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#007AFF" />
+                <ActivityIndicator size="large" color="#0E7490" />
                 <Text style={styles.loadingText}>Cargando mapa...</Text>
             </View>
         );
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
     },
     retryButton: {
-        backgroundColor: '#007AFF',
+        backgroundColor: '#0E7490',
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 8,
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f0f0f0',
     },
     filterButtonActive: {
-        backgroundColor: '#007AFF',
+        backgroundColor: '#0E7490',
     },
     filterButtonText: {
         fontSize: 14,

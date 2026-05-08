@@ -87,7 +87,7 @@ const NativeMap = ({
                 onMapReady={handleMapReady}
                 onRegionChangeComplete={setRegion}
                 loadingEnabled={true}
-                loadingIndicatorColor="#007AFF"
+                loadingIndicatorColor="#0E7490"
                 loadingBackgroundColor="#E5E3DF"
                 moveOnMarkerPress={false}
             >
@@ -134,7 +134,7 @@ const NativeMap = ({
             {/* Indicador de carga */}
             {!mapReady && (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#007AFF" />
+                    <ActivityIndicator size="large" color="#0E7490" />
                     <Text style={styles.loadingText}>Cargando mapa...</Text>
                 </View>
             )}

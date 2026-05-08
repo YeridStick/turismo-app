@@ -79,7 +79,7 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
         <View style={styles.loadingOverlay}>
             <View style={styles.loadingCard}>
                 <Animated.View style={[styles.loadingIconContainer, { transform: [{ scale: pulse }] }]}>
-                    <Ionicons name="globe-outline" size={48} color="#5B3CF0" />
+                    <Ionicons name="globe-outline" size={48} color="#14B8A6" />
                 </Animated.View>
                 <Text style={styles.loadingTitle}>Realidad Aumentada</Text>
                 <Text style={styles.loadingLabel}>{label}</Text>
@@ -403,24 +403,24 @@ const styles = StyleSheet.create({
         zIndex: 20,
     },
     loadingCard: {
-        backgroundColor: 'rgba(91, 60, 240, 0.15)',
+        backgroundColor: 'rgba(20, 184, 166, 0.2)',
         borderRadius: 28,
         padding: 36,
         alignItems: 'center',
         width: '78%',
         borderWidth: 1,
-        borderColor: 'rgba(91, 60, 240, 0.35)',
+        borderColor: 'rgba(20, 184, 166, 0.35)',
     },
     loadingIconContainer: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(91, 60, 240, 0.1)',
+        backgroundColor: 'rgba(251, 146, 60, 0.14)',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: 'rgba(91, 60, 240, 0.2)',
+        borderColor: 'rgba(251, 146, 60, 0.3)',
     },
     loadingIcon: {
         fontSize: 52,
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     loadingLabel: {
-        color: '#9B8CFF',
+        color: '#A7F3D0',
         fontSize: 14,
         marginBottom: 24,
         textAlign: 'center',
@@ -448,11 +448,11 @@ const styles = StyleSheet.create({
     },
     progressBar: {
         height: '100%',
-        backgroundColor: '#7B6CF0',
+        backgroundColor: '#FB923C',
         borderRadius: 3,
     },
     progressPercent: {
-        color: '#7B6CF0',
+        color: '#FDBA74',
         fontSize: 13,
         fontWeight: '600',
         marginTop: 10,
@@ -618,17 +618,17 @@ const styles = StyleSheet.create({
     },
     controlBtn: {
         flex: 1,
-        backgroundColor: 'rgba(91, 60, 240, 0.25)',
+        backgroundColor: 'rgba(20, 184, 166, 0.22)',
         borderRadius: 14,
         paddingVertical: 12,
         alignItems: 'center',
         gap: 5,
         borderWidth: 1,
-        borderColor: 'rgba(91,60,240,0.3)',
+        borderColor: 'rgba(20, 184, 166, 0.35)',
     },
     controlBtnPrimary: {
-        backgroundColor: '#5B3CF0',
-        borderColor: '#7B6CF0',
+        backgroundColor: '#FB923C',
+        borderColor: '#FDBA74',
     },
     controlBtnWide: {
         flex: 1,

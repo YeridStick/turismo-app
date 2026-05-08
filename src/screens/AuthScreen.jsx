@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,7 +17,7 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
-import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
+import { FONT_SIZES, SPACING } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
 const TabButton = ({ active, label, onPress }) => (
@@ -117,6 +118,7 @@ const AuthScreen = () => {
     setPassword("");
     setStatusMessage("");
     setLoginMethod("password");
+    setDocTypeOpen(false);
     setShowRecovery(false);
     setRecoveryStep("request");
     setRecoveryEmail("");
@@ -609,9 +611,9 @@ const AuthScreen = () => {
         </View>
       ) : null}
       <View style={styles.inputRow}>
-        <View style={[styles.inputHalf, { zIndex: 2 }]}>
+        <View style={styles.inputHalf}>
           <TouchableOpacity
-            style={styles.selectInput}
+            style={[styles.selectInput, docTypeOpen && styles.selectInputActive]}
             onPress={() => setDocTypeOpen((prev) => !prev)}
             activeOpacity={0.9}
           >
@@ -630,31 +632,9 @@ const AuthScreen = () => {
             <FontAwesome
               name={docTypeOpen ? "chevron-up" : "chevron-down"}
               size={12}
-              color="#5B3CF0"
+              color={docTypeOpen ? "#EA580C" : "#0E7490"}
             />
           </TouchableOpacity>
-          {docTypeOpen ? (
-            <View style={styles.dropdown}>
-              <ScrollView
-                style={styles.dropdownScroll}
-                contentContainerStyle={styles.dropdownContent}
-                nestedScrollEnabled={true}
-              >
-                {docTypeOptions.map((opt) => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setIdentificationType(opt.value);
-                      setDocTypeOpen(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownItemText}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
         </View>
         <TextInput
           style={[styles.input, styles.inputHalf]}
@@ -843,7 +823,7 @@ const AuthScreen = () => {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#5B3CF0" />
+              <ActivityIndicator color="#0E7490" />
             ) : (
               <Text style={styles.secondaryText}>Reintentar validación</Text>
             )}
@@ -858,7 +838,7 @@ const AuthScreen = () => {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#5B3CF0" />
+            <ActivityIndicator color="#0E7490" />
           ) : (
             <Text style={styles.secondaryText}>Solicitar recuperación</Text>
           )}
@@ -941,14 +921,34 @@ const AuthScreen = () => {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#f5f7fb" }}
+      style={{ flex: 1, backgroundColor: "#F7FCFE" }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <LinearGradient colors={["#1a0a3d", "#2d1b6e"]} style={styles.header}>
+      <LinearGradient colors={["#0A3B52", "#0E7490"]} style={styles.header}>
         <View style={styles.headerRow}>
+          <View style={styles.headerTitleBlock}>
+            <Text style={styles.headerKicker}>TurApp</Text>
+            <Text style={styles.headerHeroTitle}>
+              {showRecovery
+                ? "Recupera tu acceso"
+                : activeTab === "login"
+                  ? "Ingresa a tu viaje"
+                  : "Crea tu perfil viajero"}
+            </Text>
+          </View>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
+        </View>
+        <View style={styles.headerChips}>
+          <View style={styles.headerChip}>
+            <FontAwesome name="map-marker" size={12} color="#FDBA74" />
+            <Text style={styles.headerChipText}>Destinos</Text>
+          </View>
+          <View style={styles.headerChip}>
+            <FontAwesome name="camera" size={12} color="#A7F3D0" />
+            <Text style={styles.headerChipText}>Experiencias</Text>
+          </View>
         </View>
         {showRecovery ? null : renderTabs()}
       </LinearGradient>
@@ -975,25 +975,111 @@ const AuthScreen = () => {
         }
         onClose={() => setModal((prev) => ({ ...prev, visible: false }))}
       />
+      <Modal
+        visible={docTypeOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDocTypeOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.selectorBackdrop}
+          activeOpacity={1}
+          onPress={() => setDocTypeOpen(false)}
+        >
+          <View style={styles.selectorSheet}>
+            <Text style={styles.selectorTitle}>Tipo de documento</Text>
+            <ScrollView
+              style={styles.selectorScroll}
+              contentContainerStyle={styles.selectorContent}
+              nestedScrollEnabled
+            >
+              {docTypeOptions.map((opt) => {
+                const active = identificationType === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.selectorOption,
+                      active && styles.selectorOptionActive,
+                    ]}
+                    onPress={() => {
+                      setIdentificationType(opt.value);
+                      setDocTypeOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.selectorOptionText,
+                        active && styles.selectorOptionTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  // ─── ESTRUCTURA ──────────────────────────────────────────────────────────
+  //
   header: {
     paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    paddingBottom: SPACING.lg,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-    backgroundColor: "#1a0a3d",
+    backgroundColor: "#0A3B52",
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: SPACING.sm,
+  },
+  headerTitleBlock: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  headerKicker: {
+    color: "#CCFBF1",
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  headerHeroTitle: {
+    color: "#FFFFFF",
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+  headerChips: {
+    flexDirection: "row",
+    gap: 8,
     marginBottom: SPACING.md,
+  },
+  headerChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  headerChipText: {
+    color: "#ECFEFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
   headerTitleRow: {
     flexDirection: "row",
@@ -1002,28 +1088,31 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontWeight: "800",
-    color: "#1a0a3d",
+    color: "#0A3B52",
     fontSize: FONT_SIZES.lg,
     letterSpacing: -0.3,
   },
   closeText: {
     fontSize: 18,
-    color: "#5B3CF0",
-    fontWeight: "300",
-    padding: 4,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
   },
   body: {
     padding: SPACING.lg,
     paddingBottom: 48,
     gap: SPACING.md,
-    backgroundColor: "#f5f3ff",
+    backgroundColor: "#F7FCFE",
     minHeight: "100%",
   },
-
-  // ─── TABS ────────────────────────────────────────────────────────────────
+  //
   tabs: {
     flexDirection: "row",
-    backgroundColor: "rgba(91, 60, 240, 0.1)",
+    backgroundColor: "rgba(255,255,255,0.15)",
     borderRadius: 18,
     padding: 5,
     gap: 4,
@@ -1036,25 +1125,19 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   tabButtonActive: {
-    backgroundColor: "#5B3CF0",
-    shadowColor: "#5B3CF0",
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    backgroundColor: "#FB923C",
   },
   tabButtonText: {
-    color: "#7c6aad", // ← morado visible (no blanco)
+    color: "#ECFEFF",
     fontWeight: "600",
     fontSize: 14,
   },
   tabButtonTextActive: {
-    color: "#ffffff", // blanco sobre el tab activo morado
+    color: "#FFFFFF",
     fontWeight: "800",
     fontSize: 14,
   },
-
-  // ─── TOGGLE LOGIN METHOD ─────────────────────────────────────────────────
+  //
   toggleRow: {
     flexDirection: "row",
     gap: SPACING.md,
@@ -1065,21 +1148,21 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
     alignItems: "center",
     backgroundColor: "#fff",
   },
   toggleButtonActive: {
-    backgroundColor: "#5B3CF0",
-    borderColor: "#5B3CF0",
-    shadowColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
+    borderColor: "#0E7490",
+    shadowColor: "#0E7490",
     shadowOpacity: 0.28,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 5,
   },
   toggleText: {
-    color: "#7c6aad",
+    color: "#0F766E",
     fontWeight: "600",
     fontSize: 14,
   },
@@ -1088,32 +1171,30 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 14,
   },
-
-  // ─── CARD ────────────────────────────────────────────────────────────────
+  //
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
     padding: SPACING.xl,
     gap: SPACING.md,
     borderWidth: 1,
-    borderColor: "#ede9fe",
-    shadowColor: "#4a2fb0",
+    borderColor: "#CCFBF1",
+    shadowColor: "#0E7490",
     shadowOpacity: 0.08,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-
-  // ─── TIPOGRAFÍA ──────────────────────────────────────────────────────────
+  //
   subtitle: {
-    color: "#6b5b95",
+    color: "#0F766E",
     fontSize: FONT_SIZES.md,
     lineHeight: 20,
     marginBottom: SPACING.sm,
     fontWeight: "500",
   },
   stepLabel: {
-    color: "#a78bfa",
+    color: "#14B8A6",
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 1.5,
@@ -1122,34 +1203,33 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: FONT_SIZES.lg + 2,
     fontWeight: "800",
-    color: "#1a0a3d",
+    color: "#0A3B52",
     letterSpacing: -0.4,
   },
   infoText: {
-    color: "#7c6aad",
+    color: "#0F766E",
     fontSize: FONT_SIZES.md,
     lineHeight: 20,
     marginBottom: SPACING.xs,
   },
   statusText: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontWeight: "700",
     fontSize: 13,
     marginBottom: SPACING.sm,
   },
-
-  // ─── INPUTS ──────────────────────────────────────────────────────────────
+  //
   input: {
-    backgroundColor: "#faf9ff",
+    backgroundColor: "#F8FFFE",
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     fontSize: FONT_SIZES.md,
-    color: "#1a0a3d",
-    shadowColor: "#4a2fb0",
+    color: "#0A3B52",
+    shadowColor: "#0E7490",
     shadowOpacity: 0.04,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -1158,12 +1238,12 @@ const styles = StyleSheet.create({
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#faf9ff",
+    backgroundColor: "#F8FFFE",
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
-    marginBottom: SPACING.md,
-    shadowColor: "#4a2fb0",
+    borderColor: "#99F6E4",
+    marginBottom: SPACING.sm,
+    shadowColor: "#0E7490",
     shadowOpacity: 0.04,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -1174,7 +1254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     fontSize: FONT_SIZES.md,
-    color: "#1a0a3d",
+    color: "#0A3B52",
   },
   eyeIcon: {
     padding: 16,
@@ -1187,10 +1267,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectInput: {
-    backgroundColor: "#faf9ff",
+    backgroundColor: "#F0FDFA",
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     marginBottom: SPACING.sm,
@@ -1199,13 +1279,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  selectInputActive: {
+    borderColor: "#FB923C",
+    backgroundColor: "#FFF7ED",
+  },
   selectText: {
-    color: "#1a0a3d",
+    color: "#0A3B52",
     fontSize: FONT_SIZES.md,
     flex: 1,
   },
   selectPlaceholder: {
-    color: "#b0a0d6",
+    color: "#64748B",
     fontSize: FONT_SIZES.md,
     flex: 1,
   },
@@ -1217,10 +1301,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
     maxHeight: 200,
     zIndex: 1000,
-    shadowColor: "#4a2fb0",
+    shadowColor: "#0E7490",
     shadowOpacity: 0.1,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -1233,19 +1317,70 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
   },
   dropdownItemText: {
-    color: "#2d1b6e",
+    color: "#0E7490",
     fontSize: FONT_SIZES.md,
     fontWeight: "500",
   },
-
-  // ─── BOTONES ─────────────────────────────────────────────────────────────
+  selectorBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2, 6, 23, 0.35)",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.lg,
+  },
+  selectorSheet: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#D9EAF0",
+    maxHeight: "65%",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  selectorTitle: {
+    color: "#0A3B52",
+    fontWeight: "800",
+    fontSize: FONT_SIZES.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  selectorScroll: {
+    maxHeight: 300,
+  },
+  selectorContent: {
+    paddingHorizontal: SPACING.sm,
+    paddingBottom: SPACING.md,
+  },
+  selectorOption: {
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    marginTop: 4,
+  },
+  selectorOptionActive: {
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+  },
+  selectorOptionText: {
+    color: "#0F172A",
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+  },
+  selectorOptionTextActive: {
+    color: "#0E7490",
+  },
+  //
   primaryButton: {
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
     borderRadius: 18,
     paddingVertical: SPACING.lg,
     alignItems: "center",
     marginTop: SPACING.md,
-    shadowColor: "#5B3CF0",
+    shadowColor: "#0E7490",
     shadowOpacity: 0.35,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 5 },
@@ -1258,16 +1393,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   secondaryButton: {
-    backgroundColor: "#f3f0ff",
+    backgroundColor: "#ECFEFF",
     borderRadius: 18,
     paddingVertical: SPACING.lg,
     alignItems: "center",
     marginTop: SPACING.md,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
   },
   secondaryText: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontWeight: "700",
     fontSize: FONT_SIZES.md,
   },
@@ -1277,27 +1412,26 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   linkText: {
-    color: "#7c5cf6",
+    color: "#0F766E",
     fontWeight: "600",
     fontSize: 14,
   },
-
-  // ─── QR / TOTP ────────────────────────────────────────────────────────────
+  //
   qrImage: {
     width: "100%",
     height: 220,
     borderRadius: 16,
-    backgroundColor: "#faf9ff",
+    backgroundColor: "#F8FFFE",
   },
   manualBox: {
-    backgroundColor: "#f3f0ff",
+    backgroundColor: "#ECFEFF",
     borderRadius: 14,
     padding: SPACING.md,
     borderWidth: 1.5,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
   },
   manualLabel: {
-    color: "#9b8ec4",
+    color: "#9A3412",
     fontSize: 11,
     fontWeight: "700",
     marginBottom: 6,
@@ -1307,36 +1441,34 @@ const styles = StyleSheet.create({
   manualCode: {
     fontWeight: "800",
     letterSpacing: 2,
-    color: "#2d1b6e",
+    color: "#0E7490",
     fontSize: 15,
   },
-
-  // ─── SUCCESS / INFO BOXES ─────────────────────────────────────────────────
+  //
   successIcon: {
     fontSize: 36,
     textAlign: "center",
     marginBottom: 4,
   },
   successBox: {
-    backgroundColor: "#f3f0ff",
+    backgroundColor: "#ECFEFF",
     borderRadius: 16,
     padding: SPACING.md,
     gap: SPACING.xs,
     borderWidth: 1,
-    borderColor: "#ddd6fe",
+    borderColor: "#99F6E4",
   },
   successTitle: {
-    color: "#1a0a3d",
+    color: "#0A3B52",
     fontWeight: "800",
     fontSize: FONT_SIZES.md,
   },
   successMessage: {
-    color: "#7c6aad",
+    color: "#0F766E",
     fontSize: 14,
     lineHeight: 20,
   },
-
-  // ─── NOTIFICACIONES ───────────────────────────────────────────────────────
+  //
   topNotification: {
     position: "absolute",
     top: Platform.OS === "ios" ? 50 : 10,
@@ -1356,7 +1488,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   notifError: { backgroundColor: "#ef4444" },
-  notifSuccess: { backgroundColor: "#5B3CF0" },
+  notifSuccess: { backgroundColor: "#0E7490" },
   notifIcon: {
     width: 24,
     height: 24,
@@ -1371,14 +1503,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flex: 1,
   },
-
-  // ─── MISC ─────────────────────────────────────────────────────────────────
+  //
   headerRow2: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  quickHint: { color: "#9b8ec4", fontSize: 13 },
+  quickHint: { color: "#9A3412", fontSize: 13 },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
@@ -1387,3 +1518,4 @@ const styles = StyleSheet.create({
 });
 
 export default AuthScreen;
+

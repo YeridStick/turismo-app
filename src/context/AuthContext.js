@@ -16,6 +16,19 @@ import {
 
 export const AuthContext = createContext();
 
+const extractApiErrorMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data?.message === 'string' && data.message.trim()) return data.message.trim();
+  if (typeof data?.error === 'string' && data.error.trim()) return data.error.trim();
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const first = data.errors[0];
+    if (typeof first === 'string' && first.trim()) return first.trim();
+    if (typeof first?.message === 'string' && first.message.trim()) return first.message.trim();
+  }
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim();
+  return fallback;
+};
+
 const decodeJwtPayload = (token) => {
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
@@ -27,10 +40,10 @@ const decodeJwtPayload = (token) => {
     if (typeof atob === 'function') {
       return JSON.parse(atob(padded));
     }
-    if (typeof Buffer !== 'undefined') {
-      return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+    if (typeof globalThis !== 'undefined' && globalThis.Buffer) {
+      return JSON.parse(globalThis.Buffer.from(padded, 'base64').toString('utf8'));
     }
-  } catch (err) {
+  } catch (_err) {
     return null;
   }
   return null;
@@ -112,9 +125,13 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: true };
     } catch (error) {
+      const status = error?.response?.status;
+      const fallback = status === 401 || status === 403
+        ? 'Usuario o código TOTP incorrecto.'
+        : 'Error al iniciar sesión con TOTP';
       return {
         success: false,
-        error: error.response?.data?.message || 'Error al iniciar sesión con TOTP',
+        error: extractApiErrorMessage(error, fallback),
       };
     }
   };
@@ -137,9 +154,13 @@ export const AuthProvider = ({ children }) => {
       }
       return { success: true };
     } catch (error) {
+      const status = error?.response?.status;
+      const fallback = status === 401 || status === 403
+        ? 'Usuario o contraseña incorrectos.'
+        : 'Error al iniciar sesión con contraseña';
       return {
         success: false,
-        error: error.response?.data?.message || 'Error al iniciar sesión con contraseña',
+        error: extractApiErrorMessage(error, fallback),
       };
     }
   };
@@ -160,7 +181,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // GET /api/auth/email/verify?token=...
       const response = await api.get(ENDPOINTS.EMAIL_VERIFY, { params: { token } });
-      const userData = await fetchUserInfo(user?.email); // Refrescar info si hay éxito
+      const userData = await fetchUserInfo(user?.email); // Refrescar info si hay Ã©xito
       if (userData) {
         await AsyncStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
@@ -169,7 +190,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Token inválido o expirado',
+        error: error.response?.data?.message || 'Token invÃ¡lido o expirado',
       };
     }
   };
@@ -182,13 +203,13 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Error al registrarse',
+        error: extractApiErrorMessage(error, 'Error al registrarse'),
       };
     }
   };
 
   const logout = async () => {
-    // 1. Limpiar estado local inmediatamente para respuesta instantánea
+    // 1. Limpiar estado local inmediatamente para respuesta instantÃ¡nea
     setUser(null);
     setRoles([]);
     
@@ -214,7 +235,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'No se pudo confirmar la recuperación',
+        error: error.response?.data?.message || 'No se pudo confirmar la recuperaciÃ³n',
       };
     }
   };

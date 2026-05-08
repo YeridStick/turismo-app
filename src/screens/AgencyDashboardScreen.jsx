@@ -22,7 +22,7 @@ import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { RefreshControl } from "react-native";
 
 const { width } = Dimensions.get("window");
-const ACCENT = "#5B3CF0";
+const ACCENT = "#0E7490";
 
 // --- Sub-componente: Modal de Creación de Agencia ---
 const CreateAgencyModal = ({ visible, onClose, onSuccess }) => {
@@ -274,7 +274,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                 <Text style={styles.sectionHeader}>Impacto de {activeAgency.name}</Text>
                                 
                                 <LinearGradient 
-                                    colors={[ACCENT, "#7B5BFF"]} 
+                                    colors={[ACCENT, "#14B8A6"]} 
                                     start={{ x: 0, y: 0 }} 
                                     end={{ x: 1, y: 1 }} 
                                     style={styles.heroCard}
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
         borderColor: "transparent",
     },
     activeAgencyTab: {
-        backgroundColor: "rgba(91, 60, 240, 0.08)",
+        backgroundColor: "rgba(14, 116, 144, 0.1)",
         borderColor: ACCENT,
     },
     tabLogo: {
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: "600",
         color: ACCENT,
-        backgroundColor: "rgba(91, 60, 240, 0.1)",
+        backgroundColor: "rgba(14, 116, 144, 0.1)",
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 20,
@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
     addPackageBtn: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "rgba(91, 60, 240, 0.1)",
+        backgroundColor: "rgba(14, 116, 144, 0.1)",
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 12,
@@ -785,7 +785,7 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 12,
-        backgroundColor: "rgba(91, 60, 240, 0.05)",
+        backgroundColor: "rgba(14, 116, 144, 0.08)",
         alignItems: "center",
         justifyContent: "center",
         marginRight: 12,

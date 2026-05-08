@@ -1,5 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -72,6 +73,25 @@ const LoginScreen = () => {
       style={styles.container}
     >
       <View style={styles.content}>
+        <LinearGradient
+          colors={['#0B4A5F', '#0E7490']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroCard}
+        >
+          <Text style={styles.heroKicker}>TurApp</Text>
+          <Text style={styles.heroTitle}>Tu proximo destino empieza aqui</Text>
+          <View style={styles.heroTags}>
+            <View style={styles.heroTag}>
+              <FontAwesome name="map-marker" size={11} color="#FDBA74" />
+              <Text style={styles.heroTagText}>Rutas</Text>
+            </View>
+            <View style={styles.heroTag}>
+              <FontAwesome name="camera" size={11} color="#A7F3D0" />
+              <Text style={styles.heroTagText}>Postales</Text>
+            </View>
+          </View>
+        </LinearGradient>
         <Text style={styles.title}>Bienvenido</Text>
         <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
 
@@ -184,6 +204,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: SPACING.lg,
   },
+  heroCard: {
+    borderRadius: 18,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  heroKicker: {
+    color: '#CCFBF1',
+    textTransform: 'uppercase',
+    fontSize: FONT_SIZES.xs,
+    letterSpacing: 1.1,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  heroTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '800',
+    lineHeight: 24,
+    marginBottom: SPACING.sm,
+  },
+  heroTags: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  heroTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.26)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  heroTagText: {
+    color: '#ECFEFF',
+    fontWeight: '700',
+    fontSize: FONT_SIZES.xs,
+  },
   title: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: 'bold',
@@ -224,7 +285,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   button: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.accent,
     padding: SPACING.md,
     borderRadius: 8,
     alignItems: 'center',
@@ -245,8 +306,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
   toggleButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.secondary,
   },
   toggleText: {
     color: COLORS.textLight,
@@ -275,3 +336,4 @@ const styles = StyleSheet.create({
 });
 
 export default LoginScreen;
+

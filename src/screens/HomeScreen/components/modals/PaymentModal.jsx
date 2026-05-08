@@ -6,12 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
-import { COLORS } from "../../../../utils/constants";
 import styles from "../../styles";
 
 const PaymentModal = ({
@@ -33,14 +30,14 @@ const PaymentModal = ({
       <View style={styles.modalBackdrop}>
         <View style={styles.paymentCard}>
           <LinearGradient
-            colors={["#f4f0ff", "#fdf4ff"]}
+            colors={["#ECFEFF", "#FFF7ED"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.paymentHeader}
           >
             <View style={styles.paymentHeaderLeft}>
               <View style={styles.paymentIcon}>
-                <FontAwesome name="credit-card" size={14} color="#5B3CF0" />
+                <FontAwesome name="credit-card" size={14} color="#0E7490" />
               </View>
               <View>
                 <Text style={styles.paymentTitle}>Pasarela de Pago</Text>
@@ -140,7 +137,7 @@ const PaymentModal = ({
 
             <TouchableOpacity style={styles.paymentConfirm} onPress={onClose}>
               <LinearGradient
-                colors={["#7B5BFF", "#D66DFF"]}
+                colors={["#14B8A6", "#FB923C"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.paymentConfirmGradient}

@@ -15,7 +15,7 @@ export const sectionStyles = {
   },
   sectionTag: {
     alignSelf: "flex-start",
-    color: "#7B5BFF",
+    color: "#14B8A6",
     fontWeight: "bold",
     marginBottom: SPACING.xs,
   },
@@ -26,7 +26,7 @@ export const sectionStyles = {
     marginBottom: SPACING.md,
   },
   sectionLink: {
-    color: "#5B3CF0",
+    color: "#0E7490",
     fontWeight: "600",
   },
   sectionIntro: {
@@ -34,6 +34,15 @@ export const sectionStyles = {
     alignItems: "center",
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
+  },
+  sectionIconBubble: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(251, 146, 60, 0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
   },
   sectionPill: {
     paddingHorizontal: SPACING.md,
@@ -49,8 +58,8 @@ export const sectionStyles = {
   sectionPillSecondary: {
     paddingHorizontal: SPACING.md,
     paddingVertical: 6,
-    backgroundColor: "#EEF2FF",
-    color: "#5B3CF0",
+    backgroundColor: "#E0F7FA",
+    color: "#0E7490",
     fontWeight: "700",
     borderRadius: 999,
     fontSize: FONT_SIZES.xs,
@@ -67,7 +76,7 @@ export const sectionStyles = {
   sectionTitleAccent: {
     width: 4,
     height: 22,
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#FB923C",
     borderRadius: 2,
     marginRight: 12,
   },
@@ -115,9 +124,9 @@ export const sectionStyles = {
     borderColor: "#F1F5F9",
   },
   categoryTabActive: {
-    backgroundColor: "#5B3CF0",
-    borderColor: "#5B3CF0",
-    shadowColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
+    borderColor: "#0E7490",
+    shadowColor: "#0E7490",
     shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -137,7 +146,7 @@ export const sectionStyles = {
     marginTop: 6,
     height: 3,
     width: 28,
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
     borderRadius: 12,
     alignSelf: "center",
   },
@@ -210,7 +219,7 @@ export const sectionStyles = {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: "#E0F7FA",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -226,7 +235,7 @@ export const sectionStyles = {
     lineHeight: 18,
   },
   mapEmptyButton: {
-    backgroundColor: "#5B3CF0",
+    backgroundColor: "#0E7490",
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.md,
     borderRadius: 16,
@@ -252,7 +261,7 @@ export const sectionStyles = {
     borderColor: "rgba(255, 255, 255, 0.5)",
   },
   mapLoadingText: {
-    color: "#5B3CF0",
+    color: "#FB923C",
     fontWeight: "700",
     fontSize: FONT_SIZES.sm,
   },

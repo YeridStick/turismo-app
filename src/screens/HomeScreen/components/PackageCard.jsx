@@ -1,9 +1,8 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ViewStyle } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
-import { COLORS, SPACING, FONT_SIZES } from "../../../utils/constants";
 import { IMAGE_PLACEHOLDER } from "../utils/constants";
 import { formatPrice } from "../utils/helpers";
 import styles from "../styles";
@@ -24,6 +23,10 @@ const PackageCard = ({
   const packageImage = getImage(pkg);
   const hasImage = Boolean(packageImage);
   const fallbackGradient = getGradient(pkg);
+  const vibeTags = [
+    pkg.days >= 3 ? "Ruta extendida" : "Escapada",
+    "Experiencia local",
+  ];
 
   return (
     <View style={[styles.packageCard, { width }]}>
@@ -66,6 +69,17 @@ const PackageCard = ({
       </View>
 
       <View style={styles.packageBody}>
+        <View style={styles.packageVibeRow}>
+          <View style={styles.packageVibeChip}>
+            <FontAwesome name="sun-o" size={10} color="#9A3412" />
+            <Text style={styles.packageVibeText}>{vibeTags[0]}</Text>
+          </View>
+          <View style={styles.packageVibeChip}>
+            <FontAwesome name="leaf" size={10} color="#0F766E" />
+            <Text style={styles.packageVibeText}>{vibeTags[1]}</Text>
+          </View>
+        </View>
+
         <Text style={styles.packageTitle} numberOfLines={2}>
           {pkg.title}
         </Text>

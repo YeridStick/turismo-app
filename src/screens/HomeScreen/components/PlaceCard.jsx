@@ -29,6 +29,7 @@ const PlaceCard = React.memo(
   }) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
+    const compactTag = badge || "Imperdible";
 
     useEffect(() => {
       Animated.timing(fadeAnim, {
@@ -36,7 +37,7 @@ const PlaceCard = React.memo(
         duration: 500,
         useNativeDriver: true,
       }).start();
-    }, []);
+    }, [fadeAnim]);
 
     const handlePressIn = () => {
       Animated.spring(scaleAnim, {
@@ -78,6 +79,10 @@ const PlaceCard = React.memo(
               pointerEvents="none"
             />
             <View style={styles.popularTopRow}>
+              <View style={styles.compactBadge}>
+                <FontAwesome name="camera" size={10} color="#fff" />
+                <Text style={styles.compactBadgeText}>{compactTag}</Text>
+              </View>
               <View style={[styles.cardRating, styles.popularRating]}>
                 <Text style={styles.cardRatingText}>★ {rating || "4.5"}</Text>
               </View>
@@ -136,6 +141,11 @@ const PlaceCard = React.memo(
                 placeholder={IMAGE_PLACEHOLDER}
                 transition={200}
               />
+              <LinearGradient
+                colors={["rgba(14,116,144,0.28)", "rgba(251,146,60,0.16)", "transparent"]}
+                style={styles.cardTopTint}
+                pointerEvents="none"
+              />
               <View style={styles.cardTopRow}>
                 <View style={styles.cardBadge}>
                   <Text style={styles.cardBadgeText}>{badge || "Destino"}</Text>
@@ -156,7 +166,7 @@ const PlaceCard = React.memo(
                   <FontAwesome
                     name="location-arrow"
                     size={FONT_SIZES.sm}
-                    color="#5B3CF0"
+                    color="#0E7490"
                   />
                   <Text style={styles.cardDistance}>{distance}</Text>
                 </View>
@@ -190,5 +200,7 @@ const PlaceCard = React.memo(
     return renderDefault();
   },
 );
+
+PlaceCard.displayName = "PlaceCard";
 
 export default PlaceCard;

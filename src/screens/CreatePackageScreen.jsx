@@ -19,7 +19,7 @@ import api, { getPackageById, updatePackage } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
-const ACCENT = "#5B3CF0";
+const ACCENT = "#0E7490";
 
 const parseList = (value) =>
   value
@@ -622,9 +622,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "rgba(91, 60, 240, 0.06)",
+    backgroundColor: "rgba(14, 116, 144, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(91, 60, 240, 0.2)",
+    borderColor: "rgba(14, 116, 144, 0.22)",
     borderRadius: 14,
     paddingHorizontal: SPACING.md,
     paddingVertical: 14,
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
   },
   modalItemSelected: {
     borderColor: ACCENT,
-    backgroundColor: "rgba(91, 60, 240, 0.03)",
+    backgroundColor: "rgba(14, 116, 144, 0.05)",
   },
   modalItemInfo: {
     flex: 1,

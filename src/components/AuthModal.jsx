@@ -94,6 +94,7 @@ const AuthModal = ({ visible, onClose }) => {
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryStep, setRecoveryStep] = useState('request');
   const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryMessage, setRecoveryMessage] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [recoveryPassword, setRecoveryPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -122,6 +123,7 @@ const AuthModal = ({ visible, onClose }) => {
     setShowRecovery(false);
     setRecoveryStep('request');
     setRecoveryEmail('');
+    setRecoveryMessage('');
     setRecoveryCode('');
     setRecoveryPassword('');
     setConfirmPassword('');
@@ -254,7 +256,7 @@ const AuthModal = ({ visible, onClose }) => {
       try {
         await requestEmailValidation(recoveryEmail.trim());
         setRecoveryMessage('Necesitas verificar tu correo. Revisa tu bandeja y vuelve a intentar.');
-      } catch (e) {
+      } catch (_e) {
         // silencioso
       }
     } finally {
@@ -466,7 +468,7 @@ const AuthModal = ({ visible, onClose }) => {
             <FontAwesome
               name={docTypeOpen ? 'chevron-up' : 'chevron-down'}
               size={12}
-              color="#5B3CF0"
+              color="#0E7490"
             />
           </TouchableOpacity>
           {docTypeOpen ? (
@@ -537,7 +539,7 @@ const AuthModal = ({ visible, onClose }) => {
             onPress={handleCopyManualCode}
             activeOpacity={0.9}
           >
-            <FontAwesome name="copy" size={12} color="#5B3CF0" />
+            <FontAwesome name="copy" size={12} color="#0E7490" />
             <Text style={styles.copyButtonText}>Copiar código</Text>
           </TouchableOpacity>
         </View>
@@ -675,15 +677,25 @@ const AuthModal = ({ visible, onClose }) => {
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
-            <LinearGradient colors={['#eef0ff', '#f8f9fb']} style={styles.header}>
+            <LinearGradient colors={['#0B4A5F', '#0E7490']} style={styles.header}>
               <View style={styles.headerRow}>
                 <View style={styles.headerTitleRow}>
-                  <FontAwesome name="shield" size={18} color="#5B3CF0" />
+                  <FontAwesome name="shield" size={18} color="#CCFBF1" />
                   <Text style={styles.headerTitle}>Seguridad</Text>
                 </View>
                 <TouchableOpacity onPress={() => { resetFlow(); onClose?.(); }}>
                   <Text style={styles.closeText}>✕</Text>
                 </TouchableOpacity>
+              </View>
+              <View style={styles.headerChips}>
+                <View style={styles.headerChip}>
+                  <FontAwesome name="map-marker" size={11} color="#FDBA74" />
+                  <Text style={styles.headerChipText}>Rutas</Text>
+                </View>
+                <View style={styles.headerChip}>
+                  <FontAwesome name="camera" size={11} color="#A7F3D0" />
+                  <Text style={styles.headerChipText}>Momentos</Text>
+                </View>
               </View>
               {showRecovery ? null : renderTabs()}
             </LinearGradient>
@@ -706,7 +718,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     flex: 1,
-    backgroundColor: '#f5f7fb',
+    backgroundColor: '#F7FCFE',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     overflow: 'hidden',
@@ -731,16 +743,42 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#ffffff',
     fontSize: FONT_SIZES.lg,
   },
   closeText: {
     fontSize: 20,
-    color: '#4b5563',
+    color: '#ffffff',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
+  headerChips: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: SPACING.md,
+  },
+  headerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  headerChipText: {
+    color: '#ECFEFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: '#e5e7eb',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     borderRadius: 16,
     padding: 4,
     gap: 4,
@@ -757,11 +795,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   tabButtonText: {
-    color: '#6b7280',
+    color: '#ECFEFF',
     fontWeight: '600',
   },
   tabButtonTextActive: {
-    color: '#5B3CF0',
+    color: '#9A3412',
     fontWeight: '700',
   },
   toggleRow: {
@@ -779,8 +817,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   toggleButtonActive: {
-    backgroundColor: '#5B3CF0',
-    borderColor: '#5B3CF0',
+    backgroundColor: '#0E7490',
+    borderColor: '#0E7490',
   },
   toggleText: {
     color: '#6b7280',
@@ -867,7 +905,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
   },
   statusText: {
-    color: '#5B3CF0',
+    color: '#0E7490',
     fontWeight: '600',
     marginTop: SPACING.xs,
   },
@@ -876,11 +914,11 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   linkText: {
-    color: '#5B3CF0',
+    color: '#0E7490',
     fontWeight: '600',
   },
   primaryButton: {
-    backgroundColor: '#5B3CF0',
+    backgroundColor: '#0E7490',
     borderRadius: 12,
     paddingVertical: SPACING.md,
     alignItems: 'center',
@@ -892,16 +930,16 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
   },
   secondaryButton: {
-    backgroundColor: '#eef2ff',
+    backgroundColor: '#ECFEFF',
     borderRadius: 12,
     paddingVertical: SPACING.md,
     alignItems: 'center',
     marginTop: SPACING.sm,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#D9EAF0',
   },
   secondaryText: {
-    color: '#5B3CF0',
+    color: '#0E7490',
     fontWeight: '700',
   },
   card: {
@@ -917,7 +955,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   stepLabel: {
-    color: '#6366f1',
+    color: '#FB923C',
     fontWeight: '700',
   },
   cardTitle: {
@@ -957,13 +995,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#eef2ff',
+    backgroundColor: '#ECFEFF',
     borderRadius: 10,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
   },
   copyButtonText: {
-    color: '#5B3CF0',
+    color: '#0E7490',
     fontWeight: '700',
   },
   successIcon: {
@@ -971,7 +1009,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   successBox: {
-    backgroundColor: '#eef2ff',
+    backgroundColor: '#ECFEFF',
     borderRadius: 14,
     padding: SPACING.md,
     gap: SPACING.xs,
@@ -1020,3 +1058,4 @@ const styles = StyleSheet.create({
 });
 
 export default AuthModal;
+

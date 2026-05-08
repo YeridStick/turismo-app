@@ -41,7 +41,7 @@ import AnimatedBackground from "../../components/ui/AnimatedBackground";
 import styles from "./styles";
 import { COLORS } from "./utils/constants";
 import { formatPrice, getCategoryLabel, getPackageGradient, getPackageImage } from "./utils/helpers";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, FontAwesome } from "@expo/vector-icons";
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -280,6 +280,9 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.section}>
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
+            <View style={styles.sectionIconBubble}>
+              <FontAwesome name="location-arrow" size={11} color="#FB923C" />
+            </View>
             <Text style={styles.sectionHeroTitle}>Cerca de ti</Text>
           </View>
 
@@ -303,6 +306,13 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.section}>
             <View style={styles.sectionIntro}>
               <View style={styles.sectionTitleAccent} />
+              <View style={styles.sectionIconBubble}>
+                <FontAwesome
+                  name={query.trim() || selectedCategory !== "todos" ? "search" : "compass"}
+                  size={11}
+                  color="#FB923C"
+                />
+              </View>
               <Text style={styles.sectionHeroTitle}>
                 {query.trim() || selectedCategory !== "todos" ? "Resultados de búsqueda" : "Tu próxima aventura"}
               </Text>
@@ -356,6 +366,9 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.section}>
             <View style={styles.sectionIntro}>
               <View style={styles.sectionTitleAccent} />
+              <View style={styles.sectionIconBubble}>
+                <FontAwesome name="building-o" size={11} color="#FB923C" />
+              </View>
               <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
             </View>
 
@@ -378,6 +391,9 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.section}>
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
+            <View style={styles.sectionIconBubble}>
+              <FontAwesome name="suitcase" size={11} color="#FB923C" />
+            </View>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <Text style={[styles.sectionHeroTitle, { marginRight: 10 }]}>
                 {selectedAgencyFilter ? `${selectedAgencyFilter.name}` : "Paquetes turísticos"}

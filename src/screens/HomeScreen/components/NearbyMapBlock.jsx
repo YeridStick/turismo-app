@@ -94,7 +94,7 @@ const NearbyMapBlock = ({
       >
         {loadingNearby ? (
           <View style={styles.mapLoadingOverlay}>
-            <ActivityIndicator size="large" color="#5B3CF0" />
+            <ActivityIndicator size="large" color="#0E7490" />
             <Text style={styles.mapLoadingText}>Buscando...</Text>
           </View>
         ) : filteredNearby.length > 0 ? (
@@ -123,7 +123,7 @@ const NearbyMapBlock = ({
         ) : (
           <View style={styles.mapEmptyCard}>
             <View style={styles.mapEmptyIconContainer}>
-              <FontAwesome name="map-marker" size={24} color="#5B3CF0" />
+              <FontAwesome name="map-marker" size={24} color="#0E7490" />
             </View>
             <View style={{ alignItems: "center" }}>
               <Text style={styles.mapEmptyTitle}>Sin sitios cercanos</Text>

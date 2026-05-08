@@ -163,10 +163,10 @@ export const getPackageImage = (pkg) => {
 
 export const getPackageGradient = (pkg) => {
   const gradients = [
-    ["#0f172a", "#6366f1"],
-    ["#0b3b3c", "#14b8a6"],
-    ["#1f2937", "#f97316"],
-    ["#2b1b4d", "#ec4899"],
+    ["#0B1324", "#0EA5A4"],
+    ["#0C4A58", "#14B8A6"],
+    ["#7C2D12", "#FB923C"],
+    ["#0F172A", "#38BDF8"],
   ];
   const idNum = pkg.id ? (typeof pkg.id === 'number' ? pkg.id : String(pkg.id).length) : 0;
   return gradients[idNum % gradients.length];

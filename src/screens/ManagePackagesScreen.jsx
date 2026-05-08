@@ -17,8 +17,8 @@ import { getPackages, deletePackage, getAgencyPackages } from '../services/api';
 import { useRoute } from '@react-navigation/native';
 
 const COLORS = {
-    primary: '#5B3CF0',
-    accent: '#5B3CF0',
+    primary: '#0E7490',
+    accent: '#0E7490',
     bg: '#FFFFFF',
     text: '#0F172A',
     textLight: '#64748B',
@@ -230,7 +230,7 @@ const ManagePackagesScreen = ({ navigation }) => {
                         onPress={() => navigation.navigate("CreatePackage")}
                     >
                         <LinearGradient
-                            colors={[COLORS.primary, '#7B5BFF']}
+                            colors={[COLORS.primary, '#14B8A6']}
                             style={styles.addBtnGrad}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         color: COLORS.primary,
-        backgroundColor: 'rgba(91, 60, 240, 0.1)',
+        backgroundColor: 'rgba(14, 116, 144, 0.1)',
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 12,
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: 'rgba(91, 60, 240, 0.05)',
+        backgroundColor: 'rgba(14, 116, 144, 0.08)',
         alignItems: 'center',
         justifyContent: 'center',
     },
