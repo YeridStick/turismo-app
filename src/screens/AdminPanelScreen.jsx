@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,6 @@ import {
 import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { getAgencies, createAgency, updateAgency, deleteAgency, getAgencyUsers, addAgencyUser, updateAgencyUser, deleteAgencyUser } from '../services/api';
-import api from '../services/api';
 import { PremiumModal } from '../components/ui/PremiumModal';
 import { useAuth } from '../context/AuthContext';
 
@@ -41,7 +40,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUs
     const [repError, setRepError] = useState('');
     const [statusModal, setStatusModal] = useState({ visible: false, type: 'success', title: '', message: '' });
 
-    const loadUsers = async (agencyId) => {
+    const loadUsers = useCallback(async (agencyId) => {
         try {
             console.log(`[DEBUG] Cargando usuarios para agencia ${agencyId}...`);
             const res = await getAgencyUsers(agencyId);
@@ -80,7 +79,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUs
         } catch (err) {
             console.error("Error loading agency users:", err);
         }
-    };
+    }, [creatorEmail, creatorKey]);
 
     useEffect(() => {
         if (visible) {
@@ -105,7 +104,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUs
             setDeletedRepIds([]);
             setRepError('');
         }
-    }, [initialData, visible, creatorEmail, creatorKey]);
+    }, [initialData, visible, creatorEmail, creatorKey, loadUsers]);
 
     const updateRepEmail = (value, idx) => {
         setRepEmails(prev => prev.map((item, i) => {

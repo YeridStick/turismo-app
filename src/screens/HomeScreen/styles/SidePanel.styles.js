@@ -46,6 +46,9 @@ export default StyleSheet.create({
     shadowOffset: { width: 6, height: 0 },
     elevation: 12,
   },
+  sidePanelScrollContent: {
+    paddingBottom: SPACING.xl,
+  },
   sidePanelHeader: {
     marginBottom: SPACING.md,
     flexDirection: "row",

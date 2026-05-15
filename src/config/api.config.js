@@ -29,12 +29,17 @@ export const ENDPOINTS = {
   PLACES_CREATE: '/api/places',
   PLACES_MINE: '/api/places/mine',
   PLACES_TOP: '/api/pruebas/analytics/places/top',
+  PLACES_TOP_RATED: '/api/pruebas/places/top-rated',
 
   // Feedback / Reviews
   PLACE_RATING: (id) => `/api/pruebas/places/${id}/rating`,
   PLACE_REVIEWS: (id) => `/api/pruebas/places/${id}/reviews`,
   PLACE_FEEDBACK: (id) => `/api/pruebas/places/${id}/feedback`,
   PLACES_NEARBY_CONTEXT: "/api/pruebas/places/nearby/getpalce",
+  PLACE_CHECKIN: (id) => `/api/pruebas/places/${id}/checkin`,
+  VISITS_CREATE: "/api/pruebas/visits",
+  VISIT_CONFIRM: (id) => `/api/pruebas/visits/${id}/confirm`,
+  PLACE_VISITS_CREATE: (id) => `/api/pruebas/places/${id}/visits`,
 
   // Packages / Agencies
   PACKAGES: "/api/packages",

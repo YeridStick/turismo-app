@@ -5,8 +5,8 @@ import React, { useCallback } from "react";
 import {
   ActivityIndicator,
   Animated,
-  FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -27,7 +27,9 @@ const SidePanel = ({
   nearbyDisplayPlace,
   loadingNearbyContext,
   topPlaces,
+  bestRatedPlaces,
   topPlacesError,
+  bestRatedError,
   loadingTopPlaces,
   getCategoryLabel,
   getTopPlaceMeta,
@@ -41,7 +43,7 @@ const SidePanel = ({
       const imageUri =
         item?.imageUrls?.[0] || item?.imageUrl || item?.image || null;
       const title = item?.name || item?.title || "Lugar";
-      const meta = getTopPlaceMeta(item);
+      const meta = item?._displayMeta || getTopPlaceMeta(item);
       const address = item?.address || item?.location || "";
       const description = item?.description || "";
       
@@ -164,11 +166,15 @@ const SidePanel = ({
         ]}
       >
         <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFillObject} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.sidePanelScrollContent}
+        >
         {nearbyContext ? (
           <View style={styles.sidePanelWelcome}>
             <Text style={styles.sidePanelWelcomeTitle}>Bienvenido</Text>
             <Text style={styles.sidePanelWelcomeSubtitle}>
-              Estás cerca de este lugar.
+              EstÃ¡s cerca de este lugar.
             </Text>
           </View>
         ) : null}
@@ -242,13 +248,13 @@ const SidePanel = ({
           </TouchableOpacity>
         ) : (
           <Text style={styles.sidePanelEmpty}>
-            Acércate a un sitio para darte la bienvenida.
+            AcÃ©rcate a un sitio para darte la bienvenida.
           </Text>
         )}
 
         <View style={styles.sidePanelHeader}>
           <View>
-            <Text style={styles.sidePanelTitle}>Más visitados</Text>
+            <Text style={styles.sidePanelTitle}>MÃ¡s visitados</Text>
             <Text style={styles.sidePanelSubtitle}>
               Sitios favoritos cerca de la comunidad
             </Text>
@@ -269,20 +275,65 @@ const SidePanel = ({
           <Text style={styles.sidePanelEmpty}>{topPlacesError}</Text>
         ) : topPlaces.length === 0 ? (
           <Text style={styles.sidePanelEmpty}>
-            Sé el primero en visitar un lugar.
+            SÃ© el primero en visitar un lugar.
           </Text>
         ) : (
-          <FlatList
-            data={topPlaces}
-            keyExtractor={(item, index) => getPlaceKey(item) || `top:${index}`}
-            renderItem={renderTopPlaceItem}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.sidePanelList}
-          />
+          <View style={styles.sidePanelList}>
+            {topPlaces.map((item, index) => (
+              <View key={getPlaceKey(item) || `top:${index}`}>
+                {renderTopPlaceItem({ item })}
+              </View>
+            ))}
+          </View>
         )}
+
+        <View style={styles.sidePanelHeader}>
+          <View>
+            <Text style={styles.sidePanelTitle}>Mejor valorados</Text>
+            <Text style={styles.sidePanelSubtitle}>
+              Sitios con mejor promedio de resenas
+            </Text>
+          </View>
+          {bestRatedPlaces?.length > 0 ? (
+            <View style={styles.sidePanelCountBadge}>
+              <Text style={styles.sidePanelCountText}>{bestRatedPlaces.length}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {loadingTopPlaces ? (
+          <ActivityIndicator
+            color={COLORS.primary}
+            style={styles.sidePanelLoader}
+          />
+        ) : bestRatedError ? (
+          <Text style={styles.sidePanelEmpty}>{bestRatedError}</Text>
+        ) : !bestRatedPlaces || bestRatedPlaces.length === 0 ? (
+          <Text style={styles.sidePanelEmpty}>
+            Aun no hay valoraciones suficientes.
+          </Text>
+        ) : (
+          <View style={styles.sidePanelList}>
+            {bestRatedPlaces
+              .map((item) => {
+                const rating = Number(item?.rating ?? item?.avgRating ?? item?.avg_rating);
+                const reviews = Number(item?.reviews ?? item?.reviewsCount ?? item?.reviews_count);
+                const ratingLabel = Number.isFinite(rating) ? `\u2605 ${rating.toFixed(1)}` : "Sin rating";
+                const reviewsLabel = Number.isFinite(reviews) && reviews > 0 ? ` (${reviews})` : "";
+                return { ...item, _displayMeta: `${ratingLabel}${reviewsLabel}` };
+              })
+              .map((item, index) => (
+                <View key={getPlaceKey(item) || `best:${index}`}>
+                  {renderTopPlaceItem({ item })}
+                </View>
+              ))}
+          </View>
+        )}
+        </ScrollView>
       </Animated.View>
     </View>
   );
 };
 
 export default React.memo(SidePanel);
+

@@ -58,6 +58,7 @@ const HomeScreen = ({ navigation }) => {
     nearby,
     popular,
     topPlaces,
+    bestRatedPlaces,
     packages,
     agencies,
     nearbyContext,
@@ -71,6 +72,7 @@ const HomeScreen = ({ navigation }) => {
     loadingNearbyContext,
     error,
     topPlacesError,
+    bestRatedError,
     packagesError,
     agenciesError,
     allPlacesPage,
@@ -566,13 +568,15 @@ const HomeScreen = ({ navigation }) => {
         loadingNearbyContext={loadingNearbyContext}
         nearbyDisplayPlace={nearbyContext || (nearby.length ? nearby[0] : null)}
         topPlaces={topPlaces}
+        bestRatedPlaces={bestRatedPlaces}
         loadingTopPlaces={loadingTopPlaces}
+        bestRatedError={bestRatedError}
         getCategoryLabel={getCategoryLabel}
         getTopPlaceMeta={getTopPlaceMeta}
-        onSelectTop={(item, index) =>
+        onSelectTop={(item) =>
           navigation.navigate("PlaceDetail", {
-            places: topPlaces,
-            initialIndex: index,
+            places: [item],
+            initialIndex: 0,
           })
         }
         onSelectNearby={(item, index) =>

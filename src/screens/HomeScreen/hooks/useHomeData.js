@@ -15,6 +15,7 @@ const useHomeData = (user) => {
   const [recommended, setRecommended] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [topPlaces, setTopPlaces] = useState([]);
+  const [bestRatedPlaces, setBestRatedPlaces] = useState([]);
   const [packages, setPackages] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [nearbyContext, setNearbyContext] = useState(null);
@@ -30,6 +31,7 @@ const useHomeData = (user) => {
   const [loadingNearbyContext, setLoadingNearbyContext] = useState(false);
   const [error, setError] = useState("");
   const [topPlacesError, setTopPlacesError] = useState("");
+  const [bestRatedError, setBestRatedError] = useState("");
   const [packagesError, setPackagesError] = useState("");
   const [agenciesError, setAgenciesError] = useState("");
 
@@ -165,6 +167,25 @@ const useHomeData = (user) => {
       setTopPlacesError("No se pudo cargar el top de sitios.");
     } finally {
       setLoadingTopPlaces(false);
+    }
+  }, []);
+
+  const loadBestRatedPlaces = useCallback(async () => {
+    setBestRatedError("");
+    try {
+      const response = await api.get(ENDPOINTS.PLACES_TOP_RATED, {
+        params: { limit: 8 },
+      });
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const normalized = data.map((item) => normalizePlace({
+        ...item,
+        rating: item?.avgRating,
+        reviews: item?.reviewsCount,
+      }));
+      setBestRatedPlaces(normalized);
+    } catch (_err) {
+      setBestRatedError("No se pudo cargar los mejor valorados.");
+      setBestRatedPlaces([]);
     }
   }, []);
 
@@ -341,11 +362,12 @@ const useHomeData = (user) => {
       loadPackages(),
       loadAgencies(),
       loadTopPlaces(),
+      loadBestRatedPlaces(),
       loadNearby(),
       loadNearbyContext(),
       loadCategories(),
     ]);
-  }, [loadAll, loadPopular, loadPackages, loadAgencies, loadTopPlaces, loadNearby, loadNearbyContext, loadCategories]);
+  }, [loadAll, loadPopular, loadPackages, loadAgencies, loadTopPlaces, loadBestRatedPlaces, loadNearby, loadNearbyContext, loadCategories]);
 
   // Initial load
   useEffect(() => {
@@ -360,6 +382,7 @@ const useHomeData = (user) => {
     recommended,
     searchResults,
     topPlaces,
+    bestRatedPlaces,
     packages: filteredPackages, // Retornamos la lista ya filtrada dinámicamente
     agencies,
     nearbyContext,
@@ -375,6 +398,7 @@ const useHomeData = (user) => {
     loadingNearbyContext,
     error,
     topPlacesError,
+    bestRatedError,
     packagesError,
     agenciesError,
     locationError,

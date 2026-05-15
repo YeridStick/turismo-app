@@ -1,4 +1,5 @@
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -52,10 +53,21 @@ const CreatePlaceScreen = ({ navigation, route }) => {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [manualMode, setManualMode] = useState(false);
+  const [currentLocationLoading, setCurrentLocationLoading] = useState(false);
+  const [addressParts, setAddressParts] = useState({
+    viaType: "Carrera",
+    viaNumber: "",
+    crossNumber: "",
+    plateNumber: "",
+    extraDetail: "",
+  });
   const [modal, setModal] = useState({ visible: false, type: 'success', title: '', message: '', onConfirm: null });
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+  const updateAddressPart = (key, value) => {
+    setAddressParts((prev) => ({ ...prev, [key]: value }));
   };
 
   useEffect(() => {
@@ -65,7 +77,7 @@ const CreatePlaceScreen = ({ navigation, route }) => {
         const response = await api.get(ENDPOINTS.CATEGORIES);
         const payload = response.data?.data || response.data;
         setCategories(Array.isArray(payload) ? payload : []);
-      } catch (err) {
+      } catch (_err) {
         setCategories([]);
       } finally {
         setCategoriesLoading(false);
@@ -128,8 +140,33 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     return categories.find((item) => String(item.id) === String(form.categoryId));
   }, [categories, form.categoryId]);
 
+  const structuredAddressValue = useMemo(() => {
+    const via = addressParts.viaNumber.trim();
+    const cross = addressParts.crossNumber.trim();
+    const plate = addressParts.plateNumber.trim();
+    const detail = addressParts.extraDetail.trim();
+
+    if (!via || !cross) return "";
+    const base = `${addressParts.viaType} ${via} #${cross}${plate ? `-${plate}` : ""}`;
+    return detail ? `${base}, ${detail}` : base;
+  }, [addressParts]);
+
+  const applyStructuredAddress = () => {
+    if (!structuredAddressValue) {
+      setModal({
+        visible: true,
+        type: "warning",
+        title: "Direccion incompleta",
+        message: "Completa tipo de via, numero y cruce para armar la direccion.",
+      });
+      return;
+    }
+    updateField("address", structuredAddressValue);
+  };
+
   const handleGeocode = async () => {
-    const address = form.address.trim();
+    const fallbackStructured = structuredAddressValue;
+    const address = form.address.trim() || fallbackStructured;
     if (!address) {
       setModal({
         visible: true,
@@ -138,6 +175,9 @@ const CreatePlaceScreen = ({ navigation, route }) => {
         message: 'Por favor, ingresa una dirección para poder geocodificarla.'
       });
       return;
+    }
+    if (!form.address.trim() && fallbackStructured) {
+      updateField("address", fallbackStructured);
     }
     if (geocodeCooldown || geocodeLoading) return;
     setGeocodeLoading(true);
@@ -156,7 +196,7 @@ const CreatePlaceScreen = ({ navigation, route }) => {
           message: 'No logramos encontrar coordenadas para esa dirección. Intenta ser más específico.'
         });
       }
-    } catch (err) {
+    } catch (_err) {
       setModal({
         visible: true,
         type: 'error',
@@ -182,6 +222,61 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     if (!manualMode) return;
     updateField("lat", coords.latitude.toFixed(6));
     updateField("lng", coords.longitude.toFixed(6));
+  };
+
+  const handleUseCurrentLocation = async () => {
+    if (currentLocationLoading) return;
+    setCurrentLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setModal({
+          visible: true,
+          type: "warning",
+          title: "Permiso requerido",
+          message: "Activa el permiso de ubicacion para usar tu posicion actual.",
+        });
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const latitude = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      updateField("lat", latitude.toFixed(6));
+      updateField("lng", longitude.toFixed(6));
+      setGeocodeResults([]);
+
+      try {
+        const reverse = await Location.reverseGeocodeAsync({ latitude, longitude });
+        const first = reverse?.[0];
+        if (first) {
+          const resolvedAddress = [
+            [first.street, first.streetNumber].filter(Boolean).join(" "),
+            first.district,
+            first.city || first.subregion,
+            first.region,
+          ]
+            .filter(Boolean)
+            .join(", ");
+          if (resolvedAddress) {
+            updateField("address", resolvedAddress);
+          }
+        }
+      } catch (_reverseErr) {
+        // Mantener silencioso: lat/lng ya fueron asignadas.
+      }
+    } catch (_err) {
+      setModal({
+        visible: true,
+        type: "error",
+        title: "Ubicacion no disponible",
+        message: "No fue posible obtener tu ubicacion actual. Intenta de nuevo.",
+      });
+    } finally {
+      setCurrentLocationLoading(false);
+    }
   };
 
   const toggleService = (serviceLabel) => {
@@ -266,11 +361,18 @@ const CreatePlaceScreen = ({ navigation, route }) => {
                model3dUrls: "",
                services: [],
              });
+             setAddressParts({
+               viaType: "Carrera",
+               viaNumber: "",
+               crossNumber: "",
+               plateNumber: "",
+               extraDetail: "",
+             });
              setModal(prev => ({ ...prev, visible: false }));
           }
         });
       }
-    } catch (err) {
+    } catch (_err) {
       setModal({
         visible: true,
         type: 'error',
@@ -476,6 +578,67 @@ const CreatePlaceScreen = ({ navigation, route }) => {
           </View>
 
           <Text style={styles.sectionLabel}>Dirección</Text>
+          <Text style={styles.sectionSubLabel}>Direccion estructurada (opcional)</Text>
+          <View style={styles.structuredTypeRow}>
+            {["Calle", "Carrera"].map((type) => {
+              const active = addressParts.viaType === type;
+              return (
+                <TouchableOpacity
+                  key={`via-${type}`}
+                  style={[styles.typeChip, active && styles.typeChipActive]}
+                  onPress={() => updateAddressPart("viaType", type)}
+                >
+                  <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>{type}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <TextInput
+                style={styles.input}
+                value={addressParts.viaNumber}
+                onChangeText={(value) => updateAddressPart("viaNumber", value)}
+                placeholder="Numero via (55A)"
+                placeholderTextColor={COLORS.textLight}
+              />
+            </View>
+            <View style={styles.col}>
+              <TextInput
+                style={styles.input}
+                value={addressParts.crossNumber}
+                onChangeText={(value) => updateAddressPart("crossNumber", value)}
+                placeholder="Cruce (22)"
+                placeholderTextColor={COLORS.textLight}
+              />
+            </View>
+            <View style={styles.col}>
+              <TextInput
+                style={styles.input}
+                value={addressParts.plateNumber}
+                onChangeText={(value) => updateAddressPart("plateNumber", value)}
+                placeholder="Placa (20)"
+                placeholderTextColor={COLORS.textLight}
+              />
+            </View>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={addressParts.extraDetail}
+            onChangeText={(value) => updateAddressPart("extraDetail", value)}
+            placeholder="Barrio o referencia (opcional)"
+            placeholderTextColor={COLORS.textLight}
+          />
+          <View style={styles.structuredActionsRow}>
+            <TouchableOpacity
+              style={styles.secondaryActionButton}
+              onPress={applyStructuredAddress}
+            >
+              <FontAwesome name="magic" size={14} color={ACCENT} />
+              <Text style={styles.secondaryActionText}>Usar direccion estructurada</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.sectionSubLabel}>Direccion completa</Text>
           <View style={styles.geocodeRow}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
@@ -495,6 +658,16 @@ const CreatePlaceScreen = ({ navigation, route }) => {
               <FontAwesome name="search" size={16} color={COLORS.white} />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={[styles.locationButton, currentLocationLoading && styles.buttonDisabled]}
+            onPress={handleUseCurrentLocation}
+            disabled={currentLocationLoading}
+          >
+            <FontAwesome name="location-arrow" size={14} color={COLORS.white} />
+            <Text style={styles.locationButtonText}>
+              {currentLocationLoading ? "Obteniendo ubicacion..." : "Usar mi ubicacion actual"}
+            </Text>
+          </TouchableOpacity>
 
           {geocodeResults.length > 0 && (
             <View style={styles.resultsWrapper}>
@@ -703,6 +876,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  sectionSubLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.textLight,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
   input: {
     backgroundColor: "#F9FAFf",
     borderRadius: 14,
@@ -740,6 +920,67 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 8,
     elevation: 4,
+  },
+  structuredTypeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: SPACING.xs,
+  },
+  typeChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D7DEEA",
+    backgroundColor: "#F8FAFC",
+  },
+  typeChipActive: {
+    borderColor: ACCENT,
+    backgroundColor: "rgba(14, 116, 144, 0.12)",
+  },
+  typeChipText: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  typeChipTextActive: {
+    color: ACCENT,
+  },
+  structuredActionsRow: {
+    marginTop: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  secondaryActionButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(14, 116, 144, 0.25)",
+    backgroundColor: "rgba(14, 116, 144, 0.08)",
+  },
+  secondaryActionText: {
+    color: ACCENT,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  locationButton: {
+    marginTop: SPACING.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: ACCENT,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  locationButtonText: {
+    color: COLORS.white,
+    fontWeight: "700",
+    fontSize: FONT_SIZES.xs,
   },
   buttonDisabled: {
     opacity: 0.6,

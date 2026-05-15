@@ -47,6 +47,7 @@ export const getNearbyPlaces = (lat, lng, dist) =>
 export const getPopularPlaces = () => 
   api.get(ENDPOINTS.PLACES_SEARCH, { params: { limit: 10, sort: 'rating,desc' } });
 export const getTopPlaces = () => api.get(ENDPOINTS.PLACES_TOP);
+export const getTopRatedPlaces = (limit = 8) => api.get(ENDPOINTS.PLACES_TOP_RATED, { params: { limit } });
 export const getPackages = () => api.get(ENDPOINTS.PACKAGES);
 export const createPackage = (data) => api.post(ENDPOINTS.PACKAGES, data);
 export const getPackageById = (id) => api.get(`${ENDPOINTS.PACKAGES}/${id}`);
@@ -68,6 +69,14 @@ export const addAgencyUser = (data) =>
 
 export const getNearbyContext = (lat, lng) => 
   api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, { params: { lat, lng } });
+export const getPlaceReviews = (placeId) => api.get(ENDPOINTS.PLACE_REVIEWS(placeId));
+export const getPlaceRating = (placeId) => api.get(ENDPOINTS.PLACE_RATING(placeId));
+export const createPlaceReview = (placeId, data) => api.post(ENDPOINTS.PLACE_REVIEWS(placeId), data);
+export const createPlaceFeedback = (placeId, data) => api.post(ENDPOINTS.PLACE_FEEDBACK(placeId), data);
+export const createVisit = (data) => api.post(ENDPOINTS.VISITS_CREATE, data);
+export const createPlaceVisit = (placeId, data) => api.post(ENDPOINTS.PLACE_VISITS_CREATE(placeId), data);
+export const checkinPlaceVisit = (placeId, data) => api.post(ENDPOINTS.PLACE_CHECKIN(placeId), data);
+export const confirmVisit = (visitId, data) => api.patch(ENDPOINTS.VISIT_CONFIRM(visitId), data);
 
 export const getMyPlaces = () => api.get(ENDPOINTS.PLACES_MINE);
 export const createPlace = (data) => api.post(ENDPOINTS.PLACES_CREATE, data);

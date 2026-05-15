@@ -14,25 +14,21 @@ import {
   useWindowDimensions,
   FlatList,
   Modal,
+  TextInput,
 } from 'react-native';
-import { Ionicons, FontAwesome, MaterialIcons, Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
 import { getPlaceArConfig } from '../services/ar';
 import { formatDistance } from '../utils/utils';
 import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
+import { useAuth } from '../context/AuthContext';
+import { PremiumModal } from '../components/ui/PremiumModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-const getModelType = (url) => {
-  if (typeof url !== "string") return null;
-  const cleanUrl = url.trim().split("?")[0].toLowerCase();
-  if (cleanUrl.endsWith(".usdz")) return "usdz";
-  if (cleanUrl.endsWith(".glb")) return "glb";
-  if (cleanUrl.endsWith(".gltf")) return "gltf";
-  return null;
-};
 
 const normalizePlace = (place) => {
   if (!place || typeof place !== "object") return place;
@@ -89,6 +85,36 @@ const parseFiniteNumber = (value) => {
 
 const IMAGE_PLACEHOLDER =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
+const VISIT_NEAR_THRESHOLD_METERS = 80;
+
+const getApiData = (response) => response?.data?.data ?? response?.data ?? null;
+const ensureArray = (value) => (Array.isArray(value) ? value : []);
+const getApiMessage = (error, fallback) =>
+  error?.response?.data?.message ||
+  error?.response?.data?.error ||
+  fallback;
+const toNum = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+const pickVisitId = (payload) =>
+  payload?.visitId ??
+  payload?.visit_id ??
+  payload?.id ??
+  payload?.visit?.id ??
+  null;
+const pickAccuracy = (coords) => {
+  const accuracy = Number(coords?.accuracy);
+  return Number.isFinite(accuracy) && accuracy > 0 ? Math.round(accuracy) : 20;
+};
+const getOrCreateDeviceId = async () => {
+  const key = 'turismo_device_id';
+  const existing = await AsyncStorage.getItem(key);
+  if (existing) return existing;
+  const generated = `mobile-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  await AsyncStorage.setItem(key, generated);
+  return generated;
+};
 
 // --- NUEVO COMPONENTE: GALERIA HD ---
 const ImageGalleryModal = ({ visible, images, initialIndex, onClose }) => {
@@ -143,13 +169,51 @@ const ImageGalleryModal = ({ visible, images, initialIndex, onClose }) => {
   );
 };
 
+const ReviewItem = ({ item }) => {
+  const stars = Math.max(1, Math.min(5, Number(item?.rating) || 0));
+  const dateLabel = item?.createdAt
+    ? new Date(item.createdAt).toLocaleDateString("es-CO")
+    : "";
+  return (
+    <View style={styles.reviewItem}>
+      <View style={styles.reviewHead}>
+        <Text style={styles.reviewStars}>{"\u2605".repeat(stars)}</Text>
+        {item?.verified ? (
+          <View style={styles.verifiedPill}>
+            <Ionicons name="checkmark-circle" size={12} color="#0E7490" />
+            <Text style={styles.verifiedPillText}>Visita verificada</Text>
+          </View>
+        ) : null}
+      </View>
+      {item?.comment ? <Text style={styles.reviewComment}>{item.comment}</Text> : null}
+      {dateLabel ? <Text style={styles.reviewDate}>{dateLabel}</Text> : null}
+    </View>
+  );
+};
+
 // Componente para el contenido de un solo sitio
 const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
+  const { user } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [fullPlace, setFullPlace] = useState(null);
   const [galleryVisible, setGalleryVisible] = useState(false);
+  const [ratingSummary, setRatingSummary] = useState({ avgRating: null, reviewsCount: 0 });
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [nearbyDistanceM, setNearbyDistanceM] = useState(null);
+  const [pendingVisitId, setPendingVisitId] = useState(null);
+  const [visitCountdown, setVisitCountdown] = useState(0);
+  const [minStaySeconds, setMinStaySeconds] = useState(180);
+  const [visitConfirmed, setVisitConfirmed] = useState(false);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [reviewForm, setReviewForm] = useState({ rating: "5", comment: "" });
+  const [feedbackForm, setFeedbackForm] = useState({ type: "suggestion", message: "", contactEmail: user?.email || "" });
+  const [statusModal, setStatusModal] = useState({ visible: false, type: "info", title: "", message: "" });
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const imageScrollViewRef = useRef(null);
@@ -236,6 +300,19 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
         longitudeDelta: 0.01,
       }
     : null;
+  const isNearPlace = typeof nearbyDistanceM === "number" && nearbyDistanceM <= VISIT_NEAR_THRESHOLD_METERS;
+  const canCreateReview = !!user && isNearPlace;
+  const canSendFeedback = !!user && isNearPlace && visitConfirmed;
+
+  useEffect(() => {
+    setFeedbackForm((prev) => ({ ...prev, contactEmail: user?.email || prev.contactEmail || "" }));
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (visitCountdown <= 0) return undefined;
+    const timer = setTimeout(() => setVisitCountdown((prev) => Math.max(0, prev - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [visitCountdown]);
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -248,14 +325,252 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     if (index !== activeImageIndex) setActiveImageIndex(index);
   }, [activeImageIndex]);
 
-  const handleNextImage = () => {
-    const nextIndex = (activeImageIndex + 1) % images.length;
-    imageScrollViewRef.current?.scrollTo({ x: nextIndex * windowWidth, animated: true });
+  const loadReviewsAndRating = useCallback(async () => {
+    if (!place?.id) return;
+    setLoadingReviews(true);
+    try {
+      const [ratingRes, reviewsRes] = await Promise.all([
+        api.get(ENDPOINTS.PLACE_RATING(place.id)),
+        api.get(ENDPOINTS.PLACE_REVIEWS(place.id)),
+      ]);
+      const ratingData = getApiData(ratingRes) || {};
+      const reviewsData = ensureArray(getApiData(reviewsRes));
+      setRatingSummary({
+        avgRating: toNum(ratingData.avgRating),
+        reviewsCount: toNum(ratingData.reviewsCount) || reviewsData.length || 0,
+      });
+      setReviews(reviewsData);
+    } catch (_err) {
+      setRatingSummary({ avgRating: null, reviewsCount: 0 });
+      setReviews([]);
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [place?.id]);
+
+  const refreshNearbyState = useCallback(async () => {
+    if (!user || !place?.id) {
+      setNearbyDistanceM(null);
+      setPendingVisitId(null);
+      return;
+    }
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setNearbyDistanceM(null);
+        return;
+      }
+      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = current?.coords?.latitude;
+      const lng = current?.coords?.longitude;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      const response = await api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, {
+        params: { lat, lng, radius: 150, limit: 5 },
+      });
+      const nearbyList = ensureArray(getApiData(response));
+      const matched = nearbyList.find((item) => {
+        const candidateId = item?.place?.id ?? item?.placeId ?? item?.place_id;
+        return String(candidateId) === String(place.id);
+      });
+      const distance = toNum(matched?.distanceM ?? matched?.distance_m);
+      const possibleVisitId = pickVisitId(matched);
+      setNearbyDistanceM(distance);
+      if (possibleVisitId != null) {
+        setPendingVisitId(possibleVisitId);
+      }
+    } catch (_err) {
+      setNearbyDistanceM(null);
+    }
+  }, [user, place?.id]);
+
+  useEffect(() => {
+    loadReviewsAndRating();
+    refreshNearbyState();
+  }, [loadReviewsAndRating, refreshNearbyState]);
+
+  const handleStartVisit = async () => {
+    if (!user || !place?.id || !isNearPlace) return;
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = loc?.coords?.latitude;
+      const lng = loc?.coords?.longitude;
+      const accuracy = pickAccuracy(loc?.coords);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new Error("NO_COORDS");
+      }
+      if (accuracy > 75) {
+        setStatusModal({
+          visible: true,
+          type: "warning",
+          title: "GPS inestable",
+          message: "La precision de tu GPS supera 75m. Intenta en un espacio abierto.",
+        });
+        return;
+      }
+
+      const deviceId = await getOrCreateDeviceId();
+      const payload = {
+        lat,
+        lng,
+        accuracy_m: accuracy,
+        device_id: deviceId,
+        meta: JSON.stringify({ appVersion: "mobile-app", source: "place-detail" }),
+      };
+      const checkinRes = await api.post(ENDPOINTS.PLACE_CHECKIN(place.id), payload);
+      const checkinData = getApiData(checkinRes) || {};
+      const createdVisitId = pickVisitId(checkinData);
+      const requiredStay = Math.max(1, toNum(checkinData?.min_stay_seconds) || 180);
+
+      if (!createdVisitId) {
+        setStatusModal({
+          visible: true,
+          type: "warning",
+          title: "Visita pendiente",
+          message: "No se pudo abrir una visita para confirmar. Intenta de nuevo en unos segundos.",
+        });
+        return;
+      }
+
+      setPendingVisitId(createdVisitId);
+      setMinStaySeconds(requiredStay);
+      setVisitCountdown(requiredStay);
+      setStatusModal({
+        visible: true,
+        type: "info",
+        title: "Validacion iniciada",
+        message: `Debes permanecer ${requiredStay} segundos en el sitio para confirmar tu visita.`,
+      });
+    } catch (err) {
+      setStatusModal({
+        visible: true,
+        type: "error",
+        title: "No fue posible iniciar visita",
+        message: getApiMessage(err, "Activa tu ubicacion y vuelve a intentarlo."),
+      });
+    }
   };
 
-  const handlePrevImage = () => {
-    const prevIndex = (activeImageIndex - 1 + images.length) % images.length;
-    imageScrollViewRef.current?.scrollTo({ x: prevIndex * windowWidth, animated: true });
+  const handleConfirmVisit = async () => {
+    if (!pendingVisitId || visitCountdown > 0) return;
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = loc?.coords?.latitude;
+      const lng = loc?.coords?.longitude;
+      const accuracy = pickAccuracy(loc?.coords);
+      if (accuracy > 75) {
+        setStatusModal({
+          visible: true,
+          type: "warning",
+          title: "GPS inestable",
+          message: "La precision de tu GPS supera 75m. Mejora la señal y vuelve a confirmar.",
+        });
+        return;
+      }
+      const payload = { lat, lng, accuracy_m: accuracy };
+      await api.patch(ENDPOINTS.VISIT_CONFIRM(pendingVisitId), payload);
+      setVisitConfirmed(true);
+      setPendingVisitId(null);
+      setVisitCountdown(0);
+      setStatusModal({
+        visible: true,
+        type: "success",
+        title: "Visita confirmada",
+        message: "Ya puedes dejar feedback y tus reseñas contaran como verificadas.",
+      });
+      refreshNearbyState();
+      loadReviewsAndRating();
+    } catch (err) {
+      setStatusModal({
+        visible: true,
+        type: "error",
+        title: "Confirmacion fallida",
+        message: getApiMessage(err, "No se pudo confirmar la visita. Mantente cerca del sitio e intenta de nuevo."),
+      });
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!canCreateReview || reviewSubmitting) return;
+    const rating = Math.max(1, Math.min(5, Number(reviewForm.rating) || 0));
+    const comment = reviewForm.comment.trim();
+    if (!rating || !comment) {
+      setStatusModal({
+        visible: true,
+        type: "warning",
+        title: "Datos incompletos",
+        message: "Agrega una calificacion (1 a 5) y un comentario.",
+      });
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const deviceId = await getOrCreateDeviceId();
+      await api.post(ENDPOINTS.PLACE_REVIEWS(place.id), {
+        rating,
+        comment,
+        device_id: deviceId,
+      });
+      setReviewModalVisible(false);
+      setReviewForm({ rating: "5", comment: "" });
+      await loadReviewsAndRating();
+      setStatusModal({
+        visible: true,
+        type: "success",
+        title: "Resena registrada",
+        message: "Gracias por compartir tu experiencia en este sitio.",
+      });
+    } catch (_err) {
+      setStatusModal({
+        visible: true,
+        type: "error",
+        title: "No se pudo enviar resena",
+        message: "Valida que estes cerca del sitio y vuelve a intentarlo.",
+      });
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!canSendFeedback || feedbackSubmitting) return;
+    const message = feedbackForm.message.trim();
+    if (!message) {
+      setStatusModal({
+        visible: true,
+        type: "warning",
+        title: "Feedback incompleto",
+        message: "Escribe el detalle del feedback para continuar.",
+      });
+      return;
+    }
+    setFeedbackSubmitting(true);
+    try {
+      const deviceId = await getOrCreateDeviceId();
+      await api.post(ENDPOINTS.PLACE_FEEDBACK(place.id), {
+        type: feedbackForm.type || "suggestion",
+        message,
+        contact_email: feedbackForm.contactEmail.trim() || undefined,
+        device_id: deviceId,
+      });
+      setFeedbackModalVisible(false);
+      setFeedbackForm((prev) => ({ ...prev, message: "" }));
+      setStatusModal({
+        visible: true,
+        type: "success",
+        title: "Feedback enviado",
+        message: "Gracias. Tu reporte quedo asociado a este sitio.",
+      });
+    } catch (_err) {
+      setStatusModal({
+        visible: true,
+        type: "error",
+        title: "No se pudo enviar feedback",
+        message: "Intenta de nuevo en unos segundos.",
+      });
+    } finally {
+      setFeedbackSubmitting(false);
+    }
   };
 
   const infoDetails = useMemo(() => {
@@ -394,6 +709,111 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               </View>
             </View>
           )}
+          {!!user && isNearPlace && (
+            <View style={styles.visitSection}>
+              <Text style={styles.sectionTitle}>Validacion de visita</Text>
+              {typeof nearbyDistanceM === "number" ? (
+                <Text style={styles.visitMetaText}>
+                  Distancia actual: {Math.round(nearbyDistanceM)} m
+                </Text>
+              ) : (
+                <Text style={styles.visitMetaText}>
+                  Activa ubicacion para validar si estas cerca de este lugar.
+                </Text>
+              )}
+              {visitConfirmed ? (
+                <View style={styles.successInline}>
+                  <Ionicons name="checkmark-circle" size={16} color="#047857" />
+                  <Text style={styles.successInlineText}>Visita confirmada</Text>
+                </View>
+              ) : (
+                <View style={styles.visitActionsRow}>
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, !isNearPlace && styles.disabledAction]}
+                    disabled={!isNearPlace}
+                    onPress={handleStartVisit}
+                  >
+                    <Text style={styles.secondaryButtonText}>Iniciar visita</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.primarySmallButton, (!pendingVisitId || visitCountdown > 0) && styles.disabledAction]}
+                    disabled={!pendingVisitId || visitCountdown > 0}
+                    onPress={handleConfirmVisit}
+                  >
+                    <Text style={styles.primarySmallButtonText}>
+                      {visitCountdown > 0 ? `Confirmar en ${visitCountdown}s` : "Confirmar visita"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {!visitConfirmed ? (
+                <Text style={styles.lockHintText}>
+                  Permanencia minima requerida: {minStaySeconds}s.
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          <View style={styles.reviewSection}>
+            <View style={styles.reviewHeaderRow}>
+              <Text style={styles.sectionTitle}>Resenas del sitio</Text>
+              {loadingReviews ? <ActivityIndicator size="small" color="#0E7490" /> : null}
+            </View>
+            <Text style={styles.reviewSummaryText}>
+              {ratingSummary.avgRating != null ? `★ ${ratingSummary.avgRating.toFixed(1)}` : "Sin calificacion"} · {ratingSummary.reviewsCount || 0} resenas
+            </Text>
+            {reviews.length > 0 ? (
+              <View style={styles.reviewsList}>
+                {reviews.slice(0, 4).map((item, idx) => (
+                  <ReviewItem key={`rv-${item.id || idx}`} item={item} />
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.visitMetaText}>Aun no hay resenas para este lugar.</Text>
+            )}
+            {canCreateReview ? (
+              <TouchableOpacity
+                style={styles.primarySmallButton}
+                onPress={() => setReviewModalVisible(true)}
+              >
+                <Text style={styles.primarySmallButtonText}>Escribir resena</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.infoMiniButton}
+                onPress={() =>
+                  setStatusModal({
+                    visible: true,
+                    type: "info",
+                    title: "Resenas en sitio",
+                    message: "Solo puedes crear una resena cuando te encuentres en el sitio.",
+                  })
+                }
+              >
+                <Ionicons name="information-circle-outline" size={14} color="#0E7490" />
+                <Text style={styles.infoMiniButtonText}>Solo en sitio</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {!!user && isNearPlace && (
+            <View style={styles.feedbackSection}>
+              <Text style={styles.sectionTitle}>Feedback de ubicacion y datos</Text>
+              <TouchableOpacity
+                style={[styles.secondaryButton, !canSendFeedback && styles.disabledAction]}
+                disabled={!canSendFeedback}
+                onPress={() => setFeedbackModalVisible(true)}
+              >
+                <Text style={styles.secondaryButtonText}>Enviar feedback del sitio</Text>
+              </TouchableOpacity>
+              {!canSendFeedback ? (
+                <Text style={styles.lockHintText}>
+                  El feedback se habilita despues de confirmar visita.
+                </Text>
+              ) : null}
+            </View>
+          )}
+
           {(hasValidCoordinates || arConfig?.modelUrl) && (
             <View style={styles.actionRow}>
               {hasValidCoordinates && (
@@ -431,6 +851,95 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
         images={images}
         initialIndex={activeImageIndex}
         onClose={() => setGalleryVisible(false)}
+      />
+
+      <Modal visible={reviewModalVisible} transparent animationType="fade" onRequestClose={() => setReviewModalVisible(false)}>
+        <View style={styles.formModalOverlay}>
+          <View style={styles.formModalCard}>
+            <Text style={styles.formModalTitle}>Nueva resena</Text>
+            <Text style={styles.formFieldLabel}>Calificacion (1 a 5)</Text>
+            <TextInput
+              style={styles.formInput}
+              value={reviewForm.rating}
+              onChangeText={(value) => setReviewForm((prev) => ({ ...prev, rating: value.replace(/[^0-9]/g, "") }))}
+              keyboardType="numeric"
+              maxLength={1}
+              placeholder="5"
+            />
+            <Text style={styles.formFieldLabel}>Comentario</Text>
+            <TextInput
+              style={[styles.formInput, styles.formInputArea]}
+              value={reviewForm.comment}
+              onChangeText={(value) => setReviewForm((prev) => ({ ...prev, comment: value }))}
+              placeholder="Comparte tu experiencia en este lugar"
+              multiline
+            />
+            <View style={styles.formActionsRow}>
+              <TouchableOpacity style={styles.formCancelButton} onPress={() => setReviewModalVisible(false)}>
+                <Text style={styles.formCancelText}>Cerrar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.formSubmitButton} onPress={handleSubmitReview} disabled={reviewSubmitting}>
+                {reviewSubmitting ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.formSubmitText}>Publicar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={feedbackModalVisible} transparent animationType="fade" onRequestClose={() => setFeedbackModalVisible(false)}>
+        <View style={styles.formModalOverlay}>
+          <View style={styles.formModalCard}>
+            <Text style={styles.formModalTitle}>Feedback del sitio</Text>
+            <Text style={styles.formFieldLabel}>Tipo</Text>
+            <View style={styles.feedbackTypeRow}>
+              {["suggestion", "issue", "other"].map((type) => {
+                const active = feedbackForm.type === type;
+                return (
+                  <TouchableOpacity
+                    key={`fb-${type}`}
+                    style={[styles.feedbackTypeChip, active && styles.feedbackTypeChipActive]}
+                    onPress={() => setFeedbackForm((prev) => ({ ...prev, type }))}
+                  >
+                    <Text style={[styles.feedbackTypeText, active && styles.feedbackTypeTextActive]}>{type}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.formFieldLabel}>Correo de contacto</Text>
+            <TextInput
+              style={styles.formInput}
+              value={feedbackForm.contactEmail}
+              onChangeText={(value) => setFeedbackForm((prev) => ({ ...prev, contactEmail: value }))}
+              keyboardType="email-address"
+              placeholder="correo@ejemplo.com"
+              autoCapitalize="none"
+            />
+            <Text style={styles.formFieldLabel}>Mensaje</Text>
+            <TextInput
+              style={[styles.formInput, styles.formInputArea]}
+              value={feedbackForm.message}
+              onChangeText={(value) => setFeedbackForm((prev) => ({ ...prev, message: value }))}
+              placeholder="Describe la mejora o el problema detectado"
+              multiline
+            />
+            <View style={styles.formActionsRow}>
+              <TouchableOpacity style={styles.formCancelButton} onPress={() => setFeedbackModalVisible(false)}>
+                <Text style={styles.formCancelText}>Cerrar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.formSubmitButton} onPress={handleSubmitFeedback} disabled={feedbackSubmitting}>
+                {feedbackSubmitting ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.formSubmitText}>Enviar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <PremiumModal
+        visible={statusModal.visible}
+        type={statusModal.type}
+        title={statusModal.title}
+        message={statusModal.message}
+        onClose={() => setStatusModal((prev) => ({ ...prev, visible: false }))}
       />
     </View>
   );
@@ -671,6 +1180,253 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#3730A3',
     fontWeight: '600',
+  },
+  visitSection: {
+    marginTop: SPACING.xl,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  visitMetaText: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#64748B",
+  },
+  visitActionsRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  secondaryButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#0E7490",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: "#ECFEFF",
+  },
+  secondaryButtonText: {
+    color: "#0E7490",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  primarySmallButton: {
+    marginTop: SPACING.sm,
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: "#0E7490",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.md,
+  },
+  primarySmallButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  disabledAction: {
+    opacity: 0.45,
+  },
+  successInline: {
+    marginTop: SPACING.sm,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#DCFCE7",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  successInlineText: {
+    color: "#047857",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  reviewSection: {
+    marginTop: SPACING.xl,
+  },
+  reviewHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reviewSummaryText: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#334155",
+    fontWeight: "600",
+  },
+  reviewsList: {
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  reviewItem: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: SPACING.sm,
+  },
+  reviewHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: SPACING.sm,
+  },
+  reviewStars: {
+    color: "#F59E0B",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  reviewComment: {
+    marginTop: 6,
+    color: "#334155",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  reviewDate: {
+    marginTop: 6,
+    color: "#94A3B8",
+    fontSize: 11,
+  },
+  verifiedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFEFF",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  verifiedPillText: {
+    color: "#0E7490",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  feedbackSection: {
+    marginTop: SPACING.xl,
+  },
+  lockHintText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  infoMiniButton: {
+    marginTop: SPACING.sm,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.28)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  infoMiniButtonText: {
+    color: "#0E7490",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  formModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.62)",
+    justifyContent: "center",
+    padding: SPACING.lg,
+  },
+  formModalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: SPACING.lg,
+  },
+  formModalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F172A",
+    marginBottom: SPACING.sm,
+  },
+  formFieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    marginTop: SPACING.sm,
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: "#DCE3ED",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#0F172A",
+    backgroundColor: "#F8FAFC",
+  },
+  formInputArea: {
+    minHeight: 92,
+    textAlignVertical: "top",
+  },
+  formActionsRow: {
+    marginTop: SPACING.md,
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  formCancelButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formCancelText: {
+    color: "#475569",
+    fontWeight: "700",
+  },
+  formSubmitButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 12,
+    backgroundColor: "#0E7490",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formSubmitText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+  feedbackTypeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.xs,
+  },
+  feedbackTypeChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#F8FAFC",
+  },
+  feedbackTypeChipActive: {
+    borderColor: "#0E7490",
+    backgroundColor: "#ECFEFF",
+  },
+  feedbackTypeText: {
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  feedbackTypeTextActive: {
+    color: "#0E7490",
   },
   // ESTILOS MODAL HD
   modalBg: {
