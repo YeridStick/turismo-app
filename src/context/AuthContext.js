@@ -29,6 +29,20 @@ const extractApiErrorMessage = (error, fallback) => {
   return fallback;
 };
 
+const extractLoginPayload = (response) => {
+  return response?.data?.data || response?.data || {};
+};
+
+const isPayloadAuthFailure = (payload) => {
+  return payload?.success === false || payload?.ok === false || payload?.error === true;
+};
+
+const extractPayloadMessage = (payload) => {
+  if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message.trim();
+  if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error.trim();
+  return null;
+};
+
 const decodeJwtPayload = (token) => {
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
@@ -110,14 +124,24 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, totpCode) => {
     try {
       const response = await loginTotp({ email, totpCode });
-      const payload = response.data?.data || response.data;
-      const token = payload?.token;
-
-      if (token) {
-        await AsyncStorage.setItem('token', token);
-        const jwtPayload = decodeJwtPayload(token);
-        setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
+      const payload = extractLoginPayload(response);
+      if (isPayloadAuthFailure(payload)) {
+        return {
+          success: false,
+          error: extractPayloadMessage(payload) || 'Usuario o código TOTP incorrecto.',
+        };
       }
+      const token = payload?.token || payload?.accessToken || payload?.access_token;
+      if (!token || typeof token !== 'string') {
+        return {
+          success: false,
+          error: extractPayloadMessage(payload) || 'No se recibió un token de autenticación.',
+        };
+      }
+
+      await AsyncStorage.setItem('token', token);
+      const jwtPayload = decodeJwtPayload(token);
+      setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
       const userData = await fetchUserInfo(email);
       if (userData) {
         await AsyncStorage.setItem('user', JSON.stringify(userData));
@@ -139,14 +163,24 @@ export const AuthProvider = ({ children }) => {
   const loginWithPassword = async (email, password) => {
     try {
       const response = await loginPassword({ email, password });
-      const payload = response.data?.data || response.data;
-      const token = payload?.token;
-
-      if (token) {
-        await AsyncStorage.setItem('token', token);
-        const jwtPayload = decodeJwtPayload(token);
-        setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
+      const payload = extractLoginPayload(response);
+      if (isPayloadAuthFailure(payload)) {
+        return {
+          success: false,
+          error: extractPayloadMessage(payload) || 'Usuario o contraseña incorrectos.',
+        };
       }
+      const token = payload?.token || payload?.accessToken || payload?.access_token;
+      if (!token || typeof token !== 'string') {
+        return {
+          success: false,
+          error: extractPayloadMessage(payload) || 'No se recibió un token de autenticación.',
+        };
+      }
+
+      await AsyncStorage.setItem('token', token);
+      const jwtPayload = decodeJwtPayload(token);
+      setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
       const userData = await fetchUserInfo(email);
       if (userData) {
         await AsyncStorage.setItem('user', JSON.stringify(userData));

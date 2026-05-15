@@ -17,7 +17,14 @@ const HomeFooter = () => {
       <BlurView
         intensity={60}
         tint="light"
-        style={{ padding: 20, borderRadius: 28, overflow: 'hidden' }}
+        style={{
+          padding: 20,
+          borderRadius: 30,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: "rgba(14, 116, 144, 0.14)",
+          backgroundColor: "rgba(255,255,255,0.58)",
+        }}
       >
         <View style={styles.footerHeader}>
           <View style={styles.footerLogoBox}>

@@ -13,6 +13,13 @@ import { StyleSheet } from 'react-native';
 // URL del modelo de prueba
 const TEST_MODEL_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb';
 
+const resolveModelType = (url?: string): "GLB" | "GLTF" | "OBJ" => {
+    const clean = (url || "").trim().split("?")[0].toLowerCase();
+    if (clean.endsWith(".gltf")) return "GLTF";
+    if (clean.endsWith(".obj")) return "OBJ";
+    return "GLB";
+};
+
 interface ARSceneProps {
     modelUrl?: string;
     onModelLoad?: () => void;
@@ -21,6 +28,7 @@ interface ARSceneProps {
 }
 
 const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRef }: ARSceneProps) => {
+    const modelType = resolveModelType(modelUrl);
     // Estados tipados correctamente
     const [scale, setScale] = useState<[number, number, number]>([0.05, 0.05, 0.05]);
     const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
@@ -161,7 +169,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Detectar cuando el modelo carga correctamente
     const onModelLoadEnd = () => {
         setModelVisible(true);
-        console.log('✓ Modelo cargado correctamente');
+        console.log(`✓ Modelo cargado correctamente (${modelType})`);
         onModelLoad?.();
     };
 
@@ -174,12 +182,12 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     return (
         <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
             {/* ILUMINACIÓN OPTIMIZADA (SILK): Solo 2 fuentes para máximo rendimiento sin perder calidad */}
-            <ViroAmbientLight color="#ffffff" intensity={300} />
+            <ViroAmbientLight color="#ffffff" intensity={220} />
             <ViroDirectionalLight
                 color="#ffffff"
                 direction={[0.3, -1, -0.5]}
                 castsShadow={true}
-                intensity={1200}
+                intensity={850}
             />
             {/* OmniLights eliminadas para liberar CPU/GPU */}
 
@@ -192,7 +200,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
             {modelVisible && (
                 <Viro3DObject
                     source={{ uri: modelUrl }}
-                    type="GLB"
+                    type={modelType}
                     position={position}
                     scale={scale}
                     rotation={rotation}

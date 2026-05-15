@@ -11,7 +11,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 // Modular Components
@@ -26,6 +26,7 @@ import SidePanel from "./components/SidePanel";
 import AgencyModal from "./components/modals/AgencyModal";
 import ArWebViewModal from "./components/modals/ArWebViewModal";
 import FilterModal from "./components/modals/FilterModal";
+import PackageDetailModal from "./components/modals/PackageDetailModal";
 import PaymentModal from "./components/modals/PaymentModal";
 import ProfileModal from "./components/modals/ProfileModal";
 import VerificationModal from "./components/modals/VerificationModal";
@@ -37,11 +38,16 @@ import usePayment from "./hooks/usePayment";
 import useVerification from "./hooks/useVerification";
 
 // Constants & Helpers
+import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import AnimatedBackground from "../../components/ui/AnimatedBackground";
 import styles from "./styles";
 import { COLORS } from "./utils/constants";
-import { formatPrice, getCategoryLabel, getPackageGradient, getPackageImage } from "./utils/helpers";
-import { Ionicons, FontAwesome } from "@expo/vector-icons";
+import {
+  formatPrice,
+  getCategoryLabel,
+  getPackageGradient,
+  getPackageImage,
+} from "./utils/helpers";
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -125,11 +131,15 @@ const HomeScreen = ({ navigation }) => {
   const [profileVisible, setProfileVisible] = useState(false);
   const [agencyVisible, setAgencyVisible] = useState(false);
   const [selectedAgency, setSelectedAgency] = useState(null);
+  const [packageDetailVisible, setPackageDetailVisible] = useState(false);
+  const [detailPackage, setDetailPackage] = useState(null);
   const [showMap, setShowMap] = useState(false);
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
 
   const displayPlaces = useMemo(() => {
-    return (query.trim() || selectedCategory !== "todos") ? searchResults : places;
+    return query.trim() || selectedCategory !== "todos"
+      ? searchResults
+      : places;
   }, [query, selectedCategory, searchResults, places]);
 
   const handleIncreaseRadius = useCallback(() => {
@@ -150,7 +160,9 @@ const HomeScreen = ({ navigation }) => {
 
   // SidePanel Animation
   const sidePanelWidth = 320;
-  const sidePanelTranslateX = useRef(new Animated.Value(-sidePanelWidth)).current;
+  const sidePanelTranslateX = useRef(
+    new Animated.Value(-sidePanelWidth),
+  ).current;
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [panelHintDone, setPanelHintDone] = useState(false);
   const panelHintHandleAnim = useRef(new Animated.Value(0)).current;
@@ -176,38 +188,45 @@ const HomeScreen = ({ navigation }) => {
   }, [sidePanelTranslateX, sidePanelWidth]);
 
   // Pan Responder Logic
-  const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => {
-      const { dx, dy, x0 } = gesture;
-      if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
-      if (!sidePanelOpen && x0 > 40) return false;
-      return true;
-    },
-    onPanResponderMove: (_, gesture) => {
-      const startX = sidePanelOpen ? 0 : -sidePanelWidth;
-      const nextX = Math.min(0, Math.max(-sidePanelWidth, startX + gesture.dx));
-      sidePanelTranslateX.setValue(nextX);
-    },
-    onPanResponderRelease: (_, gesture) => {
-      const startX = sidePanelOpen ? 0 : -sidePanelWidth;
-      const nextX = startX + gesture.dx;
-      const shouldOpen = nextX > -sidePanelWidth / 2 || gesture.vx > 0.5;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => {
+          const { dx, dy, x0 } = gesture;
+          if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
+          if (!sidePanelOpen && x0 > 40) return false;
+          return true;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const startX = sidePanelOpen ? 0 : -sidePanelWidth;
+          const nextX = Math.min(
+            0,
+            Math.max(-sidePanelWidth, startX + gesture.dx),
+          );
+          sidePanelTranslateX.setValue(nextX);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const startX = sidePanelOpen ? 0 : -sidePanelWidth;
+          const nextX = startX + gesture.dx;
+          const shouldOpen = nextX > -sidePanelWidth / 2 || gesture.vx > 0.5;
 
-      Animated.timing(sidePanelTranslateX, {
-        toValue: shouldOpen ? 0 : -sidePanelWidth,
-        duration: 240,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => setSidePanelOpen(shouldOpen));
-    },
-  }), [sidePanelOpen, sidePanelWidth, sidePanelTranslateX]);
+          Animated.timing(sidePanelTranslateX, {
+            toValue: shouldOpen ? 0 : -sidePanelWidth,
+            duration: 240,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => setSidePanelOpen(shouldOpen));
+        },
+      }),
+    [sidePanelOpen, sidePanelWidth, sidePanelTranslateX],
+  );
 
   // Roles-based routes
   // Roles-based routes with enhanced metadata
   const allowedRoutes = useMemo(() => {
-    const norm = (roles || []).map(r => r.toLowerCase());
+    const norm = (roles || []).map((r) => r.toLowerCase());
     const isAdmin = norm.includes("admin");
-    const has = (n) => isAdmin || n.some(r => norm.includes(r));
+    const has = (n) => isAdmin || n.some((r) => norm.includes(r));
 
     const routes = [
       {
@@ -216,7 +235,7 @@ const HomeScreen = ({ navigation }) => {
         route: "ManagePlaces",
         roles: ["owner"],
         icon: "map-marker",
-        description: "Gestiona, edita y publica tus sitios turísticos."
+        description: "Gestiona, edita y publica tus sitios turísticos.",
       },
       {
         id: "agency-dashboard",
@@ -224,7 +243,7 @@ const HomeScreen = ({ navigation }) => {
         route: "AgencyDashboard",
         roles: ["agency"],
         icon: "dashboard",
-        description: "Gestiona tus paquetes y servicios turísticos."
+        description: "Gestiona tus paquetes y servicios turísticos.",
       },
       {
         id: "admin-tools",
@@ -232,13 +251,13 @@ const HomeScreen = ({ navigation }) => {
         route: "AdminPanel",
         roles: ["admin"],
         icon: "shield",
-        description: "Herramientas globales de gestión y control."
+        description: "Herramientas globales de gestión y control.",
       },
     ];
 
     // Unique routes (in case multiple roles share the same route)
     const seen = new Set();
-    return routes.filter(r => {
+    return routes.filter((r) => {
       if (seen.has(r.id)) return false;
       const canAccess = has(r.roles);
       if (canAccess) seen.add(r.id);
@@ -252,6 +271,22 @@ const HomeScreen = ({ navigation }) => {
     setSelectedAgencyFilter(agency);
   };
 
+  const openPackageDetail = useCallback((pkg) => {
+    setDetailPackage(pkg);
+    setPackageDetailVisible(true);
+  }, []);
+
+  const openPackagePayment = useCallback(
+    (pkg) => {
+      if (!pkg) return;
+      setPackageDetailVisible(false);
+      setDetailPackage(null);
+      setSelectedPackage(pkg);
+      setPaymentVisible(true);
+    },
+    [setSelectedPackage, setPaymentVisible],
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -260,7 +295,9 @@ const HomeScreen = ({ navigation }) => {
     >
       <AnimatedBackground />
       <ScrollView
-        refreshControl={<RefreshControl refreshing={loadingAll} onRefresh={handleRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={loadingAll} onRefresh={handleRefresh} />
+        }
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isInteractingWithMap}
       >
@@ -272,8 +309,21 @@ const HomeScreen = ({ navigation }) => {
           onOpenFilters={() => setFiltersVisible(true)}
           onOpenProfile={() => setProfileVisible(true)}
           onLogin={() => navigation.navigate("Auth")}
-          searchSuggestions={query.trim() ? places.filter(p => (p.name || "").toLowerCase().includes(query.toLowerCase())).slice(0, 5) : []}
-          onSelectSuggestion={(item) => navigation.navigate("PlaceDetail", { places: [item], initialIndex: 0 })}
+          searchSuggestions={
+            query.trim()
+              ? places
+                  .filter((p) =>
+                    (p.name || "").toLowerCase().includes(query.toLowerCase()),
+                  )
+                  .slice(0, 5)
+              : []
+          }
+          onSelectSuggestion={(item) =>
+            navigation.navigate("PlaceDetail", {
+              places: [item],
+              initialIndex: 0,
+            })
+          }
         />
 
         {/* Nearby Section - Always Visible */}
@@ -293,7 +343,12 @@ const HomeScreen = ({ navigation }) => {
             isInteractingWithMap={isInteractingWithMap}
             onMapTouchStart={() => setIsInteractingWithMap(true)}
             onMapTouchEnd={() => setIsInteractingWithMap(false)}
-            onPlacePress={(item, index) => navigation.navigate("PlaceDetail", { places: nearby, initialIndex: index })}
+            onPlacePress={(item, index) =>
+              navigation.navigate("PlaceDetail", {
+                places: nearby,
+                initialIndex: index,
+              })
+            }
             onArPress={openAR}
             onIncreaseRadius={handleIncreaseRadius}
             getTopPlaceMeta={getTopPlaceMeta}
@@ -308,13 +363,19 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.sectionTitleAccent} />
               <View style={styles.sectionIconBubble}>
                 <FontAwesome
-                  name={query.trim() || selectedCategory !== "todos" ? "search" : "compass"}
+                  name={
+                    query.trim() || selectedCategory !== "todos"
+                      ? "search"
+                      : "compass"
+                  }
                   size={11}
                   color="#FB923C"
                 />
               </View>
               <Text style={styles.sectionHeroTitle}>
-                {query.trim() || selectedCategory !== "todos" ? "Resultados de búsqueda" : "Tu próxima aventura"}
+                {query.trim() || selectedCategory !== "todos"
+                  ? "Resultados de búsqueda"
+                  : "Tu próxima aventura"}
               </Text>
             </View>
 
@@ -331,14 +392,20 @@ const HomeScreen = ({ navigation }) => {
                   rating={item.rating}
                   distance={item.distance}
                   variant="compact"
-                  onPress={() => navigation.navigate("PlaceDetail", { places: displayPlaces, initialIndex: index })}
+                  onPress={() =>
+                    navigation.navigate("PlaceDetail", {
+                      places: displayPlaces,
+                      initialIndex: index,
+                    })
+                  }
                   onArPress={() => openAR(item)}
                 />
               )}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
-              ListFooterComponent={() => (
-                hasMorePlaces && !(query.trim() || selectedCategory !== "todos") ? (
+              ListFooterComponent={() =>
+                hasMorePlaces &&
+                !(query.trim() || selectedCategory !== "todos") ? (
                   <TouchableOpacity
                     style={styles.loadMoreCard}
                     onPress={handleLoadMore}
@@ -349,14 +416,16 @@ const HomeScreen = ({ navigation }) => {
                     ) : (
                       <>
                         <View style={styles.loadMoreIcon}>
-                          <Text style={{ fontSize: 24, color: COLORS.primary }}>+</Text>
+                          <Text style={{ fontSize: 24, color: COLORS.primary }}>
+                            +
+                          </Text>
                         </View>
                         <Text style={styles.loadMoreText}>Cargar más</Text>
                       </>
                     )}
                   </TouchableOpacity>
                 ) : null
-              )}
+              }
             />
           </View>
         )}
@@ -377,7 +446,10 @@ const HomeScreen = ({ navigation }) => {
               data={agencies}
               keyExtractor={(item, idx) => `${item.id || idx}-age`}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.agencyChip} onPress={() => openAgency(item)}>
+                <TouchableOpacity
+                  style={styles.agencyChip}
+                  onPress={() => openAgency(item)}
+                >
                   <Text style={styles.agencyChipText}>{item.name}</Text>
                 </TouchableOpacity>
               )}
@@ -394,12 +466,24 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.sectionIconBubble}>
               <FontAwesome name="suitcase" size={11} color="#FB923C" />
             </View>
-            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
               <Text style={[styles.sectionHeroTitle, { marginRight: 10 }]}>
-                {selectedAgencyFilter ? `${selectedAgencyFilter.name}` : "Paquetes turísticos"}
+                {selectedAgencyFilter
+                  ? `${selectedAgencyFilter.name}`
+                  : "Paquetes turísticos"}
               </Text>
               {selectedAgencyFilter && (
-                <TouchableOpacity onPress={clearAgencyFilter} style={styles.clearFilterBtn}>
+                <TouchableOpacity
+                  onPress={clearAgencyFilter}
+                  style={styles.clearFilterBtn}
+                >
                   <Text style={styles.clearFilterText}>Ver todos</Text>
                 </TouchableOpacity>
               )}
@@ -407,7 +491,10 @@ const HomeScreen = ({ navigation }) => {
           </View>
 
           {loadingPackages ? (
-            <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 40 }} />
+            <ActivityIndicator
+              color={COLORS.primary}
+              style={{ marginVertical: 40 }}
+            />
           ) : packages.length > 0 ? (
             <FlatList
               horizontal
@@ -417,10 +504,8 @@ const HomeScreen = ({ navigation }) => {
                 <PackageCard
                   pkg={item}
                   width={300}
-                  onPress={() => {
-                    setSelectedPackage(item);
-                    setPaymentVisible(true);
-                  }}
+                  onOpenDetails={() => openPackageDetail(item)}
+                  onReservePress={() => openPackagePayment(item)}
                   getImage={getPackageImage}
                   getGradient={getPackageGradient}
                 />
@@ -431,14 +516,26 @@ const HomeScreen = ({ navigation }) => {
           ) : selectedAgencyFilter ? (
             <View style={styles.emptyAgencyState}>
               <View style={styles.emptyAgencyIcon}>
-                <Ionicons name="briefcase-outline" size={32} color={COLORS.textLight} />
+                <Ionicons
+                  name="briefcase-outline"
+                  size={32}
+                  color={COLORS.textLight}
+                />
               </View>
-              <Text style={styles.emptyAgencyTitle}>Sin paquetes disponibles</Text>
-              <Text style={styles.emptyAgencySub}>
-                Esta agencia aún no ha publicado ofertas. Cambia de agencia o regresa al catálogo completo.
+              <Text style={styles.emptyAgencyTitle}>
+                Sin paquetes disponibles
               </Text>
-              <TouchableOpacity style={styles.restoreButton} onPress={clearAgencyFilter}>
-                <Text style={styles.restoreButtonText}>Regresar a ver todos</Text>
+              <Text style={styles.emptyAgencySub}>
+                Esta agencia aún no ha publicado ofertas. Cambia de agencia o
+                regresa al catálogo completo.
+              </Text>
+              <TouchableOpacity
+                style={styles.restoreButton}
+                onPress={clearAgencyFilter}
+              >
+                <Text style={styles.restoreButtonText}>
+                  Regresar a ver todos
+                </Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -464,8 +561,18 @@ const HomeScreen = ({ navigation }) => {
         loadingTopPlaces={loadingTopPlaces}
         getCategoryLabel={getCategoryLabel}
         getTopPlaceMeta={getTopPlaceMeta}
-        onSelectTop={(item, index) => navigation.navigate("PlaceDetail", { places: topPlaces, initialIndex: index })}
-        onSelectNearby={(item, index) => navigation.navigate("PlaceDetail", { places: [item], initialIndex: 0 })}
+        onSelectTop={(item, index) =>
+          navigation.navigate("PlaceDetail", {
+            places: topPlaces,
+            initialIndex: index,
+          })
+        }
+        onSelectNearby={(item, index) =>
+          navigation.navigate("PlaceDetail", {
+            places: [item],
+            initialIndex: 0,
+          })
+        }
         getPlaceKey={(p) => p?.id || p?.name}
         categories={categories}
       />
@@ -477,8 +584,14 @@ const HomeScreen = ({ navigation }) => {
         user={user}
         logout={logout}
         allowedRoutes={allowedRoutes}
-        onRoutePress={(r) => { setProfileVisible(false); navigation.navigate(r); }}
-        onOpenVerification={() => { setProfileVisible(false); setEmailVerifyVisible(true); }}
+        onRoutePress={(r) => {
+          setProfileVisible(false);
+          navigation.navigate(r);
+        }}
+        onOpenVerification={() => {
+          setProfileVisible(false);
+          setEmailVerifyVisible(true);
+        }}
       />
 
       <VerificationModal
@@ -508,6 +621,19 @@ const HomeScreen = ({ navigation }) => {
         formatPrice={formatPrice}
       />
 
+      <PackageDetailModal
+        visible={packageDetailVisible}
+        pkg={detailPackage}
+        onClose={() => {
+          setPackageDetailVisible(false);
+          setDetailPackage(null);
+        }}
+        onReserve={() => openPackagePayment(detailPackage)}
+        getImage={getPackageImage}
+        getGradient={getPackageGradient}
+        formatPrice={formatPrice}
+      />
+
       <FilterModal
         visible={filtersVisible}
         onClose={() => setFiltersVisible(false)}
@@ -516,7 +642,10 @@ const HomeScreen = ({ navigation }) => {
         distanceKm={distanceKm}
         setDistanceKm={setDistanceKm}
         categories={categories}
-        onApply={() => { setFiltersVisible(false); performSearch(); }}
+        onApply={() => {
+          setFiltersVisible(false);
+          performSearch();
+        }}
       />
 
       <ArWebViewModal

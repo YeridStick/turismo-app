@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, TextInput, TouchableOpacity, Image } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, Text, TextInput, TouchableOpacity, Image, Animated, Easing } from "react-native";
 import { BlurView } from "expo-blur";
 import { FontAwesome } from "@expo/vector-icons";
 import { COLORS } from "../utils/constants";
@@ -16,6 +16,61 @@ const HomeHeader = ({
   searchSuggestions,
   onSelectSuggestion,
 }) => {
+  const introAnim = useRef(new Animated.Value(0)).current;
+  const chipsFloatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(introAnim, {
+      toValue: 1,
+      duration: 620,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    const floating = Animated.loop(
+      Animated.sequence([
+        Animated.timing(chipsFloatAnim, {
+          toValue: 1,
+          duration: 2600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(chipsFloatAnim, {
+          toValue: 0,
+          duration: 2600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    floating.start();
+    return () => floating.stop();
+  }, [chipsFloatAnim, introAnim]);
+
+  const heroInStyle = {
+    opacity: introAnim,
+    transform: [
+      {
+        translateY: introAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [14, 0],
+        }),
+      },
+    ],
+  };
+
+  const floatingChipStyle = {
+    transform: [
+      {
+        translateY: chipsFloatAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -3],
+        }),
+      },
+    ],
+  };
+
   const travelHighlights = [
     { id: "nature", icon: "leaf", label: "Naturaleza" },
     { id: "culture", icon: "university", label: "Cultura" },
@@ -55,34 +110,34 @@ const HomeHeader = ({
           )}
         </View>
 
-        <View style={styles.heroBadge}>
+        <Animated.View style={[styles.heroBadge, heroInStyle]}>
           <Text style={styles.heroBadgeText}>+10 mil viajeros felices</Text>
-        </View>
+        </Animated.View>
 
-        <Text style={styles.heroTitle}>Descubre{"\n"}el Huila</Text>
-        <Text style={styles.heroSubtitle}>
-          Paisajes unicos, cultura ancestral y aventura.
-        </Text>
+        <Animated.Text style={[styles.heroTitle, heroInStyle]}>Descubre{"\n"}el Huila</Animated.Text>
+        <Animated.Text style={[styles.heroSubtitle, heroInStyle]}>
+          Naturaleza, pueblos patrimoniales y rutas de aventura.
+        </Animated.Text>
 
-        <View style={styles.heroHighlightsRow}>
+        <Animated.View style={[styles.heroHighlightsRow, floatingChipStyle, heroInStyle]}>
           {travelHighlights.map((highlight) => (
             <View key={highlight.id} style={styles.heroHighlightChip}>
               <FontAwesome name={highlight.icon} size={12} color={COLORS.primary} />
               <Text style={styles.heroHighlightText}>{highlight.label}</Text>
             </View>
           ))}
-        </View>
+        </Animated.View>
 
-        <View style={styles.heroMoodRow}>
+        <Animated.View style={[styles.heroMoodRow, floatingChipStyle, heroInStyle]}>
           {travelMood.map((item) => (
             <View key={item.id} style={styles.heroMoodChip}>
               <FontAwesome name={item.icon} size={11} color="#FB923C" />
               <Text style={styles.heroMoodText}>{item.label}</Text>
             </View>
           ))}
-        </View>
+        </Animated.View>
 
-        <View style={styles.searchCard}>
+        <Animated.View style={[styles.searchCard, heroInStyle]}>
           <View style={styles.searchRow}>
             <View style={styles.searchInputWrapper}>
               <FontAwesome name="search" size={15} color={COLORS.primary} />
@@ -125,7 +180,7 @@ const HomeHeader = ({
               ))}
             </View>
           ) : null}
-        </View>
+        </Animated.View>
       </BlurView>
     </View>
   );
