@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
 import { getPackages, deletePackage, getAgencyPackages } from '../services/api';
 import { useRoute } from '@react-navigation/native';
+import { PremiumModal } from '../components/ui/PremiumModal';
 
 const COLORS = {
     primary: '#0E7490',
@@ -27,15 +28,52 @@ const COLORS = {
     border: '#E2E8F0',
 };
 
+const normalizePackage = (pkg) => {
+    const toNumber = (value, fallback = 0) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+    };
+
+    return {
+        ...pkg,
+        id: pkg?.id ?? pkg?.package_id ?? `tmp-${Date.now()}`,
+        title: typeof pkg?.title === 'string' ? pkg.title : 'Paquete sin titulo',
+        city: typeof pkg?.city === 'string' ? pkg.city : '',
+        days: toNumber(pkg?.days, 0),
+        nights: toNumber(pkg?.nights, 0),
+        price: toNumber(pkg?.price, 0),
+        rating: toNumber(pkg?.rating, 0),
+        reviews: toNumber(pkg?.reviews, 0),
+        places: Array.isArray(pkg?.places) ? pkg.places : [],
+    };
+};
+
+const packageFingerprint = (pkg) => {
+    const title = String(pkg?.title || '').trim().toLowerCase();
+    const city = String(pkg?.city || '').trim().toLowerCase();
+    const price = Number(pkg?.price || 0);
+    const days = Number(pkg?.days || 0);
+    const nights = Number(pkg?.nights || 0);
+    return `${title}|${city}|${price}|${days}|${nights}`;
+};
+
 const ManagePackagesScreen = ({ navigation }) => {
     const { user } = useAuth();
     const route = useRoute();
     const agencyId = route.params?.agencyId;
+    const lastHandledCreateKey = useRef(null);
     
     const [loading, setLoading] = useState(true);
     const [packages, setPackages] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [error, setError] = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [statusModal, setStatusModal] = useState({
+        visible: false,
+        type: 'success',
+        title: '',
+        message: '',
+    });
 
     const isAdmin = useMemo(() => {
         return user?.roles?.map(r => r.toLowerCase()).includes('admin');
@@ -47,18 +85,19 @@ const ManagePackagesScreen = ({ navigation }) => {
         try {
             let response;
             if (agencyId) {
-                // Caso: Venimos de una agencia específica en el Dashboard
+                // Caso: Venimos de una agencia especifica en el Dashboard
                 response = await getAgencyPackages(agencyId);
             } else {
-                // Caso: Acceso general (ej. Admin o Menú lateral)
+                // Caso: Acceso general (ej. Admin o Menu lateral)
                 response = await getPackages();
             }
             
             const allPkgs = response.data?.data || response.data || [];
+            const normalizedPkgs = allPkgs.map(normalizePackage);
             
-            // Si no es admin y no hay agencyId, podrías filtrar o mostrar vacío
+            // Si no es admin y no hay agencyId, podrias filtrar o mostrar vacio
             // Pero con los nuevos endpoints, getMyAgencies + getAgencyPackages es el flujo ideal
-            setPackages(allPkgs);
+            setPackages(normalizedPkgs);
         } catch (err) {
             console.error("Error loading packages:", err);
             setError("No se pudieron cargar los servicios.");
@@ -71,31 +110,94 @@ const ManagePackagesScreen = ({ navigation }) => {
         loadPackages();
     }, []);
 
+    useEffect(() => {
+        const createdPackageKey = route.params?.createdPackageKey;
+        const createdPackage = route.params?.createdPackage;
+        if (!createdPackageKey || !createdPackage) return;
+        if (lastHandledCreateKey.current === createdPackageKey) return;
+
+        lastHandledCreateKey.current = createdPackageKey;
+        const normalizedIncoming = normalizePackage(createdPackage);
+        const incomingId = String(normalizedIncoming.id);
+
+        setPackages((prev) => {
+            const idx = prev.findIndex((item) => String(item?.id) === incomingId);
+            if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = { ...copy[idx], ...normalizedIncoming };
+                return copy;
+            }
+            const incomingHasTempId = incomingId.startsWith('tmp-');
+            if (incomingHasTempId) {
+                const incomingPrint = packageFingerprint(normalizedIncoming);
+                const fpIndex = prev.findIndex((item) => packageFingerprint(item) === incomingPrint);
+                if (fpIndex >= 0) {
+                    const copy = [...prev];
+                    copy[fpIndex] = { ...copy[fpIndex], ...normalizedIncoming };
+                    return copy;
+                }
+            }
+            return [normalizedIncoming, ...prev];
+        });
+    }, [route.params?.createdPackageKey, route.params?.createdPackage]);
+
     const filteredPackages = packages.filter(pkg => 
         pkg.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         pkg.city.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleDeletePackage = (id) => {
-        import('react-native').then(({ Alert }) => {
-            Alert.alert(
-                "Eliminar Paquete",
-                "¿Estás seguro que deseas eliminar este paquete turístico?",
-                [
-                    { text: "Cancelar", style: "cancel" },
-                    { text: "Eliminar", style: "destructive", onPress: async () => {
-                        setLoading(true);
-                        try {
-                            await deletePackage(id);
-                            loadPackages();
-                        } catch (err) {
-                            console.error(err);
-                            setLoading(false);
-                        }
-                    }}
-                ]
+    const handleCreatePackage = () => {
+        if (agencyId) {
+            navigation.navigate("CreatePackage", { agencyId });
+            return;
+        }
+        navigation.navigate("CreatePackage");
+    };
+
+    const handleDeletePackage = (pkg) => {
+        const packageId = pkg?.id ?? pkg?.package_id;
+        if (!packageId) {
+            setStatusModal({
+                visible: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo identificar el paquete para eliminar.',
+            });
+            return;
+        }
+        setDeleteTarget(pkg);
+    };
+
+    const confirmDeletePackage = async () => {
+        const packageId = deleteTarget?.id ?? deleteTarget?.package_id;
+        if (!packageId) {
+            setDeleteTarget(null);
+            return;
+        }
+        setDeleteTarget(null);
+        setLoading(true);
+        try {
+            await deletePackage(packageId);
+            setPackages((prev) =>
+                prev.filter((item) => String(item?.id ?? item?.package_id) !== String(packageId))
             );
-        });
+            setStatusModal({
+                visible: true,
+                type: 'success',
+                title: 'Paquete eliminado',
+                message: 'El paquete turistico fue eliminado correctamente.',
+            });
+        } catch (err) {
+            console.error(err);
+            setStatusModal({
+                visible: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo eliminar el paquete. Intenta de nuevo.',
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const formatCurrency = (value) => {
@@ -125,7 +227,7 @@ const ManagePackagesScreen = ({ navigation }) => {
                     <Ionicons name="location-sharp" size={14} color={COLORS.accent} />
                     <Text style={styles.pkgCity}>{pkg.city}</Text>
                     <View style={styles.dot} />
-                    <Text style={styles.pkgDays}>{pkg.days} Días / {pkg.nights} Noches</Text>
+                    <Text style={styles.pkgDays}>{pkg.days} Dias / {pkg.nights} Noches</Text>
                 </View>
 
                 {/* Atractivos Incluidos */}
@@ -151,13 +253,25 @@ const ManagePackagesScreen = ({ navigation }) => {
                         <Ionicons name="star" size={12} color="#F59E0B" />
                         <Text style={styles.pkgStatText}>{pkg.rating}</Text>
                     </View>
-                    <Text style={styles.pkgStatReviews}>({pkg.reviews} reseñas)</Text>
+                    <Text style={styles.pkgStatReviews}>({pkg.reviews} resenas)</Text>
                 </View>
                 <View style={styles.cardActions}>
-                    <TouchableOpacity style={styles.editBtn} onPress={() => navigation.navigate("CreatePackage", { packageId: pkg.id })}>
+                    <TouchableOpacity
+                        style={styles.editBtn}
+                        onPress={(e) => {
+                            e?.stopPropagation?.();
+                            navigation.navigate("CreatePackage", { packageId: pkg.id });
+                        }}
+                    >
                         <MaterialIcons name="edit" size={18} color={COLORS.accent} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeletePackage(pkg.id)}>
+                    <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={(e) => {
+                            e?.stopPropagation?.();
+                            handleDeletePackage(pkg);
+                        }}
+                    >
                         <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
                     </TouchableOpacity>
                 </View>
@@ -174,7 +288,7 @@ const ManagePackagesScreen = ({ navigation }) => {
                 <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
                     <Ionicons name="chevron-back" size={24} color={COLORS.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Gestión de Paquetes</Text>
+                <Text style={styles.headerTitle}>Gestion de Paquetes</Text>
                 <TouchableOpacity style={styles.refreshBtn} onPress={loadPackages}>
                     <Ionicons name="refresh" size={20} color={COLORS.text} />
                 </TouchableOpacity>
@@ -212,7 +326,7 @@ const ManagePackagesScreen = ({ navigation }) => {
                     showsVerticalScrollIndicator={false}
                 >
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Catálogo Publicado</Text>
+                        <Text style={styles.sectionTitle}>Catalogo Publicado</Text>
                         <Text style={styles.pkgCount}>{filteredPackages.length} Total</Text>
                     </View>
 
@@ -227,7 +341,7 @@ const ManagePackagesScreen = ({ navigation }) => {
 
                     <TouchableOpacity 
                         style={styles.addBtnFloating}
-                        onPress={() => navigation.navigate("CreatePackage")}
+                        onPress={handleCreatePackage}
                     >
                         <LinearGradient
                             colors={[COLORS.primary, '#14B8A6']}
@@ -241,6 +355,25 @@ const ManagePackagesScreen = ({ navigation }) => {
                     </TouchableOpacity>
                 </ScrollView>
             )}
+
+            <PremiumModal
+                visible={!!deleteTarget}
+                type="warning"
+                title="Eliminar paquete"
+                message="Estas seguro que deseas eliminar este paquete turistico?"
+                confirmText="Eliminar"
+                onConfirm={confirmDeletePackage}
+                onClose={() => setDeleteTarget(null)}
+            />
+
+            <PremiumModal
+                visible={statusModal.visible}
+                type={statusModal.type}
+                title={statusModal.title}
+                message={statusModal.message}
+                onConfirm={() => setStatusModal((prev) => ({ ...prev, visible: false }))}
+                onClose={() => setStatusModal((prev) => ({ ...prev, visible: false }))}
+            />
         </View>
     );
 };
@@ -533,3 +666,4 @@ const styles = StyleSheet.create({
 });
 
 export default ManagePackagesScreen;
+

@@ -430,17 +430,23 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Agencies Section */}
-        {agencies.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionIntro}>
-              <View style={styles.sectionTitleAccent} />
-              <View style={styles.sectionIconBubble}>
-                <FontAwesome name="building-o" size={11} color="#FB923C" />
-              </View>
-              <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
+        {/* Agencies + Packages (Unified Section) */}
+        <View style={styles.section}>
+          <View style={styles.sectionIntro}>
+            <View style={styles.sectionTitleAccent} />
+            <View style={styles.sectionIconBubble}>
+              <FontAwesome
+                name={agencies.length > 0 ? "building-o" : "suitcase"}
+                size={11}
+                color="#FB923C"
+              />
             </View>
+            <Text style={styles.sectionHeroTitle}>
+              {agencies.length > 0 ? "Agencias locales" : "Paquetes turísticos"}
+            </Text>
+          </View>
 
+          {agencies.length > 0 && (
             <FlatList
               horizontal
               data={agencies}
@@ -456,12 +462,14 @@ const HomeScreen = ({ navigation }) => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalList}
             />
-          </View>
-        )}
+          )}
 
-        {/* Packages Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionIntro}>
+          <View
+            style={[
+              styles.sectionIntro,
+              { paddingTop: agencies.length > 0 ? 14 : 0, paddingBottom: 12 },
+            ]}
+          >
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
               <FontAwesome name="suitcase" size={11} color="#FB923C" />

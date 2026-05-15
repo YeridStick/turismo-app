@@ -14,8 +14,9 @@ import {
   View,
 } from "react-native";
 import { useRoute } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
 import { ENDPOINTS } from "../config/api.config";
-import api, { getPackageById, updatePackage } from "../services/api";
+import api, { getAgencies, getPackageById, updatePackage } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
@@ -27,13 +28,20 @@ const parseList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const parseNumberList = (value) =>
-  value
-    .split(",")
-    .map((item) => Number(item.trim()))
-    .filter((item) => Number.isFinite(item));
+const extractApiErrorMessage = (error, fallback) => {
+  const data = error?.response?.data;
+  if (typeof data?.message === "string" && data.message.trim()) return data.message.trim();
+  if (typeof data?.error === "string" && data.error.trim()) return data.error.trim();
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    const first = data.errors[0];
+    if (typeof first === "string" && first.trim()) return first.trim();
+    if (typeof first?.message === "string" && first.message.trim()) return first.message.trim();
+  }
+  return fallback;
+};
 
 const CreatePackageScreen = ({ navigation }) => {
+  const { roles } = useAuth();
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -53,9 +61,19 @@ const CreatePackageScreen = ({ navigation }) => {
 
   const route = useRoute();
   const packageId = route.params?.packageId;
+  const initialAgencyId = route.params?.agencyId ? Number(route.params.agencyId) : null;
+  const isAdmin = (roles || []).map((r) => String(r).toLowerCase()).includes("admin");
 
   const [selectedPlaceIds, setSelectedPlaceIds] = useState([]);
+  const [selectedAgencyId, setSelectedAgencyId] = useState(initialAgencyId);
+  const [agencyModalVisible, setAgencyModalVisible] = useState(false);
+  const [agenciesLoader, setAgenciesLoader] = useState({
+    data: [],
+    loading: false,
+    loaded: false,
+  });
   const [loading, setLoading] = useState(false);
+  const [creationCompleted, setCreationCompleted] = useState(false);
   const [modal, setModal] = useState({ visible: false, type: 'error', title: '', message: '', onConfirm: null });
 
   React.useEffect(() => {
@@ -63,6 +81,12 @@ const CreatePackageScreen = ({ navigation }) => {
       loadExistingPackage(packageId);
     }
   }, [packageId]);
+
+  React.useEffect(() => {
+    if (!isAdmin || packageId) return;
+    loadAgencies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, packageId]);
 
   const loadExistingPackage = async (id) => {
     setLoading(true);
@@ -90,7 +114,7 @@ const CreatePackageScreen = ({ navigation }) => {
           setSelectedPlaceIds(pkg.places.map((p) => p.place_id || p.id));
         }
       }
-    } catch (err) {
+    } catch (_err) {
       setModal({
         visible: true,
         type: 'error',
@@ -101,6 +125,43 @@ const CreatePackageScreen = ({ navigation }) => {
       setLoading(false);
     }
   };
+
+  const loadAgencies = React.useCallback(async () => {
+    setAgenciesLoader((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await getAgencies();
+      const raw = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      const agencies = raw
+        .map((item) => ({
+          id: Number(item?.id),
+          name: item?.name || `Agencia ${item?.id ?? ""}`.trim(),
+          email: item?.email || "",
+        }))
+        .filter((item) => Number.isFinite(item.id));
+
+      setAgenciesLoader({
+        data: agencies,
+        loading: false,
+        loaded: true,
+      });
+
+      if (initialAgencyId && agencies.some((item) => item.id === initialAgencyId)) {
+        setSelectedAgencyId(initialAgencyId);
+      }
+    } catch (_err) {
+      setAgenciesLoader({
+        data: [],
+        loading: false,
+        loaded: true,
+      });
+      setModal({
+        visible: true,
+        type: "error",
+        title: "Error",
+        message: "No se pudo cargar el listado de agencias.",
+      });
+    }
+  }, [initialAgencyId]);
 
   // Modal & Pagination State for Places
   const [modalVisible, setModalVisible] = useState(false);
@@ -128,7 +189,7 @@ const CreatePackageScreen = ({ navigation }) => {
         hasMore,
         loading: false,
       }));
-    } catch (err) {
+    } catch (_err) {
       setPlacesLoader((prev) => ({ ...prev, loading: false }));
     }
   };
@@ -150,7 +211,18 @@ const CreatePackageScreen = ({ navigation }) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const selectedAgency = agenciesLoader.data.find((item) => item.id === selectedAgencyId);
+
+  const handleOpenAgencyModal = async () => {
+    setAgencyModalVisible(true);
+    if (!agenciesLoader.loaded && !agenciesLoader.loading) {
+      await loadAgencies();
+    }
+  };
+
   const handleSubmit = async () => {
+    if (!packageId && creationCompleted) return;
+
     if (
       !form.title?.trim() ||
       !form.description?.trim() ||
@@ -170,6 +242,7 @@ const CreatePackageScreen = ({ navigation }) => {
     }
     setLoading(true);
     try {
+      let createdPackage = null;
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -191,7 +264,42 @@ const CreatePackageScreen = ({ navigation }) => {
       if (packageId) {
         await updatePackage(packageId, payload);
       } else {
-        await api.post(ENDPOINTS.PACKAGES, payload);
+        if (isAdmin && selectedAgencyId) {
+          payload.agencyId = selectedAgencyId;
+        }
+        const createRes = await api.post(ENDPOINTS.PACKAGES, payload);
+        createdPackage = createRes?.data?.data || createRes?.data || null;
+      }
+
+      const packageForList = !packageId
+        ? {
+            ...(createdPackage && typeof createdPackage === "object" ? createdPackage : {}),
+            ...payload,
+            id: createdPackage?.id || createdPackage?.package_id || `tmp-${Date.now()}`,
+            placeIds: selectedPlaceIds,
+            places: Array.isArray(createdPackage?.places) ? createdPackage.places : [],
+          }
+        : null;
+
+      if (!packageId) {
+        setCreationCompleted(true);
+        const returnParams = {
+          agencyId: initialAgencyId || undefined,
+          createdPackage: packageForList,
+          createdPackageKey: Date.now(),
+        };
+
+        if (typeof navigation?.popTo === "function") {
+          navigation.popTo("ManagePackages", returnParams);
+        } else {
+          navigation.navigate({
+            name: "ManagePackages",
+            params: returnParams,
+            merge: true,
+          });
+          navigation.goBack?.();
+        }
+        return;
       }
 
       setModal({
@@ -200,34 +308,24 @@ const CreatePackageScreen = ({ navigation }) => {
         title: packageId ? '¡Paquete Actualizado!' : '¡Paquete Lanzado!',
         message: packageId ? 'Los cambios han sido guardados.' : 'Tu nuevo paquete turístico ha sido creado correctamente.',
         onConfirm: () => {
-          if (!packageId) {
-            setForm({
-              title: "",
-              description: "",
-              price: "",
-              city: "",
-              days: "",
-              nights: "",
-              people: "",
-              rating: "",
-              reviews: "",
-              originalPrice: "",
-              discount: "",
-              tag: "",
-              includes: "",
-              image: "",
-            });
-            setSelectedPlaceIds([]);
-          }
-          setModal(prev => ({ ...prev, visible: false }));
-        }
+          setModal((prev) => ({ ...prev, visible: false }));
+        },
       });
     } catch (err) {
+      const status = err?.response?.status;
+      let fallback = "No pudimos registrar el paquete en este momento. Revisa los datos e intenta de nuevo.";
+      if (status === 400) {
+        fallback = "Solicitud invalida. Verifica que no envies agencyId y agencyEmail al mismo tiempo.";
+      } else if (status === 404) {
+        fallback = "La agencia seleccionada no existe o no esta disponible.";
+      } else if (status === 409) {
+        fallback = "Hay placeIds que no existen. Revisa los lugares seleccionados.";
+      }
       setModal({
         visible: true,
         type: 'error',
         title: 'Error al crear',
-        message: 'No pudimos registrar el paquete en este momento. Revisa los datos e intenta de nuevo.'
+        message: extractApiErrorMessage(err, fallback),
       });
     } finally {
       setLoading(false);
@@ -254,6 +352,29 @@ const CreatePackageScreen = ({ navigation }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+        {isAdmin && !packageId && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <FontAwesome name="building" size={18} color={ACCENT} />
+              <Text style={styles.cardTitle}>Agencia del paquete</Text>
+            </View>
+            <Text style={styles.sectionLabel}>Asignacion de agencia (solo admin)</Text>
+            <TouchableOpacity style={styles.selectorButton} onPress={handleOpenAgencyModal}>
+              <Text style={styles.selectorText}>
+                {selectedAgency
+                  ? `${selectedAgency.name}${selectedAgency.email ? ` (${selectedAgency.email})` : ""}`
+                  : "Usar agencia asociada a mi usuario"}
+              </Text>
+              <FontAwesome name="chevron-down" size={14} color={ACCENT} />
+            </TouchableOpacity>
+            {!!selectedAgencyId && (
+              <TouchableOpacity onPress={() => setSelectedAgencyId(null)} style={styles.clearAgencyButton}>
+                <Text style={styles.clearAgencyText}>Quitar seleccion y usar mi agencia por defecto</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* CARD 1: INFORMACION BASE */}
         <View style={styles.card}>
@@ -442,9 +563,9 @@ const CreatePackageScreen = ({ navigation }) => {
         </View>
 
         <TouchableOpacity
-          style={[styles.submitButton, loading && styles.buttonDisabled]}
+          style={[styles.submitButton, (loading || (!packageId && creationCompleted)) && styles.buttonDisabled]}
           onPress={handleSubmit}
-          disabled={loading}
+          disabled={loading || (!packageId && creationCompleted)}
           activeOpacity={0.8}
         >
           <Text style={styles.submitText}>
@@ -465,6 +586,78 @@ const CreatePackageScreen = ({ navigation }) => {
         onConfirm={modal.onConfirm || (() => setModal(prev => ({ ...prev, visible: false })))}
         onClose={() => setModal(prev => ({ ...prev, visible: false }))}
       />
+
+      <Modal
+        visible={agencyModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAgencyModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Seleccionar agencia</Text>
+            <TouchableOpacity onPress={() => setAgencyModalVisible(false)}>
+              <FontAwesome name="close" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={agenciesLoader.data}
+            keyExtractor={(item) => `agency-opt-${item.id}`}
+            contentContainerStyle={styles.modalList}
+            ListHeaderComponent={
+              <TouchableOpacity
+                style={[styles.modalItem, !selectedAgencyId && styles.modalItemSelected]}
+                onPress={() => setSelectedAgencyId(null)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.modalItemInfo}>
+                  <Text style={styles.modalItemTitle}>Agencia por defecto (mi usuario)</Text>
+                  <Text style={styles.modalItemSub}>El backend usa la agencia asociada a tu cuenta.</Text>
+                </View>
+                <FontAwesome
+                  name={!selectedAgencyId ? "check-circle" : "circle-thin"}
+                  size={24}
+                  color={!selectedAgencyId ? ACCENT : COLORS.border}
+                />
+              </TouchableOpacity>
+            }
+            renderItem={({ item }) => {
+              const isSelected = selectedAgencyId === item.id;
+              return (
+                <TouchableOpacity
+                  style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                  onPress={() => setSelectedAgencyId(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.modalItemInfo}>
+                    <Text style={styles.modalItemTitle}>{item.name}</Text>
+                    <Text style={styles.modalItemSub}>{item.email || "Sin email"}</Text>
+                  </View>
+                  <FontAwesome
+                    name={isSelected ? "check-circle" : "circle-thin"}
+                    size={24}
+                    color={isSelected ? ACCENT : COLORS.border}
+                  />
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={
+              agenciesLoader.loading ? (
+                <ActivityIndicator style={{ marginTop: 36 }} color={ACCENT} />
+              ) : (
+                <Text style={styles.emptySelectorText}>No hay agencias disponibles.</Text>
+              )
+            }
+          />
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity style={styles.modalDoneButton} onPress={() => setAgencyModalVisible(false)}>
+              <Text style={styles.submitText}>Confirmar agencia</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* PLACES MODAL */}
       <Modal
@@ -634,6 +827,15 @@ const styles = StyleSheet.create({
     color: ACCENT,
     fontWeight: "600",
   },
+  clearAgencyButton: {
+    marginTop: SPACING.sm,
+    alignSelf: "flex-start",
+  },
+  clearAgencyText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    textDecorationLine: "underline",
+  },
   submitButton: {
     marginTop: SPACING.sm,
     backgroundColor: ACCENT,
@@ -679,6 +881,12 @@ const styles = StyleSheet.create({
   },
   modalList: {
     padding: SPACING.md,
+  },
+  emptySelectorText: {
+    textAlign: "center",
+    color: COLORS.textLight,
+    marginTop: SPACING.lg,
+    fontSize: FONT_SIZES.sm,
   },
   modalItem: {
     flexDirection: "row",

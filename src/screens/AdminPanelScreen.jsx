@@ -15,6 +15,7 @@ import { BlurView } from 'expo-blur';
 import { getAgencies, createAgency, updateAgency, deleteAgency, getAgencyUsers, addAgencyUser, updateAgencyUser, deleteAgencyUser } from '../services/api';
 import api from '../services/api';
 import { PremiumModal } from '../components/ui/PremiumModal';
+import { useAuth } from '../context/AuthContext';
 
 const ACCENT = "#0E7490";
 const COLORS = {
@@ -24,13 +25,17 @@ const COLORS = {
     card: "#F8FAFC",
 };
 
-const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
+const normalizeEmail = (value) => (value || '').trim().toLowerCase();
+
+const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUserEmail }) => {
+    const creatorEmail = (currentUserEmail || '').trim();
+    const creatorKey = normalizeEmail(creatorEmail);
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [logoUrl, setLogoUrl] = useState('');
     const [loading, setLoading] = useState(false);
-    const [repEmails, setRepEmails] = useState([{ id: null, email: '', isNew: true }]);
+    const [repEmails, setRepEmails] = useState([{ id: null, email: '', isNew: true, isCreator: false, isLocked: false }]);
     const [originalReps, setOriginalReps] = useState([]);
     const [deletedRepIds, setDeletedRepIds] = useState([]);
     const [repError, setRepError] = useState('');
@@ -49,8 +54,29 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
                 return { id: u.id || null, email: u.email || u };
             });
             
+            let repsWithCreator = normalized.map((u) => ({
+                ...u,
+                isNew: !u.id,
+                isCreator: creatorKey && normalizeEmail(u.email) === creatorKey,
+                isLocked: creatorKey && normalizeEmail(u.email) === creatorKey,
+            }));
+
+            if (creatorKey && !repsWithCreator.some((u) => u.isCreator)) {
+                repsWithCreator = [
+                    { id: null, email: creatorEmail, isNew: true, isCreator: true, isLocked: true },
+                    ...repsWithCreator,
+                ];
+            }
+
             setOriginalReps(normalized);
-            setRepEmails(normalized.length > 0 ? normalized : [{ id: null, email: '', isNew: true }]);
+            if (repsWithCreator.length > 0) {
+                repsWithCreator.sort((a, b) => (a.isCreator === b.isCreator ? 0 : a.isCreator ? -1 : 1));
+                setRepEmails(repsWithCreator);
+            } else if (creatorKey) {
+                setRepEmails([{ id: null, email: creatorEmail, isNew: true, isCreator: true, isLocked: true }]);
+            } else {
+                setRepEmails([{ id: null, email: '', isNew: true, isCreator: false, isLocked: false }]);
+            }
         } catch (err) {
             console.error("Error loading agency users:", err);
         }
@@ -69,24 +95,33 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
                 setEmail('');
                 setPhone('');
                 setLogoUrl('');
-                setRepEmails([{ id: null, email: '', isNew: true }]);
+                if (creatorKey) {
+                    setRepEmails([{ id: null, email: creatorEmail, isNew: true, isCreator: true, isLocked: true }]);
+                } else {
+                    setRepEmails([{ id: null, email: '', isNew: true, isCreator: false, isLocked: false }]);
+                }
                 setOriginalReps([]);
             }
             setDeletedRepIds([]);
             setRepError('');
         }
-    }, [initialData, visible]);
+    }, [initialData, visible, creatorEmail, creatorKey]);
 
     const updateRepEmail = (value, idx) => {
-        setRepEmails(prev => prev.map((item, i) => i === idx ? { ...item, email: value } : item));
+        setRepEmails(prev => prev.map((item, i) => {
+            if (i !== idx) return item;
+            if (item.isLocked) return item;
+            return { ...item, email: value };
+        }));
     };
 
     const addRepEmail = () => {
-        setRepEmails(prev => [...prev, { id: null, email: '', isNew: true }]);
+        setRepEmails(prev => [...prev, { id: null, email: '', isNew: true, isCreator: false, isLocked: false }]);
     };
 
     const removeRepEmail = (idx) => {
         const target = repEmails[idx];
+        if (!target || target.isLocked) return;
         if (target.id) {
             setDeletedRepIds(prev => [...prev, target.id]);
         }
@@ -95,6 +130,12 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
 
     const handleSubmit = async () => {
         if (!name || !email) return;
+
+        const creatorRep = repEmails.find((r) => r.isCreator);
+        if (creatorKey && (!creatorRep || normalizeEmail(creatorRep.email) !== creatorKey)) {
+            setRepError('El correo del creador es obligatorio y no se puede quitar.');
+            return;
+        }
 
         const filledEmails = repEmails.filter(r => r.email.trim() !== '');
         if (filledEmails.length === 0 && !initialData) {
@@ -127,7 +168,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
                         // Nuevo: POST (Enviamos el correo de la agencia y el nuevo correo para vincularlos)
                         await addAgencyUser({ emailAgencia: email, email: rep.email });
                     } else if (rep.id) {
-                        // Existente y con ID: Ver si cambió (PATCH)
+                        // Existente y con ID: Ver si cambio (PATCH)
                         const original = originalReps.find(o => o.id === rep.id);
                         if (original && original.email !== rep.email) {
                             await updateAgencyUser(agencyId, rep.id, { email: rep.email });
@@ -172,34 +213,41 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
                     <ScrollView showsVerticalScrollIndicator={false}>
                         <Text style={styles.inputLabel}>Nombre de la Agencia</Text>
                         <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Ej. Turismo Huila" />
-                        <Text style={styles.inputLabel}>Correo Electrónico</Text>
+                        <Text style={styles.inputLabel}>Correo Electronico</Text>
                         <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="agencia@ejemplo.com" keyboardType="email-address" />
-                        <Text style={styles.inputLabel}>Teléfono</Text>
+                        <Text style={styles.inputLabel}>Telefono</Text>
                         <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="300 123 4567" keyboardType="phone-pad" />
                         <Text style={styles.inputLabel}>URL del Logo</Text>
                         <TextInput style={styles.input} value={logoUrl} onChangeText={setLogoUrl} placeholder="https://..." />
 
-                        {/* ─── SECCIÓN REPRESENTANTES ─────────────────── */}
+                        {/* SECCION CREADOR Y COLABORADORES */}
                         <View style={styles.repSection}>
                             <View style={styles.repSectionHeader}>
                                 <Ionicons name="people" size={16} color={ACCENT} />
-                                <Text style={styles.repSectionTitle}>Representantes de la Agencia</Text>
+                                <Text style={styles.repSectionTitle}>Creador y Colaboradores</Text>
                             </View>
-                            <Text style={styles.repSectionHint}>Al menos un correo registrado en la plataforma es requerido.</Text>
+                            <Text style={styles.repSectionHint}>El creador queda vinculado por defecto. Puedes agregar mas usuarios.</Text>
 
                             {repEmails.map((rep, idx) => (
                                 <View key={idx} style={styles.repRow}>
                                     <TextInput
-                                        style={[styles.input, styles.repInput]}
+                                        style={[styles.input, styles.repInput, rep.isLocked && styles.repInputLocked]}
                                         value={rep.email}
                                         onChangeText={(v) => updateRepEmail(v, idx)}
-                                        placeholder={`Correo representante ${idx + 1}`}
+                                        placeholder={rep.isCreator ? 'Correo del creador' : `Correo usuario ${idx + 1}`}
                                         keyboardType="email-address"
                                         autoCapitalize="none"
+                                        editable={!rep.isLocked}
                                     />
-                                    <TouchableOpacity onPress={() => removeRepEmail(idx)} style={styles.repRemoveBtn}>
-                                        <Ionicons name="close-circle" size={22} color="#EF4444" />
-                                    </TouchableOpacity>
+                                    {rep.isCreator ? (
+                                        <View style={styles.creatorBadge}>
+                                            <Text style={styles.creatorBadgeText}>Creador</Text>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity onPress={() => removeRepEmail(idx)} style={styles.repRemoveBtn}>
+                                            <Ionicons name="close-circle" size={22} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             ))}
 
@@ -207,7 +255,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
 
                             <TouchableOpacity style={styles.addRepBtn} onPress={addRepEmail}>
                                 <Ionicons name="add-circle-outline" size={18} color={ACCENT} />
-                                <Text style={styles.addRepText}>¿Desea agregar otro representante?</Text>
+                                <Text style={styles.addRepText}>Agregar otro usuario</Text>
                             </TouchableOpacity>
                         </View>
 
@@ -230,6 +278,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData }) => {
 };
 
 const AdminPanelScreen = ({ navigation }) => {
+    const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [agencies, setAgencies] = useState([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -255,7 +304,7 @@ const AdminPanelScreen = ({ navigation }) => {
         import('react-native').then(({ Alert }) => {
             Alert.alert(
                 "Eliminar Agencia",
-                "¿Estás seguro que deseas eliminar esta agencia? Los paquetes asociados también serán eliminados.",
+                "Estas seguro de eliminar esta agencia? Los paquetes asociados tambien seran eliminados.",
                 [
                     { text: "Cancelar", style: "cancel" },
                     { text: "Eliminar", style: "destructive", onPress: async () => {
@@ -286,7 +335,7 @@ const AdminPanelScreen = ({ navigation }) => {
                 <Text style={styles.agencyCardName}>{item.name}</Text>
                 <Text style={styles.agencyCardEmail}>{item.email}</Text>
                 <View style={styles.badgeRow}>
-                    <Text style={styles.cardPhone}>{item.phone || "Sin teléfono"}</Text>
+                    <Text style={styles.cardPhone}>{item.phone || "Sin telefono"}</Text>
                 </View>
             </View>
             <View style={styles.cardActions}>
@@ -311,7 +360,7 @@ const AdminPanelScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 <View>
                     <Text style={styles.headerTitle}>Centro de Control</Text>
-                    <Text style={styles.headerSubtitle}>Gestión global de agencias</Text>
+                    <Text style={styles.headerSubtitle}>Gestion global de agencias</Text>
                 </View>
                 <TouchableOpacity style={styles.addBtnHeader} onPress={() => {
                     setEditingAgency(null);
@@ -348,6 +397,7 @@ const AdminPanelScreen = ({ navigation }) => {
                 onClose={() => setShowCreateModal(false)} 
                 onSuccess={loadAgencies}
                 initialData={editingAgency}
+                currentUserEmail={user?.email || ''}
             />
         </View>
     );
@@ -513,6 +563,25 @@ const styles = StyleSheet.create({
         flex: 1,
         marginBottom: 10,
     },
+    repInputLocked: {
+        backgroundColor: "#EEF6F8",
+        borderColor: "rgba(14,116,144,0.35)",
+        color: "#0E7490",
+    },
+    creatorBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
+        backgroundColor: "rgba(14,116,144,0.12)",
+        borderWidth: 1,
+        borderColor: "rgba(14,116,144,0.3)",
+        marginBottom: 10,
+    },
+    creatorBadgeText: {
+        color: ACCENT,
+        fontSize: 11,
+        fontWeight: "700",
+    },
     repRemoveBtn: {
         paddingBottom: 10,
         paddingLeft: 4,
@@ -538,3 +607,5 @@ const styles = StyleSheet.create({
 });
 
 export default AdminPanelScreen;
+
+

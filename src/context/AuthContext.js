@@ -128,14 +128,14 @@ export const AuthProvider = ({ children }) => {
       if (isPayloadAuthFailure(payload)) {
         return {
           success: false,
-          error: extractPayloadMessage(payload) || 'Usuario o código TOTP incorrecto.',
+          error: extractPayloadMessage(payload) || 'Usuario o codigo TOTP incorrecto.',
         };
       }
       const token = payload?.token || payload?.accessToken || payload?.access_token;
       if (!token || typeof token !== 'string') {
         return {
           success: false,
-          error: extractPayloadMessage(payload) || 'No se recibió un token de autenticación.',
+          error: extractPayloadMessage(payload) || 'No se recibio un token de autenticacion.',
         };
       }
 
@@ -151,8 +151,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       const status = error?.response?.status;
       const fallback = status === 401 || status === 403
-        ? 'Usuario o código TOTP incorrecto.'
-        : 'Error al iniciar sesión con TOTP';
+        ? 'Usuario o codigo TOTP incorrecto.'
+        : 'Error al iniciar sesion con TOTP';
       return {
         success: false,
         error: extractApiErrorMessage(error, fallback),
@@ -167,14 +167,14 @@ export const AuthProvider = ({ children }) => {
       if (isPayloadAuthFailure(payload)) {
         return {
           success: false,
-          error: extractPayloadMessage(payload) || 'Usuario o contraseña incorrectos.',
+          error: extractPayloadMessage(payload) || 'Usuario o contrasena incorrectos.',
         };
       }
       const token = payload?.token || payload?.accessToken || payload?.access_token;
       if (!token || typeof token !== 'string') {
         return {
           success: false,
-          error: extractPayloadMessage(payload) || 'No se recibió un token de autenticación.',
+          error: extractPayloadMessage(payload) || 'No se recibio un token de autenticacion.',
         };
       }
 
@@ -190,8 +190,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       const status = error?.response?.status;
       const fallback = status === 401 || status === 403
-        ? 'Usuario o contraseña incorrectos.'
-        : 'Error al iniciar sesión con contraseña';
+        ? 'Usuario o contrasena incorrectos.'
+        : 'Error al iniciar sesion con contrasena';
       return {
         success: false,
         error: extractApiErrorMessage(error, fallback),
@@ -215,7 +215,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // GET /api/auth/email/verify?token=...
       const response = await api.get(ENDPOINTS.EMAIL_VERIFY, { params: { token } });
-      const userData = await fetchUserInfo(user?.email); // Refrescar info si hay Ã©xito
+      const userData = await fetchUserInfo(user?.email); // Refrescar info si hay exito
       if (userData) {
         await AsyncStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
@@ -224,7 +224,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Token invÃ¡lido o expirado',
+        error: error.response?.data?.message || 'Token invalido o expirado',
       };
     }
   };
@@ -243,7 +243,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    // 1. Limpiar estado local inmediatamente para respuesta instantÃ¡nea
+    // 1. Limpiar estado local inmediatamente para respuesta instantanea
     setUser(null);
     setRoles([]);
     
@@ -269,7 +269,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'No se pudo confirmar la recuperaciÃ³n',
+        error: error.response?.data?.message || 'No se pudo confirmar la recuperacion',
       };
     }
   };
@@ -319,3 +319,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

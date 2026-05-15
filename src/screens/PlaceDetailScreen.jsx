@@ -90,7 +90,7 @@ const parseFiniteNumber = (value) => {
 const IMAGE_PLACEHOLDER =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
 
-// --- NUEVO COMPONENTE: GALERÃƒÆ’Ã‚ÂA HD ---
+// --- NUEVO COMPONENTE: GALERIA HD ---
 const ImageGalleryModal = ({ visible, images, initialIndex, onClose }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   
@@ -186,7 +186,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     return [{ id: 'placeholder', uri: IMAGE_PLACEHOLDER }];
   }, [place.imageUrls]);
 
-  // --- LÃƒÆ’Ã¢â‚¬Å“GICA DE AUTO-PLAY ---
+  // --- LOGICA DE AUTO-PLAY ---
   useEffect(() => {
     if (images.length <= 1 || galleryVisible) return;
     
@@ -402,7 +402,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                   Linking.openURL(url);
                 }}>
                   <Ionicons name="navigate-outline" size={20} color={COLORS.white} />
-                  <Text style={styles.actionButtonText}>Cómo llegar</Text>
+                  <Text style={styles.actionButtonText}>Como llegar</Text>
                 </TouchableOpacity>
               )}
 
@@ -725,3 +725,4 @@ const styles = StyleSheet.create({
 });
 
 export default PlaceDetailScreen;
+
