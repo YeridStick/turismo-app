@@ -4,8 +4,6 @@ import {
     ViroARScene,
     ViroARSceneNavigator,
     ViroDirectionalLight,
-    ViroLightingEnvironment,
-    ViroOmniLight,
 } from '@reactvision/react-viro';
 import React, { useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
@@ -22,12 +20,21 @@ const resolveModelType = (url?: string): "GLB" | "GLTF" | "OBJ" => {
 
 interface ARSceneProps {
     modelUrl?: string;
+    powerSaver?: boolean;
+    onLoadProgress?: (progress: number) => void;
     onModelLoad?: () => void;
     onModelError?: (error: any) => void;
     sceneRef?: any;
 }
 
-const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRef }: ARSceneProps) => {
+const ARScene = ({
+    modelUrl = TEST_MODEL_URL,
+    powerSaver = true,
+    onLoadProgress,
+    onModelLoad,
+    onModelError,
+    sceneRef
+}: ARSceneProps) => {
     const modelType = resolveModelType(modelUrl);
     // Estados tipados correctamente
     const [scale, setScale] = useState<[number, number, number]>([0.05, 0.05, 0.05]);
@@ -124,13 +131,14 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Gesto de Pinch (Escalado)
     const onPinch = (pinchState: any, scaleFactor: number, source: any) => {
         const now = Date.now();
+        const throttleMs = powerSaver ? 24 : 16;
 
         if (pinchState === 1) { // PINCH_STARTED
             baseScale.current = [...scale];
             lastGestureTime.current = now;
         } else if (pinchState === 3) { // PINCH_MOVED
             // Debounce ligero
-            if (now - lastGestureTime.current < 16) return;
+            if (now - lastGestureTime.current < throttleMs) return;
             lastGestureTime.current = now;
 
             const currentScale = baseScale.current[0];
@@ -144,12 +152,13 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     // Gesto de Rotación (Eje Y)
     const onRotate = (rotateState: any, rotationFactor: number, source: any) => {
         const now = Date.now();
+        const throttleMs = powerSaver ? 24 : 16;
 
         if (rotateState === 1) { // ROTATE_STARTED
             baseRotation.current = rotation[1];
             lastGestureTime.current = now;
         } else if (rotateState === 3) { // ROTATE_MOVED
-            if (now - lastGestureTime.current < 16) return;
+            if (now - lastGestureTime.current < throttleMs) return;
             lastGestureTime.current = now;
 
             // rotationFactor viene en grados
@@ -170,6 +179,7 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     const onModelLoadEnd = () => {
         setModelVisible(true);
         console.log(`✓ Modelo cargado correctamente (${modelType})`);
+        onLoadProgress?.(100);
         onModelLoad?.();
     };
 
@@ -182,12 +192,14 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
     return (
         <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
             {/* ILUMINACIÓN OPTIMIZADA (SILK): Solo 2 fuentes para máximo rendimiento sin perder calidad */}
-            <ViroAmbientLight color="#ffffff" intensity={220} />
+            <ViroAmbientLight color="#ffffff" intensity={powerSaver ? 160 : 220} />
             <ViroDirectionalLight
                 color="#ffffff"
                 direction={[0.3, -1, -0.5]}
-                castsShadow={true}
-                intensity={850}
+                castsShadow={!powerSaver}
+                intensity={powerSaver ? 620 : 850}
+                shadowMapSize={powerSaver ? 512 : 768}
+                shadowOpacity={powerSaver ? 0.25 : 0.35}
             />
             {/* OmniLights eliminadas para liberar CPU/GPU */}
 
@@ -204,7 +216,10 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
                     position={position}
                     scale={scale}
                     rotation={rotation}
-                    onLoadStart={() => console.log('Iniciando carga del modelo...')}
+                    onLoadStart={() => {
+                        console.log('Iniciando carga del modelo...');
+                        onLoadProgress?.(65);
+                    }}
                     onLoadEnd={onModelLoadEnd}
                     onError={handleModelError}
 
@@ -221,7 +236,9 @@ const ARScene = ({ modelUrl = TEST_MODEL_URL, onModelLoad, onModelError, sceneRe
 
 interface ARViewerProps {
     modelUrl?: string;
+    powerSaver?: boolean;
     onModelPlaced?: () => void;
+    onLoadProgress?: (progress: number) => void;
     onModelLoad?: () => void;
     onModelError?: (error: any) => void;
     viewerRef?: any;
@@ -229,7 +246,9 @@ interface ARViewerProps {
 
 export const ARViewer: React.FC<ARViewerProps> = ({
     modelUrl,
+    powerSaver = true,
     onModelPlaced,
+    onLoadProgress,
     onModelLoad,
     onModelError,
     viewerRef
@@ -275,6 +294,8 @@ export const ARViewer: React.FC<ARViewerProps> = ({
                 scene: () => (
                     <ARScene
                         modelUrl={modelUrl}
+                        powerSaver={powerSaver}
+                        onLoadProgress={onLoadProgress}
                         onModelLoad={onModelLoad}
                         onModelError={onModelError}
                         sceneRef={sceneRef}

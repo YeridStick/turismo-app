@@ -19,17 +19,23 @@ interface ARScreenProps {
 }
 
 // Badge animado "AR Activo"
-const ARActiveBadge: React.FC = () => {
+const ARActiveBadge: React.FC<{ animate?: boolean }> = ({ animate = true }) => {
     const pulse = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
-        Animated.loop(
+        if (!animate) {
+            pulse.setValue(1);
+            return;
+        }
+        const loop = Animated.loop(
             Animated.sequence([
                 Animated.timing(pulse, { toValue: 0.3, duration: 700, useNativeDriver: true }),
                 Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
             ])
-        ).start();
-    }, []);
+        );
+        loop.start();
+        return () => loop.stop();
+    }, [animate, pulse]);
 
     return (
         <View style={styles.badge}>
@@ -66,13 +72,13 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
 
     const label =
         progress < 20
-            ? 'Activando cámara AR...'
+            ? 'Activando camara AR...'
             : progress < 50
             ? 'Inicializando escena...'
             : progress < 70
             ? 'Cargando modelo 3D...'
             : progress < 90
-            ? 'Procesando geometría...'
+            ? 'Procesando geometria...'
             : 'Preparando experiencia...';
 
     return (
@@ -104,7 +110,7 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
     );
 };
 
-// ... actualizando estilos más abajo ...
+// ... actualizando estilos mas abajo ...
 
 const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const modelUrl = route?.params?.modelUrl;
@@ -116,6 +122,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const [error, setError] = useState<string | null>(null);
     const [showControls, setShowControls] = useState(true);
     const [showHelpHint, setShowHelpHint] = useState(true);
+    const [powerSaverMode, setPowerSaverMode] = useState(true);
 
     const viewerRef = useRef<any>(null);
     const rotationIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -137,7 +144,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     }, []);
 
     // Safety timeout: si en 12s el modelo no carga, ocultar overlay
-    // (evita quedarse atascado si AR no está soportado o el modelo falla)
+    // (evita quedarse atascado si AR no esta soportado o el modelo falla)
     useEffect(() => {
         const timeout = setTimeout(() => {
             setIsLoading(false);
@@ -199,34 +206,44 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
 
     // Controles con haptics
     const handleReset = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (!powerSaverMode) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
         viewerRef.current?.resetPosition();
     };
 
     const handleIncreaseScale = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (!powerSaverMode) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
         viewerRef.current?.increaseScale();
     };
 
     const handleDecreaseScale = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (!powerSaverMode) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
         viewerRef.current?.decreaseScale();
     };
 
     const startRotateLeft = () => {
-        Haptics.selectionAsync();
+        if (!powerSaverMode) {
+            Haptics.selectionAsync();
+        }
         viewerRef.current?.rotateLeft();
         rotationIntervalRef.current = setInterval(() => {
             viewerRef.current?.rotateLeft();
-        }, 80);
+        }, powerSaverMode ? 120 : 80);
     };
 
     const startRotateRight = () => {
-        Haptics.selectionAsync();
+        if (!powerSaverMode) {
+            Haptics.selectionAsync();
+        }
         viewerRef.current?.rotateRight();
         rotationIntervalRef.current = setInterval(() => {
             viewerRef.current?.rotateRight();
-        }, 80);
+        }, powerSaverMode ? 120 : 80);
     };
 
     const stopRotation = () => {
@@ -234,6 +251,10 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
             clearInterval(rotationIntervalRef.current);
             rotationIntervalRef.current = null;
         }
+    };
+
+    const togglePowerSaverMode = () => {
+        setPowerSaverMode(prev => !prev);
     };
 
     const controlsTranslateY = controlsAnim.interpolate({
@@ -247,6 +268,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
 
             <ARViewer
                 modelUrl={modelUrl}
+                powerSaver={powerSaverMode}
                 onModelLoad={handleModelLoad}
                 onModelError={handleModelError}
                 onLoadProgress={handleLoadProgress}
@@ -267,18 +289,34 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 </View>
             )}
 
-            {/* Controles (solo cuando está cargado) */}
+            {/* Controles (solo cuando esta cargado) */}
             {!isLoading && !error && modelLoaded && (
                 <>
                     {/* Header: nombre del lugar + badge + acciones */}
                     <View style={styles.header}>
                         <View style={styles.headerLeft}>
-                            <ARActiveBadge />
+                            <ARActiveBadge animate={!powerSaverMode} />
+                            {powerSaverMode && (
+                                <View style={styles.powerTag}>
+                                    <Text style={styles.powerTagText}>Ahorro termico</Text>
+                                </View>
+                            )}
                             <Text style={styles.placeName} numberOfLines={1}>
                                 {placeName}
                             </Text>
                         </View>
                         <View style={styles.headerRight}>
+                            <TouchableOpacity
+                                style={[styles.headerBtn, powerSaverMode && styles.headerBtnActive]}
+                                onPress={togglePowerSaverMode}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons
+                                    name={powerSaverMode ? 'flash-off-outline' : 'flash-outline'}
+                                    size={18}
+                                    color={powerSaverMode ? '#FBBF24' : '#fff'}
+                                />
+                            </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.headerBtn}
                                 onPress={() => setShowControls(p => !p)}
@@ -304,7 +342,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                     {showHelpHint && (
                         <Animated.View style={[styles.gestureHint, { opacity: hintOpacity }]}>
                             <Text style={styles.gestureHintText}>
-                                ✋ Arrastra  •  🤏 Pellizca  •  🔄 Dos dedos rotan
+                                Arrastra - Pellizca - Dos dedos para rotar
                             </Text>
                         </Animated.View>
                     )}
@@ -323,9 +361,9 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                             {/* Handle */}
                             <View style={styles.sheetHandle} />
 
-                            {/* Sección: Escala */}
+                            {/* Seccion: Escala */}
                             <View style={styles.section}>
-                                <Text style={styles.sectionLabel}>Tamaño</Text>
+                                <Text style={styles.sectionLabel}>Tamano</Text>
                                 <View style={styles.sectionRow}>
                                     <TouchableOpacity
                                         style={styles.controlBtn}
@@ -357,9 +395,9 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                             {/* Separador */}
                             <View style={styles.separator} />
 
-                            {/* Sección: Rotación */}
+                            {/* Seccion: Rotacion */}
                             <View style={styles.section}>
-                                <Text style={styles.sectionLabel}>Rotación</Text>
+                                <Text style={styles.sectionLabel}>Rotacion</Text>
                                 <View style={styles.sectionRow}>
                                     <TouchableOpacity
                                         style={[styles.controlBtn, styles.controlBtnWide]}
@@ -394,7 +432,6 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#000',
     },
-    // ─── Loading ───────────────────────────────────────────────
     loadingOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(8, 8, 20, 0.96)',
@@ -457,7 +494,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 10,
     },
-    // ─── Error ─────────────────────────────────────────────────
     errorBanner: {
         position: 'absolute',
         top: Platform.OS === 'ios' ? 60 : 40,
@@ -482,7 +518,6 @@ const styles = StyleSheet.create({
     errorClose: {
         padding: 4,
     },
-    // ─── Header ────────────────────────────────────────────────
     header: {
         position: 'absolute',
         top: Platform.OS === 'ios' ? 56 : 36,
@@ -513,9 +548,28 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    headerBtnActive: {
+        borderColor: 'rgba(251,191,36,0.55)',
+        backgroundColor: 'rgba(251,191,36,0.16)',
+    },
     closeBtn: {
         backgroundColor: 'rgba(180,0,0,0.5)',
         borderColor: 'rgba(255,80,80,0.3)',
+    },
+    powerTag: {
+        backgroundColor: 'rgba(251,191,36,0.18)',
+        borderWidth: 1,
+        borderColor: 'rgba(251,191,36,0.45)',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        alignSelf: 'flex-start',
+    },
+    powerTagText: {
+        color: '#FCD34D',
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.2,
     },
     badge: {
         flexDirection: 'row',
@@ -550,7 +604,6 @@ const styles = StyleSheet.create({
         textShadowRadius: 4,
         letterSpacing: 0.2,
     },
-    // ─── Gesture Hint ──────────────────────────────────────────
     gestureHint: {
         position: 'absolute',
         bottom: 185,
@@ -571,7 +624,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.2,
         overflow: 'hidden',
     },
-    // ─── Bottom Sheet ──────────────────────────────────────────
     bottomSheet: {
         position: 'absolute',
         bottom: 0,
