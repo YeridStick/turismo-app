@@ -1,9 +1,17 @@
-import React, { useEffect, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, Image, Animated, Easing } from "react-native";
-import { BlurView } from "expo-blur";
 import { FontAwesome } from "@expo/vector-icons";
-import { COLORS } from "../utils/constants";
+import { BlurView } from "expo-blur";
+import React, { useEffect, useRef } from "react";
+import {
+  Animated,
+  Easing,
+  Image,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import styles from "../styles";
+import { COLORS } from "../utils/constants";
 
 const HomeHeader = ({
   user,
@@ -83,12 +91,15 @@ const HomeHeader = ({
   ];
 
   return (
-    <View style={styles.pageHeader}>
+    <View>
       <BlurView intensity={80} tint="light" style={styles.heroOverlay}>
         <View style={styles.topBar}>
           <Text style={styles.locationValue}>Cerca de ti</Text>
           {user ? (
-            <TouchableOpacity style={styles.profileButton} onPress={onOpenProfile}>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={onOpenProfile}
+            >
               <View style={styles.profileAvatarSmall}>
                 {user.urlAvatar || user.avatar ? (
                   <Image
@@ -114,21 +125,31 @@ const HomeHeader = ({
           <Text style={styles.heroBadgeText}>+10 mil viajeros felices</Text>
         </Animated.View>
 
-        <Animated.Text style={[styles.heroTitle, heroInStyle]}>Descubre{"\n"}el Huila</Animated.Text>
+        <Animated.Text style={[styles.heroTitle, heroInStyle]}>
+          Descubre{"\n"}el Huila
+        </Animated.Text>
         <Animated.Text style={[styles.heroSubtitle, heroInStyle]}>
           Naturaleza, pueblos patrimoniales y rutas de aventura.
         </Animated.Text>
 
-        <Animated.View style={[styles.heroHighlightsRow, floatingChipStyle, heroInStyle]}>
+        <Animated.View
+          style={[styles.heroHighlightsRow, floatingChipStyle, heroInStyle]}
+        >
           {travelHighlights.map((highlight) => (
             <View key={highlight.id} style={styles.heroHighlightChip}>
-              <FontAwesome name={highlight.icon} size={12} color={COLORS.primary} />
+              <FontAwesome
+                name={highlight.icon}
+                size={12}
+                color={COLORS.primary}
+              />
               <Text style={styles.heroHighlightText}>{highlight.label}</Text>
             </View>
           ))}
         </Animated.View>
 
-        <Animated.View style={[styles.heroMoodRow, floatingChipStyle, heroInStyle]}>
+        <Animated.View
+          style={[styles.heroMoodRow, floatingChipStyle, heroInStyle]}
+        >
           {travelMood.map((item) => (
             <View key={item.id} style={styles.heroMoodChip}>
               <FontAwesome name={item.icon} size={11} color="#FB923C" />
@@ -153,11 +174,17 @@ const HomeHeader = ({
             </View>
           </View>
           <View style={styles.searchActions}>
-            <TouchableOpacity style={styles.filterButton} onPress={onOpenFilters}>
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={onOpenFilters}
+            >
               <FontAwesome name="sliders" size={13} color={COLORS.primary} />
               <Text style={styles.filterButtonText}>Filtros</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.searchButton} onPress={onPerformSearch}>
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={onPerformSearch}
+            >
               <Text style={styles.searchButtonText}>Buscar</Text>
             </TouchableOpacity>
           </View>
@@ -170,7 +197,11 @@ const HomeHeader = ({
                   onPress={() => onSelectSuggestion(item)}
                 >
                   <View style={styles.searchSuggestionRow}>
-                    <FontAwesome name="map-marker" size={14} color={COLORS.primary} />
+                    <FontAwesome
+                      name="map-marker"
+                      size={14}
+                      color={COLORS.primary}
+                    />
                     <Text style={styles.searchSuggestionText} numberOfLines={1}>
                       {item.name || "Lugar sin nombre"}
                     </Text>

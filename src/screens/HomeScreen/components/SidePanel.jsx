@@ -174,7 +174,7 @@ const SidePanel = ({
           <View style={styles.sidePanelWelcome}>
             <Text style={styles.sidePanelWelcomeTitle}>Bienvenido</Text>
             <Text style={styles.sidePanelWelcomeSubtitle}>
-              EstÃ¡s cerca de este lugar.
+              Estas cerca de este lugar.
             </Text>
           </View>
         ) : null}
@@ -248,13 +248,13 @@ const SidePanel = ({
           </TouchableOpacity>
         ) : (
           <Text style={styles.sidePanelEmpty}>
-            AcÃ©rcate a un sitio para darte la bienvenida.
+            Acercate a un sitio para darte la bienvenida.
           </Text>
         )}
 
         <View style={styles.sidePanelHeader}>
           <View>
-            <Text style={styles.sidePanelTitle}>MÃ¡s visitados</Text>
+            <Text style={styles.sidePanelTitle}>Mas visitados</Text>
             <Text style={styles.sidePanelSubtitle}>
               Sitios favoritos cerca de la comunidad
             </Text>
@@ -275,7 +275,7 @@ const SidePanel = ({
           <Text style={styles.sidePanelEmpty}>{topPlacesError}</Text>
         ) : topPlaces.length === 0 ? (
           <Text style={styles.sidePanelEmpty}>
-            SÃ© el primero en visitar un lugar.
+            Se el primero en visitar un lugar.
           </Text>
         ) : (
           <View style={styles.sidePanelList}>
@@ -336,4 +336,5 @@ const SidePanel = ({
 };
 
 export default React.memo(SidePanel);
+
 

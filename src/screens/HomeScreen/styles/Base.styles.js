@@ -24,7 +24,7 @@ export const baseStyles = {
     paddingBottom: SPACING.xl,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
-    backgroundColor: "rgba(244, 252, 255, 0.78)",
+    //backgroundColor: "rgba(244, 252, 255, 0.78)",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(14, 116, 144, 0.12)",
   },

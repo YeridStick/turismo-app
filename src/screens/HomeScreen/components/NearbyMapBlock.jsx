@@ -1,33 +1,86 @@
-import React from "react";
-import { 
-  View, 
-  Text, 
-  Platform, 
-  FlatList,
-  TouchableOpacity,
+import React, { useCallback, useEffect, useRef } from "react";
+import {
   ActivityIndicator,
+  Animated,
+  FlatList,
+  Platform,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import WebViewMap from "../../../components/WebViewMap";
 import PlaceCard from "./PlaceCard";
-import { formatDistance } from "../utils/helpers";
 import { FALLBACK_CENTER } from "../utils/constants";
-import { COLORS, SPACING } from "../../../utils/constants";
+import { formatDistance } from "../utils/helpers";
 import styles from "../styles";
 
 const NearbyMapBlock = ({
   coords,
   filteredNearby,
   distanceKm,
+  mapGestureLocked,
   isInteractingWithMap,
   onMapTouchStart,
   onMapTouchEnd,
+  onToggleMapGestureLock,
+  onUnlockMapGesture,
   onPlacePress,
   onArPress,
   onIncreaseRadius,
   getTopPlaceMeta,
   loadingNearby,
 }) => {
+  const lastTapRef = useRef(0);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    let pulseLoop = null;
+
+    if (mapGestureLocked) {
+      pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.06,
+            duration: 620,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 620,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulseLoop.start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+
+    return () => {
+      if (pulseLoop) pulseLoop.stop();
+    };
+  }, [mapGestureLocked, pulseAnim]);
+
+  const handleTouchEnd = useCallback(
+    (event) => {
+      if (mapGestureLocked) {
+        onMapTouchEnd?.(event);
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastTapRef.current < 260) {
+        onToggleMapGestureLock?.();
+        lastTapRef.current = 0;
+      } else {
+        lastTapRef.current = now;
+      }
+      onMapTouchEnd?.(event);
+    },
+    [mapGestureLocked, onMapTouchEnd, onToggleMapGestureLock],
+  );
+
   const center =
     coords &&
     Number.isFinite(coords.latitude) &&
@@ -37,30 +90,28 @@ const NearbyMapBlock = ({
 
   const delta = Math.max(distanceKm / 110, 0.015);
   const nearbyMarkers = filteredNearby
-    .filter(
-      (place) =>
-        Number.isFinite(place?.lat) && Number.isFinite(place?.lng),
-    )
+    .filter((place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng))
     .map((place) => ({
       latitude: place.lat,
       longitude: place.lng,
       title: place.name,
       description:
-        place.description || (place.distanceMeters ? formatDistance(place.distanceMeters) : ""),
+        place.description ||
+        (place.distanceMeters ? formatDistance(place.distanceMeters) : ""),
     }));
 
   return (
     <View style={styles.mapCard}>
-      <View 
+      <View
         style={styles.mapTouchWrapper}
         onTouchStart={onMapTouchStart}
-        onTouchEnd={onMapTouchEnd}
+        onTouchEnd={handleTouchEnd}
         onTouchCancel={onMapTouchEnd}
       >
         {Platform.OS === "web" ? (
           <View style={styles.mapEmptyState}>
             <Text style={styles.mapEmptyText}>
-              El mapa no está disponible en la versión web.
+              El mapa no esta disponible en la version web.
             </Text>
           </View>
         ) : (
@@ -81,17 +132,44 @@ const NearbyMapBlock = ({
             }
             showCircle={true}
             circleRadius={distanceKm * 1000}
-            scrollEnabled={isInteractingWithMap}
-            zoomEnabled={isInteractingWithMap}
+            scrollEnabled={isInteractingWithMap || mapGestureLocked}
+            zoomEnabled={isInteractingWithMap || mapGestureLocked}
           />
         )}
+
+        {mapGestureLocked ? (
+          <Animated.View
+            style={[
+              styles.mapLockBadgePulseWrap,
+              {
+                transform: [{ scale: pulseAnim }],
+                opacity: pulseAnim.interpolate({
+                  inputRange: [1, 1.06],
+                  outputRange: [0.92, 1],
+                }),
+              },
+            ]}
+          >
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={styles.mapLockBadge}
+              onPress={onUnlockMapGesture}
+            >
+              <FontAwesome name="lock" size={11} color="#0E7490" />
+              <Text style={styles.mapLockBadgeText}>Modo mapa activo - Salir</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
+          <View style={styles.mapLockBadgeHint}>
+            <FontAwesome name="hand-pointer-o" size={11} color="#64748B" />
+            <Text style={styles.mapLockBadgeHintText}>
+              Doble toque para fijar el mapa
+            </Text>
+          </View>
+        )}
       </View>
-      
-      {/* Nearby Sites Carrousel Over Map */}
-      <View 
-        style={styles.mapNearbyCarrousel}
-        pointerEvents="box-none"
-      >
+
+      <View style={styles.mapNearbyCarrousel} pointerEvents="box-none">
         {loadingNearby ? (
           <View style={styles.mapLoadingOverlay}>
             <ActivityIndicator size="large" color="#0E7490" />
@@ -105,7 +183,7 @@ const NearbyMapBlock = ({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.mapCarrouselContent}
             renderItem={({ item, index }) => (
-              <PlaceCard 
+              <PlaceCard
                 title={item.name}
                 subtitle={item.description}
                 meta={getTopPlaceMeta(item)}
@@ -114,8 +192,8 @@ const NearbyMapBlock = ({
                 distance={item.distance}
                 variant="compact"
                 cardWidth={250}
-                imageHeight={180} // Increased more for full visibility
-                onPress={() => onPlacePress(item, index)} 
+                imageHeight={180}
+                onPress={() => onPlacePress(item, index)}
                 onArPress={() => onArPress(item)}
               />
             )}
@@ -131,13 +209,13 @@ const NearbyMapBlock = ({
                 No hay lugares en tu rango actual ({distanceKm}km).
               </Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.mapEmptyButton}
               onPress={onIncreaseRadius}
               activeOpacity={0.8}
             >
               <FontAwesome name="search-plus" size={16} color="#FFF" />
-              <Text style={styles.mapEmptyButtonText}>Explorar más lejos</Text>
+              <Text style={styles.mapEmptyButtonText}>Explorar mas lejos</Text>
             </TouchableOpacity>
           </View>
         )}

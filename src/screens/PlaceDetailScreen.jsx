@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import {
   Animated,
   ActivityIndicator,
+  Easing,
   Linking,
   Platform,
   View,
@@ -17,6 +18,7 @@ import {
   TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants';
@@ -85,14 +87,33 @@ const parseFiniteNumber = (value) => {
 
 const IMAGE_PLACEHOLDER =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9WFd2b0AAAAASUVORK5CYII=';
-const VISIT_NEAR_THRESHOLD_METERS = 80;
+const VISIT_NEAR_THRESHOLD_METERS = 120;
+const VISIT_GPS_MAX_ACCURACY_METERS = 120;
+const AUTO_VISIT_PREF_KEY = "turismo_auto_visit_enabled";
 
 const getApiData = (response) => response?.data?.data ?? response?.data ?? null;
 const ensureArray = (value) => (Array.isArray(value) ? value : []);
-const getApiMessage = (error, fallback) =>
+const normalizeReviewsPayload = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.content)) return value.content;
+  return [];
+};
+const getBackendErrorMessage = (error) =>
   error?.response?.data?.message ||
   error?.response?.data?.error ||
-  fallback;
+  error?.message ||
+  "";
+const composeLocalWithBackendError = (localMessage, error) => {
+  const backendMessage = getBackendErrorMessage(error);
+  if (!backendMessage) return localMessage;
+  const normalizedLocal = String(localMessage || "").trim();
+  const normalizedBackend = String(backendMessage).trim();
+  if (!normalizedLocal) return normalizedBackend;
+  if (normalizedLocal.toLowerCase() === normalizedBackend.toLowerCase()) return normalizedLocal;
+  return `${normalizedLocal}\nDetalle backend: ${normalizedBackend}`;
+};
 const toNum = (value) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
@@ -191,6 +212,195 @@ const ReviewItem = ({ item }) => {
   );
 };
 
+const GradientParticleButton = ({
+  label,
+  onPress,
+  disabled = false,
+  loading = false,
+  iconName,
+  iconSet = "ionicons",
+  backgroundColor = "#0E7490",
+  borderColor,
+  textColor = "#FFFFFF",
+  iconColor = "#FFFFFF",
+  particleColors = ["rgba(20,184,166,0.24)", "rgba(251,146,60,0.2)", "rgba(255,255,255,0.28)"],
+  style,
+  textStyle,
+}) => {
+  const particleConfigs = useMemo(
+    () =>
+      Array.from({ length: 8 }).map((_, index) => ({
+        id: `btn-particle-${index}`,
+        startXPercent: 78 + Math.random() * 20,
+        driftX: -(42 + Math.random() * 78),
+        driftY: -7 + Math.random() * 14,
+        delay: Math.floor(Math.random() * 1800),
+        duration: 2500 + Math.floor(Math.random() * 1900),
+        width: 7 + Math.random() * 9,
+        height: 2.5 + Math.random() * 2.8,
+        rotateDeg: -14 + Math.random() * 28,
+        color: particleColors[index % particleColors.length],
+      })),
+    [particleColors],
+  );
+  const particleAnims = useRef(
+    particleConfigs.map(() => new Animated.Value(0)),
+  ).current;
+  const pressSweepAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (disabled) {
+      particleAnims.forEach((anim) => anim.setValue(0));
+      return undefined;
+    }
+    const loops = particleAnims.map((anim, idx) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(particleConfigs[idx].delay),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: particleConfigs[idx].duration,
+            easing: Easing.inOut(Easing.bezier(0.35, 0, 0.2, 1)),
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+    );
+    loops.forEach((loop, idx) => {
+      particleAnims[idx].setValue(0);
+      loop.start();
+    });
+    return () => loops.forEach((loop) => loop.stop());
+  }, [disabled, particleAnims, particleConfigs]);
+
+  useEffect(() => {
+    if (!loading) {
+      pressSweepAnim.setValue(0);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pressSweepAnim, {
+          toValue: 1,
+          duration: 860,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pressSweepAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [loading, pressSweepAnim]);
+
+  const renderIcon = () => {
+    if (!iconName) return null;
+    if (iconSet === "material") {
+      return <MaterialIcons name={iconName} size={18} color={iconColor} />;
+    }
+    if (iconSet === "fontawesome") {
+      return <FontAwesome name={iconName} size={16} color={iconColor} />;
+    }
+    return <Ionicons name={iconName} size={18} color={iconColor} />;
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.gradientButtonBase, style, disabled && styles.disabledAction]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.9}
+    >
+      <View pointerEvents="none" style={styles.gradientParticleLayer}>
+        {particleConfigs.map((particle, idx) => {
+          const anim = particleAnims[idx];
+          const opacity = anim.interpolate({
+            inputRange: [0, 0.2, 0.78, 1],
+            outputRange: [0, 0.3, 0.16, 0],
+          });
+          const scale = anim.interpolate({
+            inputRange: [0, 0.5, 1],
+            outputRange: [0.8, 1.06, 0.9],
+          });
+          const translateX = anim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, particle.driftX],
+          });
+          const translateY = anim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, particle.driftY],
+          });
+          return (
+            <Animated.View
+              key={particle.id}
+              style={[
+                styles.gradientParticle,
+                {
+                  width: particle.width,
+                  height: particle.height,
+                  borderRadius: 999,
+                  left: `${particle.startXPercent}%`,
+                  bottom: 8 + (idx % 3) * 9,
+                  backgroundColor: particle.color,
+                  opacity,
+                  transform: [
+                    { translateX },
+                    { translateY },
+                    { rotate: `${particle.rotateDeg}deg` },
+                    { scale },
+                  ],
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
+      <View
+        style={[
+          styles.gradientButtonFill,
+          {
+            backgroundColor: disabled ? "#94A3B8" : backgroundColor,
+            borderColor: borderColor || "transparent",
+            borderWidth: borderColor ? 1 : 0,
+          },
+        ]}
+      >
+        {loading ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.buttonPressSweep,
+              {
+                transform: [
+                  {
+                    translateX: pressSweepAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-220, 220],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
+        <View style={styles.gradientButtonContent}>
+          {renderIcon()}
+          <Text style={[styles.gradientButtonText, { color: textColor }, textStyle]}>{label}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 // Componente para el contenido de un solo sitio
 const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const { user } = useAuth();
@@ -211,12 +421,26 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [visitStartLoading, setVisitStartLoading] = useState(false);
+  const [visitConfirmLoading, setVisitConfirmLoading] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: "5", comment: "" });
+  const [ratingSliderValue, setRatingSliderValue] = useState(5);
+  const [ratingTrackWidth, setRatingTrackWidth] = useState(0);
   const [feedbackForm, setFeedbackForm] = useState({ type: "suggestion", message: "", contactEmail: user?.email || "" });
   const [statusModal, setStatusModal] = useState({ visible: false, type: "info", title: "", message: "" });
+  const [autoVisitEnabled, setAutoVisitEnabled] = useState(false);
+  const [autoVisitFlowArmed, setAutoVisitFlowArmed] = useState(false);
   
   const scrollY = useRef(new Animated.Value(0)).current;
   const imageScrollViewRef = useRef(null);
+  const confirmBadgeScale = useRef(new Animated.Value(1)).current;
+  const confirmBadgeOpacity = useRef(new Animated.Value(1)).current;
+  const confirmRingProgress = useRef(new Animated.Value(0)).current;
+  const lastVisitConfirmedRef = useRef(false);
+  const autoCheckinInFlightRef = useRef(false);
+  const autoConfirmInFlightRef = useRef(false);
+  const autoLastCheckinAttemptRef = useRef(0);
+  const autoLastConfirmAttemptRef = useRef(0);
 
   // Cargar datos detallados en segundo plano
   useEffect(() => {
@@ -303,16 +527,122 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const isNearPlace = typeof nearbyDistanceM === "number" && nearbyDistanceM <= VISIT_NEAR_THRESHOLD_METERS;
   const canCreateReview = !!user && isNearPlace;
   const canSendFeedback = !!user && isNearPlace && visitConfirmed;
+  const ratingValue = Math.max(1, Math.min(5, Number(reviewForm.rating) || 1));
+  const ratingProgress = Math.max(0, Math.min(1, (ratingSliderValue - 1) / 4));
+  const confirmRingScale = confirmRingProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.86, 1.28],
+  });
+  const confirmRingOpacity = confirmRingProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.34, 0],
+  });
 
   useEffect(() => {
     setFeedbackForm((prev) => ({ ...prev, contactEmail: user?.email || prev.contactEmail || "" }));
   }, [user?.email]);
 
   useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(AUTO_VISIT_PREF_KEY)
+      .then(async (value) => {
+        if (!isMounted) return;
+        if (value === null) {
+          setAutoVisitEnabled(true);
+          await AsyncStorage.setItem(AUTO_VISIT_PREF_KEY, "true");
+          return;
+        }
+        setAutoVisitEnabled(value === "true");
+      })
+      .catch(() => {
+        if (isMounted) setAutoVisitEnabled(true);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setAutoVisitFlowArmed(false);
+    autoCheckinInFlightRef.current = false;
+    autoConfirmInFlightRef.current = false;
+  }, [place?.id]);
+
+  useEffect(() => {
+    if (autoVisitEnabled) return;
+    setAutoVisitFlowArmed(false);
+  }, [autoVisitEnabled]);
+
+  useEffect(() => {
     if (visitCountdown <= 0) return undefined;
     const timer = setTimeout(() => setVisitCountdown((prev) => Math.max(0, prev - 1)), 1000);
     return () => clearTimeout(timer);
   }, [visitCountdown]);
+
+  useEffect(() => {
+    const justConfirmed = visitConfirmed && !lastVisitConfirmedRef.current;
+    lastVisitConfirmedRef.current = visitConfirmed;
+    if (!justConfirmed) return;
+
+    confirmBadgeScale.setValue(0.86);
+    confirmBadgeOpacity.setValue(0.62);
+    confirmRingProgress.setValue(0);
+
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(confirmBadgeOpacity, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.spring(confirmBadgeScale, {
+          toValue: 1.08,
+          friction: 6,
+          tension: 120,
+          useNativeDriver: true,
+        }),
+        Animated.spring(confirmBadgeScale, {
+          toValue: 1,
+          friction: 7,
+          tension: 110,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(confirmRingProgress, {
+        toValue: 1,
+        duration: 760,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [
+    visitConfirmed,
+    confirmBadgeScale,
+    confirmBadgeOpacity,
+    confirmRingProgress,
+  ]);
+
+  useEffect(() => {
+    if (!reviewModalVisible) return;
+    setRatingSliderValue(ratingValue);
+  }, [reviewModalVisible, ratingValue]);
+
+  const handleRatingChange = useCallback((value) => {
+    const safeValue = Math.max(1, Math.min(5, Number(value) || 1));
+    setRatingSliderValue(safeValue);
+    const nextValue = Math.max(1, Math.min(5, Math.round(safeValue)));
+    setReviewForm((prev) => {
+      const nextRating = String(nextValue);
+      return prev.rating === nextRating ? prev : { ...prev, rating: nextRating };
+    });
+  }, []);
+
+  const handleRatingSlidingComplete = useCallback((value) => {
+    const snapped = Math.max(1, Math.min(5, Math.round(Number(value) || ratingValue)));
+    setRatingSliderValue(snapped);
+    setReviewForm((prev) => ({ ...prev, rating: String(snapped) }));
+  }, [ratingValue]);
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -329,20 +659,42 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     if (!place?.id) return;
     setLoadingReviews(true);
     try {
-      const [ratingRes, reviewsRes] = await Promise.all([
+      const [ratingResult, reviewsResult] = await Promise.allSettled([
         api.get(ENDPOINTS.PLACE_RATING(place.id)),
         api.get(ENDPOINTS.PLACE_REVIEWS(place.id)),
       ]);
-      const ratingData = getApiData(ratingRes) || {};
-      const reviewsData = ensureArray(getApiData(reviewsRes));
-      setRatingSummary({
-        avgRating: toNum(ratingData.avgRating),
-        reviewsCount: toNum(ratingData.reviewsCount) || reviewsData.length || 0,
-      });
-      setReviews(reviewsData);
+
+      const ratingData =
+        ratingResult.status === "fulfilled"
+          ? getApiData(ratingResult.value) || {}
+          : {};
+
+      const reviewsDataRaw =
+        reviewsResult.status === "fulfilled"
+          ? getApiData(reviewsResult.value)
+          : [];
+      const reviewsData = normalizeReviewsPayload(reviewsDataRaw);
+
+      const fallbackAvg =
+        reviewsData.length > 0
+          ? reviewsData.reduce((acc, item) => acc + (toNum(item?.rating) || 0), 0) /
+            reviewsData.length
+          : null;
+
+      const avgRating = toNum(ratingData.avgRating) ?? fallbackAvg;
+      const reviewsCount = toNum(ratingData.reviewsCount) || reviewsData.length || 0;
+
+      if (reviewsResult.status === "fulfilled") {
+        setReviews(reviewsData);
+      }
+      if (ratingResult.status === "fulfilled" || reviewsResult.status === "fulfilled") {
+        setRatingSummary({
+          avgRating,
+          reviewsCount,
+        });
+      }
     } catch (_err) {
-      setRatingSummary({ avgRating: null, reviewsCount: 0 });
-      setReviews([]);
+      // Mantener datos previos visibles si hay fallo temporal
     } finally {
       setLoadingReviews(false);
     }
@@ -366,7 +718,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
       const response = await api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, {
-        params: { lat, lng, radius: 150, limit: 5 },
+        params: { lat, lng, radius: 200, limit: 5 },
       });
       const nearbyList = ensureArray(getApiData(response));
       const matched = nearbyList.find((item) => {
@@ -378,19 +730,31 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       setNearbyDistanceM(distance);
       if (possibleVisitId != null) {
         setPendingVisitId(possibleVisitId);
+        if (autoVisitEnabled) {
+          setAutoVisitFlowArmed(true);
+        }
       }
     } catch (_err) {
       setNearbyDistanceM(null);
     }
-  }, [user, place?.id]);
+  }, [autoVisitEnabled, user, place?.id]);
 
   useEffect(() => {
     loadReviewsAndRating();
     refreshNearbyState();
   }, [loadReviewsAndRating, refreshNearbyState]);
 
-  const handleStartVisit = async () => {
+  useEffect(() => {
+    if (!user || !place?.id) return undefined;
+    const timer = setInterval(() => {
+      refreshNearbyState();
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [user, place?.id, refreshNearbyState]);
+
+  const handleStartVisit = useCallback(async () => {
     if (!user || !place?.id || !isNearPlace) return;
+    setVisitStartLoading(true);
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const lat = loc?.coords?.latitude;
@@ -399,13 +763,15 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         throw new Error("NO_COORDS");
       }
-      if (accuracy > 75) {
-        setStatusModal({
-          visible: true,
-          type: "warning",
-          title: "GPS inestable",
-          message: "La precision de tu GPS supera 75m. Intenta en un espacio abierto.",
-        });
+      if (accuracy > VISIT_GPS_MAX_ACCURACY_METERS) {
+        if (!autoVisitEnabled) {
+          setStatusModal({
+            visible: true,
+            type: "warning",
+            title: "GPS inestable",
+            message: `La precision de tu GPS supera ${VISIT_GPS_MAX_ACCURACY_METERS}m. Intenta en un espacio abierto.`,
+          });
+        }
         return;
       }
 
@@ -423,48 +789,62 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       const requiredStay = Math.max(1, toNum(checkinData?.min_stay_seconds) || 180);
 
       if (!createdVisitId) {
-        setStatusModal({
-          visible: true,
-          type: "warning",
-          title: "Visita pendiente",
-          message: "No se pudo abrir una visita para confirmar. Intenta de nuevo en unos segundos.",
-        });
+        if (!autoVisitEnabled) {
+          setStatusModal({
+            visible: true,
+            type: "warning",
+            title: "Visita pendiente",
+            message: "No se pudo abrir una visita para confirmar. Intenta de nuevo en unos segundos.",
+          });
+        }
         return;
       }
 
       setPendingVisitId(createdVisitId);
       setMinStaySeconds(requiredStay);
       setVisitCountdown(requiredStay);
-      setStatusModal({
-        visible: true,
-        type: "info",
-        title: "Validacion iniciada",
-        message: `Debes permanecer ${requiredStay} segundos en el sitio para confirmar tu visita.`,
-      });
+      if (autoVisitEnabled) {
+        setAutoVisitFlowArmed(true);
+      }
+      if (!autoVisitEnabled) {
+        setStatusModal({
+          visible: true,
+          type: "info",
+          title: "Validacion iniciada",
+          message: `Debes permanecer ${requiredStay} segundos en el sitio para confirmar tu visita.`,
+        });
+      }
     } catch (err) {
-      setStatusModal({
-        visible: true,
-        type: "error",
-        title: "No fue posible iniciar visita",
-        message: getApiMessage(err, "Activa tu ubicacion y vuelve a intentarlo."),
-      });
+      if (!autoVisitEnabled) {
+        setStatusModal({
+          visible: true,
+          type: "error",
+          title: "No fue posible iniciar visita",
+          message: composeLocalWithBackendError("Activa tu ubicacion y vuelve a intentarlo.", err),
+        });
+      }
+    } finally {
+      setVisitStartLoading(false);
     }
-  };
+  }, [autoVisitEnabled, isNearPlace, place?.id, user]);
 
-  const handleConfirmVisit = async () => {
+  const handleConfirmVisit = useCallback(async () => {
     if (!pendingVisitId || visitCountdown > 0) return;
+    setVisitConfirmLoading(true);
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const lat = loc?.coords?.latitude;
       const lng = loc?.coords?.longitude;
       const accuracy = pickAccuracy(loc?.coords);
-      if (accuracy > 75) {
-        setStatusModal({
-          visible: true,
-          type: "warning",
-          title: "GPS inestable",
-          message: "La precision de tu GPS supera 75m. Mejora la señal y vuelve a confirmar.",
-        });
+      if (accuracy > VISIT_GPS_MAX_ACCURACY_METERS) {
+        if (!autoVisitEnabled) {
+          setStatusModal({
+            visible: true,
+            type: "warning",
+            title: "GPS inestable",
+            message: `La precision de tu GPS supera ${VISIT_GPS_MAX_ACCURACY_METERS}m. Mejora la senal y vuelve a confirmar.`,
+          });
+        }
         return;
       }
       const payload = { lat, lng, accuracy_m: accuracy };
@@ -472,23 +852,76 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       setVisitConfirmed(true);
       setPendingVisitId(null);
       setVisitCountdown(0);
-      setStatusModal({
-        visible: true,
-        type: "success",
-        title: "Visita confirmada",
-        message: "Ya puedes dejar feedback y tus reseñas contaran como verificadas.",
-      });
+      setAutoVisitFlowArmed(false);
+      if (!autoVisitEnabled) {
+        setStatusModal({
+          visible: true,
+          type: "success",
+          title: "Visita confirmada",
+          message: "Ya puedes dejar feedback y tus resenas contaran como verificadas.",
+        });
+      }
       refreshNearbyState();
       loadReviewsAndRating();
     } catch (err) {
-      setStatusModal({
-        visible: true,
-        type: "error",
-        title: "Confirmacion fallida",
-        message: getApiMessage(err, "No se pudo confirmar la visita. Mantente cerca del sitio e intenta de nuevo."),
-      });
+      if (!autoVisitEnabled) {
+        setStatusModal({
+          visible: true,
+          type: "error",
+          title: "Confirmacion fallida",
+          message: composeLocalWithBackendError(
+            "No se pudo confirmar la visita. Mantente cerca del sitio e intenta de nuevo.",
+            err,
+          ),
+        });
+      }
+    } finally {
+      setVisitConfirmLoading(false);
     }
-  };
+  }, [autoVisitEnabled, loadReviewsAndRating, pendingVisitId, refreshNearbyState, visitCountdown]);
+
+  useEffect(() => {
+    if (!autoVisitEnabled || !user || !isNearPlace || visitConfirmed || pendingVisitId) return;
+    if (autoCheckinInFlightRef.current) return;
+    if (Date.now() - autoLastCheckinAttemptRef.current < 30000) return;
+
+    autoCheckinInFlightRef.current = true;
+    autoLastCheckinAttemptRef.current = Date.now();
+    setAutoVisitFlowArmed(true);
+
+    Promise.resolve(handleStartVisit())
+      .finally(() => {
+        autoCheckinInFlightRef.current = false;
+      });
+  }, [
+    autoVisitEnabled,
+    user,
+    isNearPlace,
+    visitConfirmed,
+    pendingVisitId,
+    handleStartVisit,
+  ]);
+
+  useEffect(() => {
+    if (!autoVisitEnabled || !autoVisitFlowArmed || !pendingVisitId || visitConfirmed) return;
+    if (visitCountdown > 0) return;
+    if (autoConfirmInFlightRef.current) return;
+    if (Date.now() - autoLastConfirmAttemptRef.current < 15000) return;
+
+    autoConfirmInFlightRef.current = true;
+    autoLastConfirmAttemptRef.current = Date.now();
+    Promise.resolve(handleConfirmVisit())
+      .finally(() => {
+        autoConfirmInFlightRef.current = false;
+      });
+  }, [
+    autoVisitEnabled,
+    autoVisitFlowArmed,
+    pendingVisitId,
+    visitConfirmed,
+    visitCountdown,
+    handleConfirmVisit,
+  ]);
 
   const handleSubmitReview = async () => {
     if (!canCreateReview || reviewSubmitting) return;
@@ -709,47 +1142,85 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               </View>
             </View>
           )}
+
           {!!user && isNearPlace && (
             <View style={styles.visitSection}>
               <Text style={styles.sectionTitle}>Validacion de visita</Text>
               {typeof nearbyDistanceM === "number" ? (
-                <Text style={styles.visitMetaText}>
-                  Distancia actual: {Math.round(nearbyDistanceM)} m
-                </Text>
-              ) : (
-                <Text style={styles.visitMetaText}>
-                  Activa ubicacion para validar si estas cerca de este lugar.
-                </Text>
-              )}
+                <Text style={styles.visitMetaText}>Distancia: {Math.round(nearbyDistanceM)} m</Text>
+              ) : null}
+
               {visitConfirmed ? (
-                <View style={styles.successInline}>
-                  <Ionicons name="checkmark-circle" size={16} color="#047857" />
-                  <Text style={styles.successInlineText}>Visita confirmada</Text>
+                <View style={styles.successInlineWrap}>
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.successInlineRing,
+                      {
+                        opacity: confirmRingOpacity,
+                        transform: [{ scale: confirmRingScale }],
+                      },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.successInline,
+                      {
+                        opacity: confirmBadgeOpacity,
+                        transform: [{ scale: confirmBadgeScale }],
+                      },
+                    ]}
+                  >
+                    <Ionicons name="checkmark-circle" size={16} color="#047857" />
+                    <Text style={styles.successInlineText}>Visita confirmada</Text>
+                  </Animated.View>
+                </View>
+              ) : autoVisitEnabled ? (
+                <View style={{ marginTop: SPACING.sm }}>
+                  <Text style={styles.visitMetaText}>Modo automatico activado</Text>
+                  <Text style={styles.visitMetaText}>
+                    {pendingVisitId
+                      ? (visitCountdown > 0 ? `Confirmacion en ${visitCountdown}s` : "Confirmando...")
+                      : "Iniciando check-in..."}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.visitActionsRow}>
-                  <TouchableOpacity
-                    style={[styles.secondaryButton, !isNearPlace && styles.disabledAction]}
-                    disabled={!isNearPlace}
+                  <GradientParticleButton
+                    style={[styles.visitManualStartButton, !isNearPlace && styles.disabledAction]}
+                    disabled={!isNearPlace || visitStartLoading || visitConfirmLoading}
+                    loading={visitStartLoading}
                     onPress={handleStartVisit}
-                  >
-                    <Text style={styles.secondaryButtonText}>Iniciar visita</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.primarySmallButton, (!pendingVisitId || visitCountdown > 0) && styles.disabledAction]}
-                    disabled={!pendingVisitId || visitCountdown > 0}
+                    label={visitStartLoading ? "Iniciando..." : "Iniciar"}
+                    iconName="play-outline"
+                    backgroundColor="#FFFFFF"
+                    borderColor="#0E7490"
+                    textColor="#0E7490"
+                    iconColor="#0E7490"
+                    particleColors={["rgba(14,116,144,0.24)", "rgba(20,184,166,0.2)", "rgba(251,146,60,0.16)"]}
+                  />
+                  <GradientParticleButton
+                    style={[
+                      styles.visitManualConfirmButton,
+                      (!pendingVisitId || visitCountdown > 0) && styles.disabledAction
+                    ]}
+                    disabled={!pendingVisitId || visitCountdown > 0 || visitConfirmLoading || visitStartLoading}
+                    loading={visitConfirmLoading}
                     onPress={handleConfirmVisit}
-                  >
-                    <Text style={styles.primarySmallButtonText}>
-                      {visitCountdown > 0 ? `Confirmar en ${visitCountdown}s` : "Confirmar visita"}
-                    </Text>
-                  </TouchableOpacity>
+                    label={
+                      visitConfirmLoading
+                        ? "Confirmando..."
+                        : (visitCountdown > 0 ? `En ${visitCountdown}s` : "Confirmar")
+                    }
+                    iconName="checkmark-outline"
+                    backgroundColor="#0E7490"
+                    particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
+                  />
                 </View>
               )}
+
               {!visitConfirmed ? (
-                <Text style={styles.lockHintText}>
-                  Permanencia minima requerida: {minStaySeconds}s.
-                </Text>
+                <Text style={styles.lockHintText}>Minimo: {minStaySeconds}s</Text>
               ) : null}
             </View>
           )}
@@ -760,7 +1231,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               {loadingReviews ? <ActivityIndicator size="small" color="#0E7490" /> : null}
             </View>
             <Text style={styles.reviewSummaryText}>
-              {ratingSummary.avgRating != null ? `★ ${ratingSummary.avgRating.toFixed(1)}` : "Sin calificacion"} · {ratingSummary.reviewsCount || 0} resenas
+              {ratingSummary.avgRating != null ? `* ${ratingSummary.avgRating.toFixed(1)}` : "Sin calificacion"} - {ratingSummary.reviewsCount || 0} resenas
             </Text>
             {reviews.length > 0 ? (
               <View style={styles.reviewsList}>
@@ -772,12 +1243,14 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               <Text style={styles.visitMetaText}>Aun no hay resenas para este lugar.</Text>
             )}
             {canCreateReview ? (
-              <TouchableOpacity
-                style={styles.primarySmallButton}
+              <GradientParticleButton
+                style={styles.reviewCtaButton}
                 onPress={() => setReviewModalVisible(true)}
-              >
-                <Text style={styles.primarySmallButtonText}>Escribir resena</Text>
-              </TouchableOpacity>
+                label="Escribir resena"
+                iconName="create-outline"
+                backgroundColor="#0E7490"
+                particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
+              />
             ) : (
               <TouchableOpacity
                 style={styles.infoMiniButton}
@@ -796,6 +1269,40 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
             )}
           </View>
 
+          {(hasValidCoordinates || arConfig?.modelUrl) && (
+            <View style={styles.actionRow}>
+              {hasValidCoordinates && (
+                <GradientParticleButton
+                  style={[styles.actionButton, { flex: 1 }]}
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
+                    Linking.openURL(url);
+                  }}
+                  label="Como llegar"
+                  iconName="navigate-outline"
+                  backgroundColor="#0F172A"
+                  particleColors={["rgba(255,255,255,0.28)", "rgba(20,184,166,0.2)", "rgba(14,116,144,0.2)"]}
+                />
+              )}
+
+              {arConfig?.modelUrl && (
+                <GradientParticleButton
+                  style={[styles.actionButton, styles.arActionButton]} 
+                  onPress={() => {
+                    navigation.navigate('ARView', { 
+                      modelUrl: arConfig.modelUrl,
+                      placeName: place.name 
+                    });
+                  }}
+                  label="Ver en AR"
+                  iconName="cube-outline"
+                  backgroundColor="#0E7490"
+                  particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
+                />
+              )}
+            </View>
+          )}
+
           {!!user && isNearPlace && (
             <View style={styles.feedbackSection}>
               <Text style={styles.sectionTitle}>Feedback de ubicacion y datos</Text>
@@ -813,35 +1320,6 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               ) : null}
             </View>
           )}
-
-          {(hasValidCoordinates || arConfig?.modelUrl) && (
-            <View style={styles.actionRow}>
-              {hasValidCoordinates && (
-                <TouchableOpacity style={[styles.actionButton, { flex: 1 }]} onPress={() => {
-                  const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
-                  Linking.openURL(url);
-                }}>
-                  <Ionicons name="navigate-outline" size={20} color={COLORS.white} />
-                  <Text style={styles.actionButtonText}>Como llegar</Text>
-                </TouchableOpacity>
-              )}
-
-              {arConfig?.modelUrl && (
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.arActionButton]} 
-                  onPress={() => {
-                    navigation.navigate('ARView', { 
-                      modelUrl: arConfig.modelUrl,
-                      placeName: place.name 
-                    });
-                  }}
-                >
-                  <Ionicons name="cube-outline" size={20} color={COLORS.white} />
-                  <Text style={styles.actionButtonText}>Ver en AR</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
         </View>
       </Animated.ScrollView>
 
@@ -857,15 +1335,63 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
         <View style={styles.formModalOverlay}>
           <View style={styles.formModalCard}>
             <Text style={styles.formModalTitle}>Nueva resena</Text>
-            <Text style={styles.formFieldLabel}>Calificacion (1 a 5)</Text>
-            <TextInput
-              style={styles.formInput}
-              value={reviewForm.rating}
-              onChangeText={(value) => setReviewForm((prev) => ({ ...prev, rating: value.replace(/[^0-9]/g, "") }))}
-              keyboardType="numeric"
-              maxLength={1}
-              placeholder="5"
-            />
+            <Text style={styles.formFieldLabel}>Calificacion</Text>
+            <View style={styles.ratingSliderTouch}>
+              <View
+                style={styles.ratingSliderTrack}
+                onLayout={(event) => setRatingTrackWidth(event.nativeEvent.layout.width)}
+              >
+                <View style={styles.ratingSliderTrackBase} />
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.ratingSliderFill,
+                    { width: Math.max(0, ratingTrackWidth * ratingProgress) },
+                  ]}
+                />
+                <View style={styles.ratingTicksRow} pointerEvents="none">
+                  {[1, 2, 3, 4, 5].map((level, index) => (
+                    <View
+                      key={`tick-${level}`}
+                      style={[
+                        styles.ratingSliderTick,
+                        index === 0 && styles.ratingSliderTickEdge,
+                        index === 4 && styles.ratingSliderTickEdge,
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.ratingSliderLevelText}>Nivel {reviewForm.rating}/5</Text>
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.ratingSliderThumbGhost,
+                    {
+                      left: Math.max(
+                        0,
+                        Math.min(
+                          Math.max(0, ratingTrackWidth - 32),
+                          ratingTrackWidth * ratingProgress - 16,
+                        ),
+                      ),
+                    },
+                  ]}
+                />
+                <Slider
+                  style={styles.ratingSliderNative}
+                  minimumValue={1}
+                  maximumValue={5}
+                  step={0.05}
+                  value={ratingSliderValue}
+                  minimumTrackTintColor="transparent"
+                  maximumTrackTintColor="transparent"
+                  thumbTintColor="transparent"
+                  onValueChange={handleRatingChange}
+                  onSlidingComplete={handleRatingSlidingComplete}
+                />
+              </View>
+            </View>
+            <Text style={styles.ratingBarHint}>Desliza para elegir nivel</Text>
             <Text style={styles.formFieldLabel}>Comentario</Text>
             <TextInput
               style={[styles.formInput, styles.formInputArea]}
@@ -1093,14 +1619,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   actionButton: {
-    backgroundColor: "#0f172a",
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACING.md,
+    overflow: "visible",
     borderRadius: 12,
     marginTop: SPACING.lg,
-    gap: SPACING.sm,
     minHeight: 48,
   },
   actionButtonText: {
@@ -1115,8 +1636,52 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   arActionButton: {
-    backgroundColor: "#0E7490",
     flex: 1,
+  },
+  gradientButtonBase: {
+    minHeight: 46,
+    borderRadius: 14,
+    overflow: "visible",
+    justifyContent: "center",
+  },
+  gradientButtonFill: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  buttonPressSweep: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: "46%",
+    backgroundColor: "rgba(255,255,255,0.26)",
+    borderRadius: 14,
+  },
+  gradientButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: SPACING.md,
+  },
+  gradientButtonText: {
+    color: "#FFFFFF",
+    fontSize: FONT_SIZES.md,
+    fontWeight: "800",
+  },
+  gradientParticleLayer: {
+    position: "absolute",
+    left: -8,
+    right: -8,
+    top: -10,
+    bottom: -10,
+    zIndex: 3,
+  },
+  gradientParticle: {
+    position: "absolute",
+    borderRadius: 999,
   },
   detailsSection: {
     marginTop: SPACING.md,
@@ -1199,6 +1764,36 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     marginTop: SPACING.md,
   },
+  visitManualStartButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  visitManualStartText: {
+    color: "#0E7490",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  visitManualConfirmButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  visitManualConfirmText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
   secondaryButton: {
     flex: 1,
     minHeight: 42,
@@ -1229,12 +1824,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  reviewCtaButton: {
+    marginTop: SPACING.sm,
+    minHeight: 46,
+    borderRadius: 14,
+    shadowColor: "#F97316",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+  },
+  reviewCtaButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
   disabledAction: {
     opacity: 0.45,
   },
-  successInline: {
+  successInlineWrap: {
     marginTop: SPACING.sm,
     alignSelf: "flex-start",
+    position: "relative",
+  },
+  successInlineRing: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(5,150,105,0.55)",
+    backgroundColor: "rgba(16,185,129,0.1)",
+  },
+  successInline: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1242,6 +1868,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#86EFAC",
   },
   successInlineText: {
     color: "#047857",
@@ -1372,6 +2000,92 @@ const styles = StyleSheet.create({
   formInputArea: {
     minHeight: 92,
     textAlignVertical: "top",
+  },
+  ratingBarWrap: {
+    marginTop: 2,
+  },
+  ratingSliderTouch: {
+    width: "100%",
+    minHeight: 38,
+    justifyContent: "center",
+  },
+  ratingSliderTrack: {
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "#BEEAF2",
+    overflow: "hidden",
+    justifyContent: "center",
+    position: "relative",
+  },
+  ratingSliderTrackBase: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(20,184,166,0.10)",
+  },
+  ratingSliderFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 999,
+    backgroundColor: "rgba(20,184,166,0.38)",
+  },
+  ratingTicksRow: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    top: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  ratingSliderTick: {
+    width: 1,
+    height: 14,
+    backgroundColor: "rgba(14,116,144,0.26)",
+  },
+  ratingSliderTickEdge: {
+    opacity: 0.5,
+  },
+  ratingSliderLevelText: {
+    position: "absolute",
+    alignSelf: "center",
+    color: "#0E7490",
+    fontSize: 12,
+    fontWeight: "800",
+    zIndex: 2,
+    pointerEvents: "none",
+  },
+  ratingSliderThumbGhost: {
+    position: "absolute",
+    top: 3,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#A5E4EC",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.20,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  ratingSliderNative: {
+    position: "absolute",
+    left: -8,
+    right: -8,
+    top: 0,
+    bottom: 0,
+    transform: [{ scaleY: 1.65 }],
+  },
+  ratingBarHint: {
+    marginTop: 6,
+    color: "#64748B",
+    fontSize: 12,
+    fontWeight: "700",
   },
   formActionsRow: {
     marginTop: SPACING.md,

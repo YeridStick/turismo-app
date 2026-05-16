@@ -7,16 +7,20 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Switch,
   Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
-import { FontAwesome, Feather, Ionicons } from "@expo/vector-icons";
-import { COLORS, SPACING } from "../../../../utils/constants";
+import { FontAwesome, Feather } from "@expo/vector-icons";
+import { SPACING } from "../../../../utils/constants";
 import styles from "../../styles";
 import api from "../../../../services/api";
 import { ENDPOINTS } from "../../../../config/api.config";
 import { useAuth } from "../../../../context/AuthContext";
 import { PremiumModal } from "../../../../components/ui/PremiumModal";
+
+const AUTO_VISIT_PREF_KEY = "turismo_auto_visit_enabled";
 
 const ProfileModal = ({
   visible,
@@ -48,6 +52,8 @@ const ProfileModal = ({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [autoVisitEnabled, setAutoVisitEnabled] = useState(false);
+  const [savingAutoVisit, setSavingAutoVisit] = useState(false);
 
   // UI State
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -60,8 +66,47 @@ const ProfileModal = ({
       setIdType(user.identificationType || "CC");
       setIdNumber(user.identificationNumber || "");
       setCurrentView('summary'); // Reset a summary al abrir
+      AsyncStorage.getItem(AUTO_VISIT_PREF_KEY)
+        .then(async (value) => {
+          if (value === null) {
+            setAutoVisitEnabled(true);
+            await AsyncStorage.setItem(AUTO_VISIT_PREF_KEY, "true");
+            return;
+          }
+          setAutoVisitEnabled(value === "true");
+        })
+        .catch(() => setAutoVisitEnabled(true));
     }
   }, [visible, user]);
+
+  const persistAutoVisitPreference = async (nextValue) => {
+    setSavingAutoVisit(true);
+    try {
+      await AsyncStorage.setItem(AUTO_VISIT_PREF_KEY, nextValue ? "true" : "false");
+      setAutoVisitEnabled(nextValue);
+    } catch (_err) {
+      setStatusModal({
+        visible: true,
+        type: "error",
+        title: "Error",
+        message: "No se pudo guardar la preferencia de visita automatica.",
+      });
+    } finally {
+      setSavingAutoVisit(false);
+    }
+  };
+
+  const handleToggleAutoVisit = (nextValue) => {
+    const action = nextValue ? "activar" : "desactivar";
+    Alert.alert(
+      "Confirmar cambio",
+      `Vas a ${action} la validacion automatica de visita. Deseas continuar?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Aceptar", onPress: () => persistAutoVisitPreference(nextValue) },
+      ],
+    );
+  };
 
   const handleUpdateProfile = async () => {
     if (!fullName.trim()) {
@@ -87,7 +132,7 @@ const ProfileModal = ({
         setStatusModal({
           visible: true,
           type: 'success',
-          title: 'Éxito',
+          title: 'Exito',
           message: 'Perfil actualizado correctamente'
         });
         setCurrentView('summary');
@@ -110,7 +155,7 @@ const ProfileModal = ({
         visible: true,
         type: 'error',
         title: 'Error',
-        message: 'Las contraseñas no coinciden'
+        message: 'Las contrasenas no coinciden'
       });
       return;
     }
@@ -120,8 +165,8 @@ const ProfileModal = ({
       setStatusModal({
         visible: true,
         type: 'success',
-        title: 'Éxito',
-        message: 'Contraseña actualizada'
+        title: 'Exito',
+        message: 'Contrasena actualizada'
       });
       setNewPassword("");
       setConfirmPassword("");
@@ -152,14 +197,14 @@ const ProfileModal = ({
     try {
       const date = new Date(dateString);
       return date.toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
-    } catch (e) { return "Error"; }
+    } catch (_e) { return "Error"; }
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <View style={styles.profileCard}>
-          {/* Header Dinámico */}
+          {/* Header Dinamico */}
           <View style={styles.profileHeaderRow}>
             {currentView === 'summary' ? (
               <View style={styles.profileHeaderTitle}>
@@ -172,7 +217,7 @@ const ProfileModal = ({
             ) : (
               <TouchableOpacity onPress={() => setCurrentView('summary')} style={styles.profileHeaderTitle}>
                 <Feather name="arrow-left" size={20} color="#0E7490" />
-                <Text style={styles.profileTitleText}>Configuración</Text>
+                <Text style={styles.profileTitleText}>Configuracion</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onClose} style={styles.profileCloseBtn}>
@@ -211,7 +256,7 @@ const ProfileModal = ({
                 </View>
 
                 <View style={styles.profileInfoGroup}>
-                  <Text style={styles.profileItemLabel}>Información personal</Text>
+                  <Text style={styles.profileItemLabel}>Informacion personal</Text>
                   <View style={styles.profileItem}>
                     <FontAwesome name="id-card" size={13} color="#0E7490" style={{ width: 20 }} />
                     <Text style={styles.profileItemText}><Text style={{ fontWeight: "bold" }}>Documento: </Text>{user.identificationType || "CC"} {user.identificationNumber || "No registrado"}</Text>
@@ -226,7 +271,7 @@ const ProfileModal = ({
                   <View style={styles.profileInfoGroup}>
                     <Text style={styles.profileItemLabel}>Accesos y herramientas</Text>
                     {allowedRoutes.map((route) => {
-                      if (route.id === 'profile-settings') return null; // Ocultamos el viejo botón grande
+                      if (route.id === 'profile-settings') return null; // Ocultamos el viejo boton grande
                       return (
                         <TouchableOpacity key={route.id} style={styles.profileRouteItem} onPress={() => onRoutePress(route.route)}>
                           <View style={styles.profileRouteIconWrapper}><FontAwesome name={route.icon || "circle-o"} size={16} color="#0E7490" /></View>
@@ -269,7 +314,7 @@ const ProfileModal = ({
                       <TextInput style={styles.fieldInput} value={idType} onChangeText={setIdType} />
                    </View>
                    <View style={{ flex: 2 }}>
-                      <Text style={styles.inputLabel}>Número ID</Text>
+                      <Text style={styles.inputLabel}>Numero ID</Text>
                       <TextInput style={styles.fieldInput} value={idNumber} onChangeText={setIdNumber} keyboardType="numeric" />
                    </View>
                 </View>
@@ -287,14 +332,14 @@ const ProfileModal = ({
                 <Text style={[styles.profileItemLabel, { marginBottom: 0 }]}>Seguridad</Text>
                 
                 <View style={styles.inputGroup}>
-                   <Text style={styles.inputLabel}>Nueva Contraseña</Text>
+                   <Text style={styles.inputLabel}>Nueva Contrasena</Text>
                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <TextInput 
                         style={[styles.fieldInput, { flex: 1 }]} 
                         value={newPassword} 
                         onChangeText={setNewPassword} 
                         secureTextEntry={!showPassword} 
-                        placeholder="••••••••"
+                        placeholder="********"
                       />
                       <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: 15 }}>
                          <Feather name={showPassword ? "eye-off" : "eye"} size={18} color="#94A3B8" />
@@ -303,13 +348,13 @@ const ProfileModal = ({
                 </View>
 
                 <View style={styles.inputGroup}>
-                   <Text style={styles.inputLabel}>Confirmar Contraseña</Text>
+                   <Text style={styles.inputLabel}>Confirmar Contrasena</Text>
                    <TextInput 
                      style={styles.fieldInput} 
                      value={confirmPassword} 
                      onChangeText={setConfirmPassword} 
                      secureTextEntry={!showPassword} 
-                     placeholder="••••••••"
+                     placeholder="********"
                    />
                 </View>
 
@@ -318,8 +363,31 @@ const ProfileModal = ({
                    onPress={handleUpdatePassword}
                    disabled={loadingPassword}
                 >
-                   {loadingPassword ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryText}>Cambiar Contraseña</Text>}
+                   {loadingPassword ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalPrimaryText}>Cambiar Contrasena</Text>}
                 </TouchableOpacity>
+                <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 10 }} />
+
+                <Text style={[styles.profileItemLabel, { marginBottom: 0 }]}>Terminos y condiciones</Text>
+                <View style={styles.profileItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#1E293B", fontWeight: "700", fontSize: 14 }}>
+                      Marcar visita automatica
+                    </Text>
+                    <Text style={{ color: "#64748B", fontSize: 12, marginTop: 3 }}>
+                      Check-in y confirmacion automatica al estar en el sitio.
+                    </Text>
+                  </View>
+                  {savingAutoVisit ? (
+                    <ActivityIndicator size="small" color="#0E7490" />
+                  ) : (
+                    <Switch
+                      value={autoVisitEnabled}
+                      onValueChange={handleToggleAutoVisit}
+                      thumbColor={autoVisitEnabled ? "#0E7490" : "#E2E8F0"}
+                      trackColor={{ false: "#CBD5E1", true: "#A5F3FC" }}
+                    />
+                  )}
+                </View>
               </View>
             )}
           </ScrollView>
@@ -333,7 +401,7 @@ const ProfileModal = ({
               style={[styles.modalPrimary, { backgroundColor: '#0E7490' }]} 
               onPress={currentView === 'summary' ? logout : () => setCurrentView('summary')}
             >
-              <Text style={styles.modalPrimaryText}>{currentView === 'summary' ? 'Cerrar sesión' : 'Cancelar'}</Text>
+              <Text style={styles.modalPrimaryText}>{currentView === 'summary' ? 'Cerrar sesion' : 'Cancelar'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -351,3 +419,5 @@ const ProfileModal = ({
 };
 
 export default React.memo(ProfileModal);
+
+

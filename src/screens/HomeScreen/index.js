@@ -137,6 +137,7 @@ const HomeScreen = ({ navigation }) => {
   const [detailPackage, setDetailPackage] = useState(null);
   const [showMap, setShowMap] = useState(false);
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
+  const [mapGestureLocked, setMapGestureLocked] = useState(false);
 
   const displayPlaces = useMemo(() => {
     return query.trim() || selectedCategory !== "todos"
@@ -194,12 +195,14 @@ const HomeScreen = ({ navigation }) => {
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gesture) => {
+          if (mapGestureLocked) return false;
           const { dx, dy, x0 } = gesture;
           if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
           if (!sidePanelOpen && x0 > 40) return false;
           return true;
         },
         onPanResponderMove: (_, gesture) => {
+          if (mapGestureLocked) return;
           const startX = sidePanelOpen ? 0 : -sidePanelWidth;
           const nextX = Math.min(
             0,
@@ -208,6 +211,7 @@ const HomeScreen = ({ navigation }) => {
           sidePanelTranslateX.setValue(nextX);
         },
         onPanResponderRelease: (_, gesture) => {
+          if (mapGestureLocked) return;
           const startX = sidePanelOpen ? 0 : -sidePanelWidth;
           const nextX = startX + gesture.dx;
           const shouldOpen = nextX > -sidePanelWidth / 2 || gesture.vx > 0.5;
@@ -220,7 +224,7 @@ const HomeScreen = ({ navigation }) => {
           }).start(() => setSidePanelOpen(shouldOpen));
         },
       }),
-    [sidePanelOpen, sidePanelWidth, sidePanelTranslateX],
+    [mapGestureLocked, sidePanelOpen, sidePanelWidth, sidePanelTranslateX],
   );
 
   // Roles-based routes
@@ -289,6 +293,24 @@ const HomeScreen = ({ navigation }) => {
     [setSelectedPackage, setPaymentVisible],
   );
 
+  const toggleMapGestureLock = useCallback(() => {
+    setMapGestureLocked((prev) => {
+      const next = !prev;
+      if (next) {
+        closeSidePanel();
+        setIsInteractingWithMap(true);
+      } else {
+        setIsInteractingWithMap(false);
+      }
+      return next;
+    });
+  }, [closeSidePanel]);
+
+  const unlockMapGesture = useCallback(() => {
+    setMapGestureLocked(false);
+    setIsInteractingWithMap(false);
+  }, []);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -301,7 +323,7 @@ const HomeScreen = ({ navigation }) => {
           <RefreshControl refreshing={loadingAll} onRefresh={handleRefresh} />
         }
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!isInteractingWithMap}
+        scrollEnabled={!isInteractingWithMap && !mapGestureLocked}
       >
         <HomeHeader
           user={user}
@@ -342,16 +364,25 @@ const HomeScreen = ({ navigation }) => {
             coords={coords}
             filteredNearby={nearby}
             distanceKm={distanceKm}
+            mapGestureLocked={mapGestureLocked}
             isInteractingWithMap={isInteractingWithMap}
             onMapTouchStart={() => setIsInteractingWithMap(true)}
             onMapTouchEnd={() => setIsInteractingWithMap(false)}
+            onToggleMapGestureLock={toggleMapGestureLock}
+            onUnlockMapGesture={unlockMapGesture}
             onPlacePress={(item, index) =>
+              {
+                unlockMapGesture();
               navigation.navigate("PlaceDetail", {
                 places: nearby,
                 initialIndex: index,
-              })
+              });
+              }
             }
-            onArPress={openAR}
+            onArPress={(item) => {
+              unlockMapGesture();
+              openAR(item);
+            }}
             onIncreaseRadius={handleIncreaseRadius}
             getTopPlaceMeta={getTopPlaceMeta}
             loadingNearby={loadingNearby}
