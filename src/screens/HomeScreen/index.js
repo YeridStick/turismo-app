@@ -10,6 +10,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -41,7 +42,7 @@ import useVerification from "./hooks/useVerification";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import AnimatedBackground from "../../components/ui/AnimatedBackground";
 import styles from "./styles";
-import { COLORS } from "./utils/constants";
+import { COLORS, screenWidth } from "./utils/constants";
 import {
   formatPrice,
   getCategoryLabel,
@@ -69,6 +70,8 @@ const HomeScreen = ({ navigation }) => {
     loadingTopPlaces,
     loadingPackages,
     loadingAgencies,
+    loadingMorePackages,
+    loadingMoreAgencies,
     loadingNearbyContext,
     error,
     topPlacesError,
@@ -78,16 +81,22 @@ const HomeScreen = ({ navigation }) => {
     allPlacesPage,
     setAllPlacesPage,
     hasMorePlaces,
+    hasMorePackages,
+    hasMoreAgencies,
     selectedCategory,
     setSelectedCategory,
     distanceKm,
     setDistanceKm,
     query,
     setQuery,
+    agencySearchQuery,
+    setAgencySearchQuery,
     coords,
     loadAll,
     loadNearby,
     performSearch,
+    loadMoreAgencies,
+    loadMorePackages,
     handleRefresh,
     getTopPlaceMeta,
     selectedAgencyFilter,
@@ -162,7 +171,7 @@ const HomeScreen = ({ navigation }) => {
   }, [allPlacesPage, loadAll, setAllPlacesPage]);
 
   // SidePanel Animation
-  const sidePanelWidth = 320;
+  const sidePanelWidth = 360;
   const sidePanelTranslateX = useRef(
     new Animated.Value(-sidePanelWidth),
   ).current;
@@ -277,6 +286,15 @@ const HomeScreen = ({ navigation }) => {
     setSelectedAgencyFilter(agency);
   };
 
+  const selectAgencyFilter = useCallback(
+    (agency) => {
+      setSelectedAgencyFilter((current) =>
+        current?.id === agency?.id ? null : agency,
+      );
+    },
+    [setSelectedAgencyFilter],
+  );
+
   const openPackageDetail = useCallback((pkg) => {
     setDetailPackage(pkg);
     setPackageDetailVisible(true);
@@ -355,7 +373,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
-              <FontAwesome name="location-arrow" size={11} color="#FB923C" />
+              <FontAwesome name="location-arrow" size={11} color="#0E7490" />
             </View>
             <Text style={styles.sectionHeroTitle}>Cerca de ti</Text>
           </View>
@@ -402,7 +420,7 @@ const HomeScreen = ({ navigation }) => {
                       : "compass"
                   }
                   size={11}
-                  color="#FB923C"
+                  color="#0E7490"
                 />
               </View>
               <Text style={styles.sectionHeroTitle}>
@@ -471,7 +489,7 @@ const HomeScreen = ({ navigation }) => {
               <FontAwesome
                 name={agencies.length > 0 ? "building-o" : "suitcase"}
                 size={11}
-                color="#FB923C"
+                color="#0E7490"
               />
             </View>
             <Text style={styles.sectionHeroTitle}>
@@ -479,22 +497,103 @@ const HomeScreen = ({ navigation }) => {
             </Text>
           </View>
 
-          {agencies.length > 0 && (
-            <FlatList
-              horizontal
-              data={agencies}
-              keyExtractor={(item, idx) => `${item.id || idx}-age`}
-              renderItem={({ item }) => (
+          {(agencies.length > 0 || agencySearchQuery || loadingAgencies) && (
+            <View style={styles.agencyFilterWrap}>
+              <View style={styles.agencySearchBox}>
+                <Ionicons name="search-outline" size={17} color="#0E7490" />
+                <TextInput
+                  value={agencySearchQuery}
+                  onChangeText={setAgencySearchQuery}
+                  placeholder="Buscar agencia local"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.agencySearchInput}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+                {agencySearchQuery ? (
+                  <TouchableOpacity
+                    onPress={() => setAgencySearchQuery("")}
+                    style={styles.agencySearchClear}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="close" size={14} color="#64748B" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              {loadingAgencies ? (
+                <ActivityIndicator color="#0E7490" style={{ marginVertical: 14 }} />
+              ) : agencies.length === 0 ? (
+                <Text style={styles.agencyEmptyText}>
+                  No encontramos agencias con ese nombre.
+                </Text>
+              ) : (
+            <View style={styles.agencyFilterList}>
+              {agencies.map((item, idx) => {
+                const isActive = selectedAgencyFilter?.id === item?.id;
+                return (
                 <TouchableOpacity
-                  style={styles.agencyChip}
-                  onPress={() => openAgency(item)}
+                  key={`${item.id || idx}-age`}
+                  style={[
+                    styles.agencyFilterCard,
+                    isActive && styles.agencyFilterCardActive,
+                  ]}
+                  activeOpacity={0.88}
+                  onPress={() => selectAgencyFilter(item)}
                 >
-                  <Text style={styles.agencyChipText}>{item.name}</Text>
+                  <View
+                    style={[
+                      styles.agencyFilterIcon,
+                      isActive && styles.agencyFilterIconActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name="business-outline"
+                      size={17}
+                      color={isActive ? "#FFFFFF" : "#0E7490"}
+                    />
+                  </View>
+                  <View style={styles.agencyFilterInfo}>
+                    <Text style={styles.agencyFilterName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.agencyFilterMeta} numberOfLines={1}>
+                      {isActive ? "Filtro activo" : "Toca para filtrar paquetes"}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.agencyFilterInfoButton}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      openAgency(item);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="information" size={14} color="#0E7490" />
+                  </TouchableOpacity>
                 </TouchableOpacity>
+                );
+              })}
+              {hasMoreAgencies ? (
+                <TouchableOpacity
+                  style={styles.agencyMoreButton}
+                  onPress={loadMoreAgencies}
+                  disabled={loadingMoreAgencies}
+                  activeOpacity={0.86}
+                >
+                  {loadingMoreAgencies ? (
+                    <ActivityIndicator size="small" color="#0E7490" />
+                  ) : (
+                    <>
+                      <Text style={styles.agencyMoreText}>Ver más agencias</Text>
+                      <Ionicons name="chevron-down" size={15} color="#0E7490" />
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
               )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-            />
+            </View>
           )}
 
           <View
@@ -505,7 +604,7 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
-              <FontAwesome name="suitcase" size={11} color="#FB923C" />
+              <FontAwesome name="suitcase" size={11} color="#0E7490" />
             </View>
             <View
               style={{
@@ -537,23 +636,36 @@ const HomeScreen = ({ navigation }) => {
               style={{ marginVertical: 40 }}
             />
           ) : packages.length > 0 ? (
-            <FlatList
-              horizontal
-              data={packages}
-              keyExtractor={(item, idx) => `${item.id || idx}-pkg`}
-              renderItem={({ item }) => (
+            <View style={styles.packageColumnList}>
+              {packages.map((item, idx) => (
                 <PackageCard
+                  key={`${item.id || idx}-pkg`}
                   pkg={item}
-                  width={300}
+                  width={screenWidth - 36}
                   onOpenDetails={() => openPackageDetail(item)}
                   onReservePress={() => openPackagePayment(item)}
                   getImage={getPackageImage}
                   getGradient={getPackageGradient}
                 />
-              )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-            />
+              ))}
+              {hasMorePackages ? (
+                <TouchableOpacity
+                  style={styles.packageMoreButton}
+                  onPress={loadMorePackages}
+                  disabled={loadingMorePackages}
+                  activeOpacity={0.86}
+                >
+                  {loadingMorePackages ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.packageMoreText}>Cargar más paquetes</Text>
+                      <Ionicons name="add" size={16} color="#FFFFFF" />
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : selectedAgencyFilter ? (
             <View style={styles.emptyAgencyState}>
               <View style={styles.emptyAgencyIcon}>
@@ -600,6 +712,7 @@ const HomeScreen = ({ navigation }) => {
         nearbyDisplayPlace={nearbyContext || (nearby.length ? nearby[0] : null)}
         topPlaces={topPlaces}
         bestRatedPlaces={bestRatedPlaces}
+        places={places}
         loadingTopPlaces={loadingTopPlaces}
         bestRatedError={bestRatedError}
         getCategoryLabel={getCategoryLabel}

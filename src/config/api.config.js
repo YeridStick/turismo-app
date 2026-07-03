@@ -44,6 +44,7 @@ export const ENDPOINTS = {
   // Packages / Agencies
   PACKAGES: "/api/packages",
   AGENCIES: "/api/agencies",
+  AGENCIES_SEARCH: "/api/agencies/search",
   AGENCY_BY_USER: "/api/agencies/by-user",
   AGENCY_MY: "/api/agencies/by-user",
   AGENCY_PACKAGES: (id) => `/api/agencies/${id}/packages`,

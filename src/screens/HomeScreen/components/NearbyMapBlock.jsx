@@ -33,6 +33,7 @@ const NearbyMapBlock = ({
 }) => {
   const lastTapRef = useRef(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const carouselOpacity = useRef(new Animated.Value(mapGestureLocked ? 0 : 1)).current;
 
   useEffect(() => {
     let pulseLoop = null;
@@ -61,6 +62,14 @@ const NearbyMapBlock = ({
       if (pulseLoop) pulseLoop.stop();
     };
   }, [mapGestureLocked, pulseAnim]);
+
+  useEffect(() => {
+    Animated.timing(carouselOpacity, {
+      toValue: mapGestureLocked ? 0 : 1,
+      duration: mapGestureLocked ? 160 : 220,
+      useNativeDriver: true,
+    }).start();
+  }, [carouselOpacity, mapGestureLocked]);
 
   const handleTouchEnd = useCallback(
     (event) => {
@@ -169,7 +178,10 @@ const NearbyMapBlock = ({
         )}
       </View>
 
-      <View style={styles.mapNearbyCarrousel} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.mapNearbyCarrousel, { opacity: carouselOpacity }]}
+        pointerEvents={mapGestureLocked ? "none" : "box-none"}
+      >
         {loadingNearby ? (
           <View style={styles.mapLoadingOverlay}>
             <ActivityIndicator size="large" color="#0E7490" />
@@ -219,7 +231,7 @@ const NearbyMapBlock = ({
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 };

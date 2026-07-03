@@ -12,7 +12,7 @@ import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { theme } from '../../theme/theme';
 import { PremiumButton } from './PremiumButton';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 /**
  * PremiumModal - A high-end feedback component
@@ -23,6 +23,8 @@ const { width, height } = Dimensions.get('window');
  * @param {function} onClose 
  * @param {string} confirmText 
  * @param {function} onConfirm 
+ * @param {string} cancelText
+ * @param {function} onCancel
  */
 export const PremiumModal = ({
   visible,
@@ -32,6 +34,8 @@ export const PremiumModal = ({
   onClose,
   confirmText = 'Entendido',
   onConfirm,
+  cancelText,
+  onCancel,
 }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -65,7 +69,7 @@ export const PremiumModal = ({
         }),
       ]).start();
     }
-  }, [visible]);
+  }, [visible, opacityAnim, scaleAnim]);
 
   const getIcon = () => {
     switch (type) {
@@ -91,6 +95,9 @@ export const PremiumModal = ({
   };
 
   if (!visible) return null;
+
+  const showCancel = Boolean(cancelText || onCancel);
+  const handleCancel = onCancel || onClose;
 
   return (
     <Modal
@@ -123,10 +130,19 @@ export const PremiumModal = ({
           </View>
 
           <View style={styles.actions}>
+            {showCancel && (
+              <PremiumButton
+                title={cancelText || 'Cancelar'}
+                onPress={handleCancel}
+                variant="outline"
+                style={styles.cancelButton}
+                size="md"
+              />
+            )}
             <PremiumButton
               title={confirmText}
               onPress={onConfirm || onClose}
-              style={{ width: '100%' }}
+              style={showCancel ? styles.confirmButton : styles.fullButton}
               size="md"
             />
           </View>
@@ -182,5 +198,19 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 24,
     paddingTop: 0,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  fullButton: {
+    width: '100%',
+  },
+  cancelButton: {
+    flex: 1,
+    minHeight: 48,
+    backgroundColor: theme.colors.surface,
+  },
+  confirmButton: {
+    flex: 1,
+    minHeight: 48,
   },
 });

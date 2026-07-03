@@ -8,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
-  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
@@ -98,14 +97,19 @@ const ProfileModal = ({
 
   const handleToggleAutoVisit = (nextValue) => {
     const action = nextValue ? "activar" : "desactivar";
-    Alert.alert(
-      "Confirmar cambio",
-      `Vas a ${action} la validacion automatica de visita. Deseas continuar?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Aceptar", onPress: () => persistAutoVisitPreference(nextValue) },
-      ],
-    );
+    setStatusModal({
+      visible: true,
+      type: "warning",
+      title: "Confirmar cambio",
+      message: `Vas a ${action} la validacion automatica de visita. Deseas continuar?`,
+      confirmText: "Aceptar",
+      cancelText: "Cancelar",
+      onConfirm: async () => {
+        setStatusModal((prev) => ({ ...prev, visible: false }));
+        await persistAutoVisitPreference(nextValue);
+      },
+      onCancel: () => setStatusModal((prev) => ({ ...prev, visible: false })),
+    });
   };
 
   const handleUpdateProfile = async () => {
@@ -412,6 +416,10 @@ const ProfileModal = ({
         type={statusModal.type}
         title={statusModal.title}
         message={statusModal.message}
+        confirmText={statusModal.confirmText}
+        cancelText={statusModal.cancelText}
+        onConfirm={statusModal.onConfirm}
+        onCancel={statusModal.onCancel}
         onClose={() => setStatusModal({ ...statusModal, visible: false })}
       />
     </Modal>
@@ -419,5 +427,4 @@ const ProfileModal = ({
 };
 
 export default React.memo(ProfileModal);
-
 

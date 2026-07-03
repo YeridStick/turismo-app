@@ -48,15 +48,16 @@ export const getPopularPlaces = () =>
   api.get(ENDPOINTS.PLACES_SEARCH, { params: { limit: 10, sort: 'rating,desc' } });
 export const getTopPlaces = () => api.get(ENDPOINTS.PLACES_TOP);
 export const getTopRatedPlaces = (limit = 8) => api.get(ENDPOINTS.PLACES_TOP_RATED, { params: { limit } });
-export const getPackages = () => api.get(ENDPOINTS.PACKAGES);
+export const getPackages = (params = {}) => api.get(ENDPOINTS.PACKAGES, { params });
 export const createPackage = (data) => api.post(ENDPOINTS.PACKAGES, data);
 export const getPackageById = (id) => api.get(`${ENDPOINTS.PACKAGES}/${id}`);
-export const getAgencies = () => api.get(ENDPOINTS.AGENCIES);
+export const getAgencies = (params = {}) => api.get(ENDPOINTS.AGENCIES, { params });
+export const searchAgencies = (params = {}) => api.get(ENDPOINTS.AGENCIES_SEARCH, { params });
 export const createAgency = (data) => api.post(ENDPOINTS.AGENCIES, data);
 export const getAgencyByEmail = (email) => 
   api.get(ENDPOINTS.AGENCY_BY_USER, { params: { email, userEmail: email } });
 export const getMyAgencies = (email) => api.get(ENDPOINTS.AGENCY_MY, { params: { email } });
-export const getAgencyPackages = (id) => api.get(ENDPOINTS.AGENCY_PACKAGES(id));
+export const getAgencyPackages = (id, params = {}) => api.get(ENDPOINTS.AGENCY_PACKAGES(id), { params });
 
 // Agency User Management
 export const getAgencyUsers = (id) => api.get(ENDPOINTS.AGENCY_USERS(id));

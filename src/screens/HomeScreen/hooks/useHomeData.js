@@ -1,9 +1,12 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import api from "../../../services/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENDPOINTS } from "../../../config/api.config";
-import { normalizePlace, normalizeTopPlace, isSameCoords, distanceBetweenMeters, getCategoryLabel } from "../utils/helpers";
-import { MAX_DISTANCE_KM } from "../utils/constants";
+import api from "../../../services/api";
+import { distanceBetweenMeters, getCategoryLabel, isSameCoords, normalizePlace, normalizeTopPlace } from "../utils/helpers";
 import useLocation from "./useLocation";
+
+const AGENCIES_PAGE_SIZE = 3;
+const PACKAGES_PAGE_SIZE = 3;
+const AGENCY_SEARCH_DEBOUNCE_MS = 450;
 
 const useHomeData = (user) => {
   const { coords, setCoords, ensureLocation, error: locationError } = useLocation();
@@ -28,6 +31,8 @@ const useHomeData = (user) => {
   const [loadingTopPlaces, setLoadingTopPlaces] = useState(false);
   const [loadingPackages, setLoadingPackages] = useState(false);
   const [loadingAgencies, setLoadingAgencies] = useState(false);
+  const [loadingMorePackages, setLoadingMorePackages] = useState(false);
+  const [loadingMoreAgencies, setLoadingMoreAgencies] = useState(false);
   const [loadingNearbyContext, setLoadingNearbyContext] = useState(false);
   const [error, setError] = useState("");
   const [topPlacesError, setTopPlacesError] = useState("");
@@ -38,9 +43,14 @@ const useHomeData = (user) => {
   // Pagination & Filters
   const [allPlacesPage, setAllPlacesPage] = useState(0);
   const [hasMorePlaces, setHasMorePlaces] = useState(true);
+  const [packagesOffset, setPackagesOffset] = useState(0);
+  const [agenciesOffset, setAgenciesOffset] = useState(0);
+  const [hasMorePackages, setHasMorePackages] = useState(true);
+  const [hasMoreAgencies, setHasMoreAgencies] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("todos");
   const [distanceKm, setDistanceKm] = useState(5);
   const [query, setQuery] = useState("");
+  const [agencySearchQuery, setAgencySearchQuery] = useState("");
   const [selectedAgencyFilter, setSelectedAgencyFilter] = useState(null);
 
   const getTopPlaceMeta = useCallback((item) => {
@@ -65,15 +75,13 @@ const useHomeData = (user) => {
     data: [],
     categoryId: null,
   });
+  const didMountAgencySearchRef = useRef(false);
+  const didMountPackageFilterRef = useRef(false);
 
   // Derived data: Filtered packages
   const filteredPackages = useMemo(() => {
-    if (!selectedAgencyFilter) return packages;
-    return packages.filter(pkg => 
-      pkg.agencyId === selectedAgencyFilter.id || 
-      String(pkg.agencyName).toLowerCase() === String(selectedAgencyFilter.name).toLowerCase()
-    );
-  }, [packages, selectedAgencyFilter]);
+    return packages;
+  }, [packages]);
 
   const clearAgencyFilter = useCallback(() => setSelectedAgencyFilter(null), []);
 
@@ -177,11 +185,32 @@ const useHomeData = (user) => {
         params: { limit: 8 },
       });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      const normalized = data.map((item) => normalizePlace({
-        ...item,
-        rating: item?.avgRating,
-        reviews: item?.reviewsCount,
-      }));
+      const normalized = data.map((item) => {
+        const nestedPlace = item?.place || item?.site || item?.placeInfo || item?.placeData;
+        const place = nestedPlace ? normalizePlace(nestedPlace) : normalizePlace(item);
+
+        return normalizePlace({
+          ...place,
+          ...item,
+          id: place?.id ?? item?.placeId ?? item?.place_id ?? item?.siteId ?? item?.site_id ?? item?.id,
+          name: item?.name || item?.placeName || place?.name || place?.placeName || place?.title,
+          title: item?.title || place?.title || place?.name,
+          imageUrls:
+            Array.isArray(item?.imageUrls) && item.imageUrls.length
+              ? item.imageUrls
+              : place?.imageUrls,
+          imageUrl: item?.imageUrl || place?.imageUrl,
+          image: item?.image || place?.image,
+          address: item?.address || item?.location || place?.address || place?.location,
+          location: item?.location || place?.location || place?.address,
+          categoryId: item?.categoryId ?? item?.category_id ?? place?.categoryId ?? place?.category_id,
+          category_id: item?.category_id ?? item?.categoryId ?? place?.category_id ?? place?.categoryId,
+          categoryName: item?.categoryName || place?.categoryName,
+          category: item?.category || place?.category,
+          rating: item?.rating ?? item?.avgRating ?? item?.avg_rating,
+          reviews: item?.reviews ?? item?.reviewsCount ?? item?.reviews_count,
+        });
+      });
       setBestRatedPlaces(normalized);
     } catch (_err) {
       setBestRatedError("No se pudo cargar los mejor valorados.");
@@ -189,33 +218,65 @@ const useHomeData = (user) => {
     }
   }, []);
 
-  const loadPackages = useCallback(async () => {
-    setLoadingPackages(true);
+  const loadPackages = useCallback(async (offset = 0, append = false, agency = selectedAgencyFilter) => {
+    if (append) setLoadingMorePackages(true);
+    else setLoadingPackages(true);
     setPackagesError("");
     try {
-      const response = await api.get(ENDPOINTS.PACKAGES);
+      const endpoint = agency?.id ? ENDPOINTS.AGENCY_PACKAGES(agency.id) : ENDPOINTS.PACKAGES;
+      const response = await api.get(endpoint, {
+        params: {
+          limit: PACKAGES_PAGE_SIZE,
+          offset,
+        },
+      });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPackages(data);
+      setPackages((prev) => (append ? [...prev, ...data] : data));
+      setPackagesOffset(offset);
+      setHasMorePackages(data.length >= PACKAGES_PAGE_SIZE);
     } catch (err) {
       setPackagesError("No se pudo cargar los paquetes.");
     } finally {
-      setLoadingPackages(false);
+      if (append) setLoadingMorePackages(false);
+      else setLoadingPackages(false);
     }
-  }, []);
+  }, [selectedAgencyFilter]);
 
-  const loadAgencies = useCallback(async () => {
-    setLoadingAgencies(true);
+  const loadAgencies = useCallback(async (offset = 0, append = false, searchText = agencySearchQuery) => {
+    const q = String(searchText || "").trim();
+    if (append) setLoadingMoreAgencies(true);
+    else setLoadingAgencies(true);
     setAgenciesError("");
     try {
-      const response = await api.get(ENDPOINTS.AGENCIES);
+      const endpoint = q.length >= 2 ? ENDPOINTS.AGENCIES_SEARCH : ENDPOINTS.AGENCIES;
+      const response = await api.get(endpoint, {
+        params: {
+          q: q.length >= 2 ? q : undefined,
+          limit: AGENCIES_PAGE_SIZE,
+          offset,
+        },
+      });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setAgencies(data);
+      setAgencies((prev) => (append ? [...prev, ...data] : data));
+      setAgenciesOffset(offset);
+      setHasMoreAgencies(data.length >= AGENCIES_PAGE_SIZE);
     } catch (err) {
       setAgenciesError("No se pudo cargar las agencias.");
     } finally {
-      setLoadingAgencies(false);
+      if (append) setLoadingMoreAgencies(false);
+      else setLoadingAgencies(false);
     }
-  }, []);
+  }, [agencySearchQuery]);
+
+  const loadMoreAgencies = useCallback(() => {
+    if (loadingMoreAgencies || loadingAgencies || !hasMoreAgencies) return;
+    loadAgencies(agenciesOffset + AGENCIES_PAGE_SIZE, true);
+  }, [agenciesOffset, hasMoreAgencies, loadAgencies, loadingAgencies, loadingMoreAgencies]);
+
+  const loadMorePackages = useCallback(() => {
+    if (loadingMorePackages || loadingPackages || !hasMorePackages) return;
+    loadPackages(packagesOffset + PACKAGES_PAGE_SIZE, true);
+  }, [hasMorePackages, loadPackages, loadingMorePackages, loadingPackages, packagesOffset]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -369,6 +430,28 @@ const useHomeData = (user) => {
     ]);
   }, [loadAll, loadPopular, loadPackages, loadAgencies, loadTopPlaces, loadBestRatedPlaces, loadNearby, loadNearbyContext, loadCategories]);
 
+  useEffect(() => {
+    if (!didMountAgencySearchRef.current) {
+      didMountAgencySearchRef.current = true;
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      loadAgencies(0, false, agencySearchQuery);
+    }, AGENCY_SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [agencySearchQuery, loadAgencies]);
+
+  useEffect(() => {
+    if (!didMountPackageFilterRef.current) {
+      didMountPackageFilterRef.current = true;
+      return;
+    }
+
+    loadPackages(0, false, selectedAgencyFilter);
+  }, [selectedAgencyFilter, loadPackages]);
+
   // Initial load
   useEffect(() => {
     handleRefresh();
@@ -395,6 +478,8 @@ const useHomeData = (user) => {
     loadingTopPlaces,
     loadingPackages,
     loadingAgencies,
+    loadingMorePackages,
+    loadingMoreAgencies,
     loadingNearbyContext,
     error,
     topPlacesError,
@@ -407,12 +492,16 @@ const useHomeData = (user) => {
     allPlacesPage,
     setAllPlacesPage,
     hasMorePlaces,
+    hasMorePackages,
+    hasMoreAgencies,
     selectedCategory,
     setSelectedCategory,
     distanceKm,
     setDistanceKm,
     query,
     setQuery,
+    agencySearchQuery,
+    setAgencySearchQuery,
     coords,
     setCoords,
     selectedAgencyFilter,
@@ -422,6 +511,8 @@ const useHomeData = (user) => {
     loadAll,
     loadNearby,
     loadNearbyContext,
+    loadMoreAgencies,
+    loadMorePackages,
     performSearch,
     handleRefresh,
     ensureLocation,

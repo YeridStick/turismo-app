@@ -29,6 +29,7 @@ import api from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 import { useAuth } from '../context/AuthContext';
 import { PremiumModal } from '../components/ui/PremiumModal';
+import WebViewMap from '../components/WebViewMap';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -1103,6 +1104,40 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
             </View>
           )}
 
+          {(hasValidCoordinates || arConfig?.modelUrl) && (
+            <View style={styles.actionRow}>
+              {hasValidCoordinates && (
+                <TouchableOpacity
+                  activeOpacity={0.86}
+                  style={[styles.detailCtaButton, styles.detailCtaPrimary]}
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
+                    Linking.openURL(url);
+                  }}
+                >
+                  <Ionicons name="navigate-outline" size={15} color="#FFFFFF" />
+                  <Text style={styles.detailCtaPrimaryText}>Como llegar</Text>
+                </TouchableOpacity>
+              )}
+
+              {arConfig?.modelUrl && (
+                <TouchableOpacity
+                  activeOpacity={0.86}
+                  style={[styles.detailCtaButton, styles.detailCtaSecondary]}
+                  onPress={() => {
+                    navigation.navigate('ARView', { 
+                      modelUrl: arConfig.modelUrl,
+                      placeName: place.name 
+                    });
+                  }}
+                >
+                  <Ionicons name="cube-outline" size={15} color="#0E7490" />
+                  <Text style={styles.detailCtaSecondaryText}>Realidad aumentada</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {place.description && (
             <Text style={styles.description}>{place.description}</Text>
           )}
@@ -1227,11 +1262,11 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
 
           <View style={styles.reviewSection}>
             <View style={styles.reviewHeaderRow}>
-              <Text style={styles.sectionTitle}>Resenas del sitio</Text>
+              <Text style={styles.sectionTitle}>Reseñas del sitio</Text>
               {loadingReviews ? <ActivityIndicator size="small" color="#0E7490" /> : null}
             </View>
             <Text style={styles.reviewSummaryText}>
-              {ratingSummary.avgRating != null ? `* ${ratingSummary.avgRating.toFixed(1)}` : "Sin calificacion"} - {ratingSummary.reviewsCount || 0} resenas
+              {ratingSummary.avgRating != null ? `* ${ratingSummary.avgRating.toFixed(1)}` : "Sin calificacion"} - {ratingSummary.reviewsCount || 0} reseñas
             </Text>
             {reviews.length > 0 ? (
               <View style={styles.reviewsList}>
@@ -1240,13 +1275,13 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                 ))}
               </View>
             ) : (
-              <Text style={styles.visitMetaText}>Aun no hay resenas para este lugar.</Text>
+              <Text style={styles.visitMetaText}>Aun no hay reseñas para este lugar.</Text>
             )}
             {canCreateReview ? (
               <GradientParticleButton
                 style={styles.reviewCtaButton}
                 onPress={() => setReviewModalVisible(true)}
-                label="Escribir resena"
+                label="Escribir reseña"
                 iconName="create-outline"
                 backgroundColor="#0E7490"
                 particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
@@ -1258,8 +1293,8 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                   setStatusModal({
                     visible: true,
                     type: "info",
-                    title: "Resenas en sitio",
-                    message: "Solo puedes crear una resena cuando te encuentres en el sitio.",
+                    title: "Reseñas en sitio",
+                    message: "Solo puedes crear una reseña cuando te encuentres en el sitio.",
                   })
                 }
               >
@@ -1268,40 +1303,6 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               </TouchableOpacity>
             )}
           </View>
-
-          {(hasValidCoordinates || arConfig?.modelUrl) && (
-            <View style={styles.actionRow}>
-              {hasValidCoordinates && (
-                <GradientParticleButton
-                  style={[styles.actionButton, { flex: 1 }]}
-                  onPress={() => {
-                    const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
-                    Linking.openURL(url);
-                  }}
-                  label="Como llegar"
-                  iconName="navigate-outline"
-                  backgroundColor="#0F172A"
-                  particleColors={["rgba(255,255,255,0.28)", "rgba(20,184,166,0.2)", "rgba(14,116,144,0.2)"]}
-                />
-              )}
-
-              {arConfig?.modelUrl && (
-                <GradientParticleButton
-                  style={[styles.actionButton, styles.arActionButton]} 
-                  onPress={() => {
-                    navigation.navigate('ARView', { 
-                      modelUrl: arConfig.modelUrl,
-                      placeName: place.name 
-                    });
-                  }}
-                  label="Ver en AR"
-                  iconName="cube-outline"
-                  backgroundColor="#0E7490"
-                  particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
-                />
-              )}
-            </View>
-          )}
 
           {!!user && isNearPlace && (
             <View style={styles.feedbackSection}>
@@ -1320,6 +1321,45 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
               ) : null}
             </View>
           )}
+
+          {hasValidCoordinates ? (
+            <View style={styles.locationSection}>
+              <Text style={styles.sectionTitle}>Ubicacion</Text>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={styles.locationMapCard}
+                onPress={() => {
+                  const url = `https://www.google.com/maps/search/?api=1&query=${coordinates.latitude},${coordinates.longitude}`;
+                  Linking.openURL(url);
+                }}
+              >
+                <WebViewMap
+                  initialRegion={{
+                    latitude: coordinates.latitude,
+                    longitude: coordinates.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                  markers={[{
+                    id: place.id || "place-location",
+                    latitude: coordinates.latitude,
+                    longitude: coordinates.longitude,
+                    title: place.name || "Ubicacion",
+                    description: place.address || "Localizacion exacta",
+                  }]}
+                  showCircle={false}
+                  showUserLocation={false}
+                />
+                  <View style={styles.locationExactPill}>
+                    <Ionicons name="navigate-circle-outline" size={13} color="#0E7490" />
+                    <Text style={styles.locationExactText}>Localizacion exacta</Text>
+                  </View>
+              </TouchableOpacity>
+              <Text style={styles.locationAddressText} numberOfLines={2}>
+                {place.address || `${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)}`}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </Animated.ScrollView>
 
@@ -1334,7 +1374,15 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       <Modal visible={reviewModalVisible} transparent animationType="fade" onRequestClose={() => setReviewModalVisible(false)}>
         <View style={styles.formModalOverlay}>
           <View style={styles.formModalCard}>
-            <Text style={styles.formModalTitle}>Nueva resena</Text>
+            <View style={styles.formModalHeader}>
+              <View style={styles.formModalIcon}>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#0E7490" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formModalTitle}>Escribir reseña</Text>
+                <Text style={styles.formModalSubtitle}>Comparte una opinión breve y útil para otros viajeros.</Text>
+              </View>
+            </View>
             <Text style={styles.formFieldLabel}>Calificacion</Text>
             <View style={styles.ratingSliderTouch}>
               <View
@@ -1370,8 +1418,8 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                       left: Math.max(
                         0,
                         Math.min(
-                          Math.max(0, ratingTrackWidth - 32),
-                          ratingTrackWidth * ratingProgress - 16,
+                          Math.max(0, ratingTrackWidth - 26),
+                          ratingTrackWidth * ratingProgress - 13,
                         ),
                       ),
                     },
@@ -1585,44 +1633,48 @@ const styles = StyleSheet.create({
     width: 20,
   },
   infoContainer: {
-    padding: SPACING.lg,
-    backgroundColor: COLORS.background,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
+    backgroundColor: "#F5FBFE",
   },
   title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-    lineHeight: FONT_SIZES.xxl + 4,
+    fontSize: 22,
+    fontWeight: '900',
+    color: "#0F172A",
+    marginBottom: 4,
+    lineHeight: 26,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   infoText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textLight,
+    fontSize: 13,
+    color: "#64748B",
     flex: 1,
+    lineHeight: 18,
   },
   description: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    lineHeight: 26,
+    fontSize: 13,
+    color: "#111827",
+    lineHeight: 20,
+    marginTop: SPACING.sm,
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.md,
+    fontSize: 15,
+    fontWeight: '900',
+    color: "#0F172A",
+    marginBottom: SPACING.sm,
+    lineHeight: 19,
   },
   actionButton: {
     overflow: "visible",
-    borderRadius: 12,
-    marginTop: SPACING.lg,
-    minHeight: 48,
+    borderRadius: 999,
+    minHeight: 50,
   },
   actionButtonText: {
     color: COLORS.white,
@@ -1631,9 +1683,45 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    gap: SPACING.md,
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.xl,
+    flexWrap: "wrap",
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  detailCtaButton: {
+    minHeight: 36,
+    borderRadius: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  detailCtaPrimary: {
+    backgroundColor: "#0E7490",
+    borderWidth: 1,
+    borderColor: "rgba(20,184,166,0.5)",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  detailCtaSecondary: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.22)",
+  },
+  detailCtaPrimaryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  detailCtaSecondaryText: {
+    color: "#0E7490",
+    fontSize: 13,
+    fontWeight: "800",
   },
   arActionButton: {
     flex: 1,
@@ -1684,23 +1772,28 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   detailsSection: {
-    marginTop: SPACING.md,
+    marginTop: SPACING.lg,
     gap: SPACING.sm,
   },
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     padding: SPACING.md,
     borderRadius: 16,
     gap: SPACING.md,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E8EEF5',
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   detailIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1711,40 +1804,39 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     color: '#64748B',
-    fontWeight: '600',
+    fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#1E293B',
-    fontWeight: '700',
-    marginTop: 2,
+    fontWeight: '900',
+    marginTop: 4,
   },
   amenitiesSection: {
-    marginTop: SPACING.xl,
+    marginTop: SPACING.lg,
   },
   amenitiesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.sm,
-    marginTop: SPACING.xs,
   },
   amenityChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: '#F3F7FA',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 99,
-    gap: 8,
+    gap: 6,
     borderWidth: 1,
-    borderColor: '#E0E7FF',
+    borderColor: '#E4ECF2',
   },
   amenityText: {
-    fontSize: 13,
-    color: '#3730A3',
-    fontWeight: '600',
+    fontSize: 11,
+    color: '#0E7490',
+    fontWeight: '800',
   },
   visitSection: {
     marginTop: SPACING.xl,
@@ -1826,13 +1918,15 @@ const styles = StyleSheet.create({
   },
   reviewCtaButton: {
     marginTop: SPACING.sm,
-    minHeight: 46,
-    borderRadius: 14,
-    shadowColor: "#F97316",
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
+    minHeight: 40,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+    minWidth: 156,
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.24)",
   },
@@ -1877,7 +1971,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   reviewSection: {
-    marginTop: SPACING.xl,
+    marginTop: SPACING.lg,
   },
   reviewHeaderRow: {
     flexDirection: "row",
@@ -1886,7 +1980,7 @@ const styles = StyleSheet.create({
   },
   reviewSummaryText: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: 12,
     color: "#334155",
     fontWeight: "600",
   },
@@ -1896,7 +1990,7 @@ const styles = StyleSheet.create({
   },
   reviewItem: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     padding: SPACING.sm,
@@ -1938,7 +2032,41 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   feedbackSection: {
-    marginTop: SPACING.xl,
+    marginTop: SPACING.lg,
+  },
+  locationSection: {
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.xl,
+  },
+  locationMapCard: {
+    height: 140,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#AEB2C8",
+    borderWidth: 1,
+    borderColor: "#DCE3ED",
+  },
+  locationExactPill: {
+    position: "absolute",
+    left: 10,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  locationExactText: {
+    fontSize: 10,
+    color: "#64748B",
+    fontWeight: "800",
+  },
+  locationAddressText: {
+    marginTop: SPACING.xs,
+    fontSize: 12,
+    color: "#64748B",
   },
   lockHintText: {
     marginTop: 6,
@@ -1966,19 +2094,45 @@ const styles = StyleSheet.create({
   formModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.62)",
-    justifyContent: "center",
+    justifyContent: "flex-end",
     padding: SPACING.lg,
   },
   formModalCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 24,
     padding: SPACING.lg,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  formModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  formModalIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#ECFEFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.16)",
   },
   formModalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 19,
+    fontWeight: "900",
     color: "#0F172A",
-    marginBottom: SPACING.sm,
+  },
+  formModalSubtitle: {
+    marginTop: 3,
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
   },
   formFieldLabel: {
     fontSize: 12,
@@ -1998,7 +2152,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   formInputArea: {
-    minHeight: 92,
+    minHeight: 104,
+    maxHeight: 150,
     textAlignVertical: "top",
   },
   ratingBarWrap: {
@@ -2010,7 +2165,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ratingSliderTrack: {
-    height: 38,
+    height: 34,
     borderRadius: 999,
     backgroundColor: "#ECFEFF",
     borderWidth: 1,
@@ -2060,10 +2215,10 @@ const styles = StyleSheet.create({
   },
   ratingSliderThumbGhost: {
     position: "absolute",
-    top: 3,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: 4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#A5E4EC",
@@ -2088,14 +2243,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   formActionsRow: {
-    marginTop: SPACING.md,
+    marginTop: SPACING.lg,
     flexDirection: "row",
     gap: SPACING.sm,
   },
   formCancelButton: {
     flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
+    minHeight: 44,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "#CBD5E1",
     alignItems: "center",
@@ -2107,8 +2262,8 @@ const styles = StyleSheet.create({
   },
   formSubmitButton: {
     flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
+    minHeight: 44,
+    borderRadius: 999,
     backgroundColor: "#0E7490",
     alignItems: "center",
     justifyContent: "center",
@@ -2195,4 +2350,3 @@ const styles = StyleSheet.create({
 });
 
 export default PlaceDetailScreen;
-

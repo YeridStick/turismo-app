@@ -143,23 +143,58 @@ const WebViewMap = ({
 
                     log('Mapa inicializado en [${initialRegion.latitude}, ${initialRegion.longitude}]');
 
-                    // Add OpenStreetMap tiles (NO GOOGLE MAPS)
-                    const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                        maxZoom: 19,
-                        minZoom: 3,
-                        errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-                    }).addTo(map);
+                    // Add map tiles with fallback. WebView can occasionally fail one CDN
+                    // and leave only Leaflet's beige base visible.
+                    const tileProviders = [
+                        {
+                            name: 'CARTO',
+                            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                        },
+                        {
+                            name: 'OpenStreetMap',
+                            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        }
+                    ];
+                    let activeTileProviderIndex = 0;
+                    let tileLayer = null;
+                    let tileErrorCount = 0;
 
-                    tileLayer.on('tileerror', function(error) {
-                        log('Error cargando tile: ' + error.tile.src);
-                    });
+                    function addTileLayer(providerIndex) {
+                        const provider = tileProviders[providerIndex];
+                        if (tileLayer) {
+                            map.removeLayer(tileLayer);
+                        }
+                        tileErrorCount = 0;
+                        tileLayer = L.tileLayer(provider.url, {
+                            attribution: provider.attribution,
+                            maxZoom: 19,
+                            minZoom: 3,
+                            crossOrigin: true,
+                            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+                        }).addTo(map);
 
-                    tileLayer.on('tileload', function(e) {
-                        log('Tile cargado exitosamente');
-                    });
+                        tileLayer.on('tileerror', function(error) {
+                            tileErrorCount += 1;
+                            log('Error cargando tile ' + provider.name + ': ' + error.tile.src);
+                            if (tileErrorCount >= 3 && activeTileProviderIndex < tileProviders.length - 1) {
+                                activeTileProviderIndex += 1;
+                                log('Cambiando proveedor de mapa a ' + tileProviders[activeTileProviderIndex].name);
+                                addTileLayer(activeTileProviderIndex);
+                            }
+                        });
 
-                    log('Capa de tiles de OpenStreetMap agregada');
+                        log('Capa de tiles agregada: ' + provider.name);
+                    }
+
+                    addTileLayer(activeTileProviderIndex);
+                    setTimeout(function() {
+                        map.invalidateSize();
+                    }, 250);
+                    setTimeout(function() {
+                        map.invalidateSize();
+                    }, 900);
 
                     // Store markers and circles
                     window.mapInstance = map;

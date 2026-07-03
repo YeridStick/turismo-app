@@ -1,7 +1,7 @@
-import { FontAwesome } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -28,6 +28,7 @@ const SidePanel = ({
   loadingNearbyContext,
   topPlaces,
   bestRatedPlaces,
+  places = [],
   topPlacesError,
   bestRatedError,
   loadingTopPlaces,
@@ -38,26 +39,100 @@ const SidePanel = ({
   getPlaceKey,
   categories = [],
 }) => {
+  const getRankedPlaceId = useCallback((item) => {
+    return (
+      item?.placeId ??
+      item?.place_id ??
+      item?.siteId ??
+      item?.site_id ??
+      item?.place?.id ??
+      item?.site?.id ??
+      item?.id
+    );
+  }, []);
+
+  const displayPlaceSources = useMemo(
+    () => [...(topPlaces || []), ...(places || [])],
+    [places, topPlaces],
+  );
+
+  const resolveDisplayPlace = useCallback(
+    (item) => {
+      const nestedPlace = item?.place || item?.site || item?.placeInfo || item?.placeData;
+      const rankedId = getRankedPlaceId(item);
+      const sourcePlace =
+        nestedPlace ||
+        displayPlaceSources.find((place) => {
+          const sourceId = getRankedPlaceId(place);
+          return rankedId != null && sourceId != null && String(sourceId) === String(rankedId);
+        });
+
+      if (!sourcePlace) return item;
+
+      const merged = {
+        ...sourcePlace,
+        ...item,
+        id: sourcePlace.id ?? rankedId ?? item?.id,
+        name: item?.name || item?.placeName || sourcePlace.name || sourcePlace.placeName || sourcePlace.title,
+        title:
+          item?.title && item.title !== "Lugar"
+            ? item.title
+            : sourcePlace.title || sourcePlace.name,
+        imageUrls:
+          Array.isArray(item?.imageUrls) && item.imageUrls.length
+            ? item.imageUrls
+            : sourcePlace.imageUrls,
+        imageUrl: item?.imageUrl || sourcePlace.imageUrl,
+        image: item?.image || sourcePlace.image,
+        address: item?.address || item?.location || sourcePlace.address || sourcePlace.location,
+        location: item?.location || sourcePlace.location || sourcePlace.address,
+        categoryId: item?.categoryId ?? item?.category_id ?? sourcePlace.categoryId ?? sourcePlace.category_id,
+        category_id: item?.category_id ?? item?.categoryId ?? sourcePlace.category_id ?? sourcePlace.categoryId,
+        categoryName: item?.categoryName || sourcePlace.categoryName,
+        category: item?.category || sourcePlace.category,
+      };
+
+      return merged;
+    },
+    [displayPlaceSources, getRankedPlaceId],
+  );
+
   const renderTopPlaceItem = useCallback(
     ({ item }) => {
+      const nestedPlace = item?.place || item?.site || item?.placeInfo || item?.placeData;
       const imageUri =
-        item?.imageUrls?.[0] || item?.imageUrl || item?.image || null;
-      const title = item?.name || item?.title || "Lugar";
+        item?.imageUrls?.[0] ||
+        item?.imageUrl ||
+        item?.image ||
+        nestedPlace?.imageUrls?.[0] ||
+        nestedPlace?.imageUrl ||
+        nestedPlace?.image ||
+        null;
+      const title =
+        item?.name ||
+        item?.placeName ||
+        nestedPlace?.name ||
+        nestedPlace?.placeName ||
+        item?.title ||
+        nestedPlace?.title ||
+        "Lugar";
       const meta = item?._displayMeta || getTopPlaceMeta(item);
-      const address = item?.address || item?.location || "";
-      const description = item?.description || "";
+      const address = item?.address || item?.location || nestedPlace?.address || nestedPlace?.location || "";
+      const isRatingMeta = typeof meta === "string" && meta.includes("\u2605");
       
-      const resolvedCatId = item?.categoryId ?? item?.category_id;
+      const resolvedCatId = item?.categoryId ?? item?.category_id ?? nestedPlace?.categoryId ?? nestedPlace?.category_id;
       const foundCat = categories?.find((c) => String(c.id) === String(resolvedCatId));
-      const categoryLabel = foundCat ? foundCat.name : getCategoryLabel(item);
+      const categoryLabel = foundCat ? foundCat.name : getCategoryLabel(item) || getCategoryLabel(nestedPlace);
       
       const categoryText =
         categoryLabel ||
         (item?.categoryId != null ? `Categoria ${item.categoryId}` : "");
+      const mainTag = isRatingMeta ? categoryText : categoryText || meta;
 
       return (
         <TouchableOpacity
           style={styles.sidePanelItemCard}
+          activeOpacity={0.86}
           onPress={() => {
             closeSidePanel();
             if (item) onSelectTop(item);
@@ -70,35 +145,33 @@ const SidePanel = ({
                 style={styles.sidePanelThumbImage}
               />
             ) : (
-              <FontAwesome name="map-marker" size={16} color="#64748B" />
+              <Ionicons name="image-outline" size={16} color="#0E7490" />
             )}
           </View>
           <View style={styles.sidePanelItemInfo}>
-            <Text style={styles.sidePanelItemTitle} numberOfLines={1}>
-              {title}
-            </Text>
+            <View style={styles.sidePanelItemTitleRow}>
+              <Text style={styles.sidePanelItemTitle} numberOfLines={1}>
+                {title}
+              </Text>
+              {isRatingMeta ? (
+                <Text style={styles.sidePanelRatingText}>{meta}</Text>
+              ) : null}
+            </View>
             {address ? (
-              <Text style={styles.sidePanelItemMeta} numberOfLines={1}>
-                {address}
-              </Text>
-            ) : null}
-            {description ? (
-              <Text style={styles.sidePanelItemMeta} numberOfLines={2}>
-                {description}
-              </Text>
+              <View style={styles.sidePanelInlineMeta}>
+                <Ionicons name="location-outline" size={10} color="#64748B" />
+                <Text style={styles.sidePanelItemMeta} numberOfLines={1}>
+                  {address}
+                </Text>
+              </View>
             ) : null}
             <View style={styles.sidePanelMetaRow}>
-              {meta ? (
-                <View style={styles.sidePanelMetaPill}>
-                  <Text style={styles.sidePanelMetaPillText}>{meta}</Text>
-                </View>
-              ) : null}
-              {categoryText ? (
+              {mainTag ? (
                 <View
-                  style={[styles.sidePanelMetaPill, styles.sidePanelMetaPillOutline]}
+                  style={styles.sidePanelMetaPill}
                 >
                   <Text style={styles.sidePanelMetaPillText}>
-                    {categoryText}
+                    {mainTag}
                   </Text>
                 </View>
               ) : null}
@@ -170,82 +243,92 @@ const SidePanel = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.sidePanelScrollContent}
         >
-        {nearbyContext ? (
-          <View style={styles.sidePanelWelcome}>
-            <Text style={styles.sidePanelWelcomeTitle}>Bienvenido</Text>
-            <Text style={styles.sidePanelWelcomeSubtitle}>
-              Estas cerca de este lugar.
-            </Text>
-          </View>
-        ) : null}
-
         {loadingNearbyContext ? (
           <ActivityIndicator
             color={COLORS.primary}
             style={styles.sidePanelLoader}
           />
         ) : nearbyDisplayPlace ? (
-          <TouchableOpacity
+          <View
             style={styles.sidePanelNearbyCard}
-            onPress={() => {
-              closeSidePanel();
-              onSelectNearby(nearbyDisplayPlace);
-            }}
           >
-            <View style={styles.sidePanelBadgeRow}>
-              <View style={styles.sidePanelBadge}>
-                <Text style={styles.sidePanelBadgeTextLight}>
-                  {nearbyContext ? "Cerca de ti" : "Explora"}
-                </Text>
+            <Text style={styles.sidePanelNearbyKicker} numberOfLines={1}>
+              {nearbyContext
+                ? `Estas cerca de ${nearbyDisplayPlace.name}`
+                : "Te damos la bienvenida"}
+            </Text>
+            <View style={styles.sidePanelNearbyRow}>
+              <View style={styles.sidePanelNearbyThumb}>
+                {nearbyDisplayPlace?.imageUrls?.[0] ? (
+                <Image
+                  source={{ uri: nearbyDisplayPlace.imageUrls[0] }}
+                  style={styles.sidePanelNearbyImage}
+                />
+                ) : (
+                  <Ionicons name="image-outline" size={18} color="#0E7490" />
+                )}
               </View>
-              {!nearbyContext ? (
-                <View style={styles.sidePanelBadgeOutline}>
-                  <Text style={styles.sidePanelBadgeText}>
-                    Primer resultado
+              <View style={styles.sidePanelNearbyInfo}>
+                {nearbyContext ? (
+                  <View style={styles.sidePanelWelcomePill}>
+                    <Text style={styles.sidePanelBadgeText}>Bienvenido</Text>
+                  </View>
+                ) : null}
+                {!nearbyContext ? (
+                  <View style={styles.sidePanelCompactBadgeRow}>
+                    <View style={styles.sidePanelBadge}>
+                      <Text style={styles.sidePanelBadgeTextLight}>Explora</Text>
+                    </View>
+                    <View style={styles.sidePanelBadgeOutline}>
+                      <Text style={styles.sidePanelBadgeText}>Primer resultado</Text>
+                    </View>
+                  </View>
+                ) : null}
+                <View style={styles.sidePanelNearbyTitleRow}>
+                  <Text style={styles.sidePanelNearbyTitle} numberOfLines={2}>
+                    {nearbyDisplayPlace.name}
+                  </Text>
+                  <Ionicons name="star" size={15} color="#0E7490" />
+                </View>
+                <View style={styles.sidePanelNearbyMetaRow}>
+                  <Ionicons name="location-outline" size={11} color="#64748B" />
+                  <Text style={styles.sidePanelNearbyMeta} numberOfLines={1}>
+                    {nearbyDisplayPlace.address ||
+                      (categories?.find(c => String(c.id) === String(nearbyDisplayPlace.categoryId ?? nearbyDisplayPlace.category_id))?.name) ||
+                      getCategoryLabel(nearbyDisplayPlace) ||
+                      "Lugar cercano"}
                   </Text>
                 </View>
-              ) : null}
-              {typeof nearbyDisplayPlace.distanceM === "number" ? (
-                <View style={styles.sidePanelBadgeOutline}>
-                  <Text style={styles.sidePanelBadgeText}>
-                    {Math.round(nearbyDisplayPlace.distanceM)} m
-                  </Text>
-                </View>
-              ) : null}
+              </View>
             </View>
-            {nearbyDisplayPlace?.imageUrls?.[0] ? (
-              <Image
-                source={{ uri: nearbyDisplayPlace.imageUrls[0] }}
-                style={styles.sidePanelNearbyImage}
-              />
-            ) : null}
-            <Text style={styles.sidePanelNearbyTitle} numberOfLines={2}>
-              {nearbyDisplayPlace.name}
-            </Text>
-            <Text style={styles.sidePanelNearbyMeta} numberOfLines={1}>
-              {nearbyDisplayPlace.address ||
-                (categories?.find(c => String(c.id) === String(nearbyDisplayPlace.categoryId ?? nearbyDisplayPlace.category_id))?.name) ||
-                getCategoryLabel(nearbyDisplayPlace) ||
-                "Lugar cercano"}
-            </Text>
             {nearbyDisplayPlace.description ? (
               <Text style={styles.sidePanelNearbyDescription} numberOfLines={3}>
                 {nearbyDisplayPlace.description}
               </Text>
             ) : null}
-            {nearbyDisplayPlace.categoryId != null ? (
-              <Text style={styles.sidePanelNearbyMeta}>
-                Categoria {nearbyDisplayPlace.categoryId}
-              </Text>
-            ) : null}
-            {nearbyDisplayPlace.lat != null &&
-            nearbyDisplayPlace.lng != null ? (
-              <Text style={styles.sidePanelNearbyMeta}>
-                {Number(nearbyDisplayPlace.lat).toFixed(3)},{" "}
-                {Number(nearbyDisplayPlace.lng).toFixed(3)}
-              </Text>
-            ) : null}
-          </TouchableOpacity>
+            <View style={styles.sidePanelNearbyActions}>
+              {typeof nearbyDisplayPlace.distanceM === "number" ? (
+                <View style={styles.sidePanelDistancePill}>
+                  <Text style={styles.sidePanelBadgeText}>
+                    {Math.round(nearbyDisplayPlace.distanceM)} m
+                  </Text>
+                </View>
+              ) : (
+                <View />
+              )}
+              <TouchableOpacity
+                style={styles.sidePanelVisitButton}
+                activeOpacity={0.86}
+                onPress={() => {
+                  closeSidePanel();
+                  onSelectNearby(nearbyDisplayPlace);
+                }}
+              >
+                <Text style={styles.sidePanelVisitButtonText}>Visitar</Text>
+                <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
         ) : (
           <Text style={styles.sidePanelEmpty}>
             Acercate a un sitio para darte la bienvenida.
@@ -316,11 +399,12 @@ const SidePanel = ({
           <View style={styles.sidePanelList}>
             {bestRatedPlaces
               .map((item) => {
+                const displayItem = resolveDisplayPlace(item);
                 const rating = Number(item?.rating ?? item?.avgRating ?? item?.avg_rating);
                 const reviews = Number(item?.reviews ?? item?.reviewsCount ?? item?.reviews_count);
                 const ratingLabel = Number.isFinite(rating) ? `\u2605 ${rating.toFixed(1)}` : "Sin rating";
                 const reviewsLabel = Number.isFinite(reviews) && reviews > 0 ? ` (${reviews})` : "";
-                return { ...item, _displayMeta: `${ratingLabel}${reviewsLabel}` };
+                return { ...displayItem, _displayMeta: `${ratingLabel}${reviewsLabel}` };
               })
               .map((item, index) => (
                 <View key={getPlaceKey(item) || `best:${index}`}>
@@ -336,5 +420,3 @@ const SidePanel = ({
 };
 
 export default React.memo(SidePanel);
-
-

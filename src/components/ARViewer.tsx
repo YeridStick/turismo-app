@@ -5,7 +5,7 @@ import {
     ViroARSceneNavigator,
     ViroDirectionalLight,
 } from '@reactvision/react-viro';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 // URL del modelo de prueba
@@ -48,45 +48,11 @@ const ARScene = ({
     const baseRotation = useRef(0);
     const lastGestureTime = useRef(0);
 
-    // Referencia para la posición de la cámara
-    const cameraRef = useRef<{
-        position: [number, number, number];
-        rotation: [number, number, number];
-        forward: [number, number, number];
-    }>({
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-        forward: [0, 0, -1]
-    });
-
-    // Función para calcular la posición frente a la cámara
-    const getPositionInFrontOfCamera = (distance: number = 1.2): [number, number, number] => {
-        const { position: camPos, forward } = cameraRef.current;
-        return [
-            camPos[0] + forward[0] * distance,
-            camPos[1] + forward[1] * distance - 0.3, // Ajustar Y para nivel del suelo
-            camPos[2] + forward[2] * distance
-        ];
-    };
-
-    // Actualizar referencia de cámara
-    const onCameraTransformUpdate = (cameraTransform: any) => {
-        const { position: camPos, rotation: camRot, forward } = cameraTransform;
-        cameraRef.current = {
-            position: camPos,
-            rotation: camRot,
-            forward: forward
-        };
-    };
-
     // Exponer función de reset al componente padre
     if (sceneRef) {
         sceneRef.current = {
             resetPosition: () => {
-                // Calcular nueva posición frente a la cámara actual
-                const newPos = getPositionInFrontOfCamera(1.2);
-
-                setPosition(newPos);
+                setPosition([0, -0.3, -1.2]);
                 setRotation([0, 0, 0]);
                 setScale([0.05, 0.05, 0.05]);
 
@@ -172,7 +138,7 @@ const ARScene = ({
         if (!dragToPos || !Array.isArray(dragToPos) || dragToPos.length !== 3) return;
 
         // Actualizamos la posición directamente
-        setPosition(dragToPos);
+        setPosition([dragToPos[0], dragToPos[1], dragToPos[2]]);
     };
 
     // Detectar cuando el modelo carga correctamente
@@ -190,7 +156,7 @@ const ARScene = ({
     };
 
     return (
-        <ViroARScene onCameraTransformUpdate={onCameraTransformUpdate}>
+        <ViroARScene>
             {/* ILUMINACIÓN OPTIMIZADA (SILK): Solo 2 fuentes para máximo rendimiento sin perder calidad */}
             <ViroAmbientLight color="#ffffff" intensity={powerSaver ? 160 : 220} />
             <ViroDirectionalLight
@@ -255,6 +221,25 @@ export const ARViewer: React.FC<ARViewerProps> = ({
 }) => {
     // Referencia interna para comunicarse con la escena
     const sceneRef = useRef<any>(null);
+    const callbacksRef = useRef({ onLoadProgress, onModelLoad, onModelError });
+    callbacksRef.current = { onLoadProgress, onModelLoad, onModelError };
+    const sceneProps = useMemo(
+        () => ({
+            modelUrl,
+            powerSaver,
+            onLoadProgress: (progress: number) => callbacksRef.current.onLoadProgress?.(progress),
+            onModelLoad: () => callbacksRef.current.onModelLoad?.(),
+            onModelError: (error: any) => callbacksRef.current.onModelError?.(error),
+            sceneRef
+        }),
+        [modelUrl, powerSaver]
+    );
+    const arInitialScene = useMemo(
+        () => ({
+            scene: () => <ARScene {...sceneProps} />,
+        }),
+        [sceneProps]
+    );
 
     // Exponer métodos al padre (ARScreen)
     if (viewerRef) {
@@ -289,19 +274,9 @@ export const ARViewer: React.FC<ARViewerProps> = ({
 
     return (
         <ViroARSceneNavigator
+            key={`ar-${modelUrl || TEST_MODEL_URL}`}
             autofocus={true}
-            initialScene={{
-                scene: () => (
-                    <ARScene
-                        modelUrl={modelUrl}
-                        powerSaver={powerSaver}
-                        onLoadProgress={onLoadProgress}
-                        onModelLoad={onModelLoad}
-                        onModelError={onModelError}
-                        sceneRef={sceneRef}
-                    />
-                ),
-            }}
+            initialScene={arInitialScene}
             style={styles.container}
         />
     );
