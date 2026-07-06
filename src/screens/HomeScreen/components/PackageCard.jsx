@@ -6,7 +6,6 @@ import {
   Pressable,
   Animated,
   Easing,
-  ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,6 +24,9 @@ const PackageCard = ({
   places = [],
 }) => {
   const revealAnim = useRef(new Animated.Value(0)).current;
+  const pressAnim = useRef(new Animated.Value(0)).current;
+  const shineAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(revealAnim, {
@@ -34,6 +36,41 @@ const PackageCard = ({
       useNativeDriver: true,
     }).start();
   }, [revealAnim]);
+
+  useEffect(() => {
+    const shineLoop = Animated.loop(
+      Animated.timing(shineAnim, {
+        toValue: 1,
+        duration: 3400,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    );
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1700,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 1700,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    shineLoop.start();
+    pulseLoop.start();
+
+    return () => {
+      shineLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [pulseAnim, shineAnim]);
 
   const sanitizedIncludes = Array.isArray(pkg.includes)
     ? pkg.includes.filter((item) => item && String(item).trim())
@@ -72,12 +109,18 @@ const PackageCard = ({
         .map((placeId) => placeLookup.get(String(placeId)) || { id: placeId })
         .filter(Boolean);
   const visibleRoutePlaces = routePlaces.slice(0, 6);
+  const description =
+    pkg.description ||
+    pkg.summary ||
+    pkg.shortDescription ||
+    pkg.subtitle ||
+    "";
   const vibeTags = [
     pkg.days >= 3 ? "Ruta extendida" : "Escapada",
     "Experiencia local",
   ];
 
-  const revealStyle = {
+  const cardAnimatedStyle = {
     opacity: revealAnim,
     transform: [
       {
@@ -86,12 +129,61 @@ const PackageCard = ({
           outputRange: [14, 0],
         }),
       },
+      {
+        scale: pressAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 0.985],
+        }),
+      },
+    ],
+  };
+  const shineStyle = {
+    opacity: shineAnim.interpolate({
+      inputRange: [0, 0.18, 0.52, 1],
+      outputRange: [0, 0.22, 0.08, 0],
+    }),
+    transform: [
+      {
+        translateX: shineAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-width * 0.7, width * 0.92],
+        }),
+      },
+      { rotate: "18deg" },
+    ],
+  };
+  const pulseStyle = {
+    opacity: pulseAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.18, 0.34],
+    }),
+    transform: [
+      {
+        scale: pulseAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.92, 1.08],
+        }),
+      },
     ],
   };
 
+  const animatePress = (toValue) => {
+    Animated.timing(pressAnim, {
+      toValue,
+      duration: 140,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
-    <Animated.View style={revealStyle}>
-      <Pressable style={[styles.packageCard, { width }]} onPress={onOpenDetails}>
+    <Animated.View style={cardAnimatedStyle}>
+      <Pressable
+        style={[styles.packageCard, { width }]}
+        onPress={onOpenDetails}
+        onPressIn={() => animatePress(1)}
+        onPressOut={() => animatePress(0)}
+      >
         <View style={styles.packageImageWrapper}>
           {hasImage ? (
             <>
@@ -104,7 +196,7 @@ const PackageCard = ({
                 transition={200}
               />
               <LinearGradient
-                colors={["rgba(0,0,0,0.01)", "rgba(0,0,0,0.55)"]}
+                colors={["rgba(0,0,0,0.02)", "rgba(0,0,0,0.60)"]}
                 style={styles.packageImageOverlay}
               />
             </>
@@ -123,6 +215,9 @@ const PackageCard = ({
             </LinearGradient>
           )}
 
+          <Animated.View pointerEvents="none" style={[styles.packageImageGlowOrb, pulseStyle]} />
+          <Animated.View pointerEvents="none" style={[styles.packageImageShine, shineStyle]} />
+
           {cityTags.length > 0 && (
             <View style={styles.packageLocationRow}>
               {cityTags.slice(0, 2).map((tag, idx) => (
@@ -136,6 +231,21 @@ const PackageCard = ({
               ))}
             </View>
           )}
+
+          <View style={styles.packageHeroMetricRow}>
+            <View style={styles.packageHeroMetric}>
+              <FontAwesome name="calendar-o" size={10} color="#FFFFFF" />
+              <Text style={styles.packageHeroMetricText}>
+                {pkg.days || 1}D / {pkg.nights || 0}N
+              </Text>
+            </View>
+            <View style={styles.packageHeroMetric}>
+              <FontAwesome name="users" size={10} color="#FFFFFF" />
+              <Text style={styles.packageHeroMetricText}>
+                {pkg.people || "Flexible"}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <View style={styles.packageBody}>
@@ -155,6 +265,12 @@ const PackageCard = ({
               {pkg.title}
             </Text>
 
+            {description ? (
+              <Text style={styles.packageDescription} numberOfLines={3}>
+                {description}
+              </Text>
+            ) : null}
+
             <View style={styles.packageRatingRow}>
               <FontAwesome name="star" size={12} color="#F59E0B" />
               <Text style={styles.packageRatingText}>{pkg.rating ?? 4.8}</Text>
@@ -165,16 +281,20 @@ const PackageCard = ({
               ) : null}
             </View>
 
-            <View style={styles.packageMetaCleanRow}>
-              <View style={styles.packageMetaCleanItem}>
+            <View style={styles.packageMetaGrid}>
+              <View style={styles.packageMetricCard}>
                 <FontAwesome name="clock-o" size={12} color="#94A3B8" />
-                <Text style={styles.packageMetaCleanText}>
-                  {pkg.days}D / {pkg.nights}N
+                <Text style={styles.packageMetricLabel}>Duración</Text>
+                <Text style={styles.packageMetricValue}>
+                  {pkg.days || 1}D / {pkg.nights || 0}N
                 </Text>
               </View>
-              <View style={styles.packageMetaCleanItem}>
+              <View style={styles.packageMetricCard}>
                 <FontAwesome name="user" size={12} color="#94A3B8" />
-                <Text style={styles.packageMetaCleanText}>{pkg.people}</Text>
+                <Text style={styles.packageMetricLabel}>Capacidad</Text>
+                <Text style={styles.packageMetricValue}>
+                  {pkg.people || "Flexible"}
+                </Text>
               </View>
             </View>
 
@@ -183,18 +303,7 @@ const PackageCard = ({
                 <FontAwesome name="map-signs" size={11} color="#0E7490" />
                 <Text style={styles.packageRouteTitle}>Sitios del paquete</Text>
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.packageRouteScroller}
-                nestedScrollEnabled
-                directionalLockEnabled
-                keyboardShouldPersistTaps="handled"
-                onStartShouldSetResponder={() => true}
-                onMoveShouldSetResponder={() => true}
-                onTouchStart={(event) => event.stopPropagation?.()}
-                onTouchMove={(event) => event.stopPropagation?.()}
-              >
+              <View style={styles.packageRouteVerticalList}>
                 {visibleRoutePlaces.length > 0 ? (
                   visibleRoutePlaces.map((place, idx) => {
                     const placeId =
@@ -213,8 +322,11 @@ const PackageCard = ({
                     return (
                       <View
                         key={`${pkg.id}-route-${placeId}-${idx}`}
-                        style={styles.packageRouteChip}
+                        style={styles.packageRouteChipVertical}
                       >
+                        {idx < visibleRoutePlaces.length - 1 ? (
+                          <View style={styles.packageRouteLine} />
+                        ) : null}
                         <View style={styles.packageRouteIndex}>
                           <Text style={styles.packageRouteIndexText}>{idx + 1}</Text>
                         </View>
@@ -244,7 +356,7 @@ const PackageCard = ({
                     </Text>
                   </View>
                 ) : null}
-              </ScrollView>
+              </View>
             </View>
 
             {includeList.length > 0 && (
@@ -267,13 +379,13 @@ const PackageCard = ({
                 )}
               </View>
             )}
-            <Text style={styles.packageDetailHint}>
-              Toca la tarjeta para ver más detalles
-            </Text>
           </View>
 
           <View style={styles.packageFooter}>
             <View style={styles.packagePriceCol}>
+              <Text style={styles.packageDetailHint}>
+                Toca para ver detalles
+              </Text>
               <Text style={styles.packagePriceNote}>por persona</Text>
               <Text style={styles.packagePrice}>{formatPrice(pkg.price)}</Text>
             </View>

@@ -2,8 +2,6 @@ import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +14,7 @@ import {
   getReservationMessages,
   sendReservationMessage,
 } from "../../../services/api";
+import EdgeDrawer from "../../../components/ui/EdgeDrawer";
 import { COLORS, FONT_SIZES, SPACING } from "../../../utils/constants";
 
 const FINAL_STATUSES = ["confirmed", "rejected", "cancelled"];
@@ -82,9 +81,9 @@ const NotificationPanel = ({
   onMarkRead,
   onMarkAllRead,
   onOpenReservations,
-  panelTranslateX,
   panelWidth,
-  handlePanHandlers,
+  onMotionStart,
+  onMotionEnd,
 }) => {
   const [activeView, setActiveView] = useState("notifications");
   const [chatReservations, setChatReservations] = useState([]);
@@ -95,16 +94,6 @@ const NotificationPanel = ({
   const [chatError, setChatError] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
-  const backdropOpacity = useMemo(() => {
-    if (!panelTranslateX || !panelWidth) return 1;
-
-    return panelTranslateX.interpolate({
-      inputRange: [0, panelWidth],
-      outputRange: [1, 0],
-      extrapolate: "clamp",
-    });
-  }, [panelTranslateX, panelWidth]);
-
   const messageAttention = useMemo(
     () => hasMessageNotification(notifications),
     [notifications],
@@ -508,82 +497,35 @@ const NotificationPanel = ({
   );
 
   return (
-    <View
-      style={panelStyles.root}
-      pointerEvents={enabled || visible ? "box-none" : "none"}
+    <EdgeDrawer
+      side="right"
+      width={panelWidth}
+      open={visible}
+      enabled={enabled}
+      onOpen={onOpen}
+      onClose={onClose}
+      onMotionStart={onMotionStart}
+      onMotionEnd={onMotionEnd}
+      containerStyle={panelStyles.root}
+      panelStyle={panelStyles.panel}
+      handleTouchStyle={panelStyles.handleTouch}
+      renderHandle={() => (
+        <>
+          <View
+            pointerEvents="none"
+            style={panelStyles.handle}
+          />
+          {unreadCount > 0 ? (
+            <View style={panelStyles.handleBadge}>
+              <Text style={panelStyles.handleBadgeText}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </Text>
+            </View>
+          ) : null}
+        </>
+      )}
     >
-      {enabled ? (
-        <Animated.View
-          {...(handlePanHandlers || {})}
-          style={[
-            panelStyles.handlePress,
-            {
-              transform: [
-                {
-                  translateX:
-                    panelTranslateX && panelWidth
-                      ? panelTranslateX.interpolate({
-                          inputRange: [0, panelWidth],
-                          outputRange: [-(panelWidth - 13), 0],
-                          extrapolate: "clamp",
-                        })
-                      : 0,
-                },
-              ],
-            },
-          ]}
-        >
-          <Pressable
-            style={panelStyles.handleTouch}
-            onPress={visible ? onClose : onOpen}
-          >
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                panelStyles.handle,
-                {
-                  backgroundColor: visible
-                    ? "rgba(14, 116, 144, 0.56)"
-                    : "rgba(251, 146, 60, 0.62)",
-                },
-              ]}
-            />
-            {unreadCount > 0 ? (
-              <View style={panelStyles.handleBadge}>
-                <Text style={panelStyles.handleBadgeText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-        </Animated.View>
-      ) : null}
-
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={onClose}
-        pointerEvents={visible ? "auto" : "none"}
-      >
-        <Animated.View
-          style={[
-            panelStyles.backdrop,
-            {
-              opacity: backdropOpacity,
-            },
-          ]}
-        />
-      </Pressable>
-
-      <Animated.View
-        pointerEvents={visible ? "auto" : "none"}
-        style={[
-          panelStyles.panel,
-          panelWidth ? { width: panelWidth } : null,
-          {
-            transform: [{ translateX: panelTranslateX || 0 }],
-          },
-        ]}
-      >
+      <View style={panelStyles.content}>
         <View style={panelStyles.header}>
           <View style={panelStyles.headerIcon}>
             <Ionicons
@@ -624,8 +566,8 @@ const NotificationPanel = ({
           : activeView === "chats"
             ? renderChats()
             : renderHistory()}
-      </Animated.View>
-    </View>
+      </View>
+    </EdgeDrawer>
   );
 };
 
@@ -636,17 +578,12 @@ const panelStyles = StyleSheet.create({
     zIndex: 1002,
     elevation: 1002,
   },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 23, 42, 0.42)",
-  },
   panel: {
-    width: "90%",
-    maxWidth: 410,
+    width: "100%",
     height: "100%",
     paddingTop: 52,
     paddingHorizontal: SPACING.lg,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "rgba(248, 250, 252, 0.92)",
     borderTopLeftRadius: 28,
     borderBottomLeftRadius: 28,
     shadowColor: "#0F172A",
@@ -655,17 +592,8 @@ const panelStyles = StyleSheet.create({
     shadowOffset: { width: -8, height: 0 },
     elevation: 24,
   },
-  handlePress: {
-    position: "absolute",
-    right: 0,
-    top: "50%",
-    width: 48,
-    height: 150,
-    marginTop: -75,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    zIndex: 1004,
-    elevation: 1004,
+  content: {
+    flex: 1,
   },
   handleTouch: {
     width: 48,

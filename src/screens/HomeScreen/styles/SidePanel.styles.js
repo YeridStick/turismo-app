@@ -44,12 +44,9 @@ export default StyleSheet.create({
   },
 
   sidePanel: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
+    height: "100%",
 
-    backgroundColor: PANEL_COLORS.background,
+    backgroundColor: "rgba(248, 250, 252, 0.92)",
 
     borderTopRightRadius: 28,
     borderBottomRightRadius: 28,
@@ -68,7 +65,7 @@ export default StyleSheet.create({
   sidePanelSurface: {
     flex: 1,
 
-    backgroundColor: PANEL_COLORS.background,
+    backgroundColor: "rgba(248, 250, 252, 0.92)",
 
     paddingTop:
       Platform.OS === "ios"

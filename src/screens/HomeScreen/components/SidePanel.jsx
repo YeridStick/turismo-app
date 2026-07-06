@@ -1,29 +1,30 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Animated,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from "react-native";
+import EdgeDrawer from "../../../components/ui/EdgeDrawer";
 import { COLORS } from "../../../utils/constants";
 import styles from "../styles/SidePanel.styles";
 import { getPlaceImage } from "../utils/helpers";
 
 const SidePanel = ({
   sidePanelOpen,
+  enabled = true,
   openSidePanel,
   closeSidePanel,
-  sidePanelTranslateX,
   sidePanelWidth,
-  handlePanHandlers,
+  onMotionStart,
+  onMotionEnd,
   nearbyContext,
   nearbyDisplayPlace,
   loadingNearbyContext,
@@ -42,6 +43,25 @@ const SidePanel = ({
   categories = [],
 }) => {
   const particleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!sidePanelOpen) {
+      particleAnim.stopAnimation();
+      particleAnim.setValue(0);
+      return undefined;
+    }
+
+    const loop = Animated.loop(
+      Animated.timing(particleAnim, {
+        toValue: 1,
+        duration: 2400,
+        useNativeDriver: true,
+      }),
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [particleAnim, sidePanelOpen]);
 
   const getRankedPlaceId = useCallback((item) => {
     return (
@@ -132,7 +152,7 @@ const SidePanel = ({
   );
 
   const renderTopPlaceItem = useCallback(
-    ({ item, index = 0 }) => {
+    ({ item, index = 0, drawerTranslateX }) => {
       const nestedPlace =
         item?.place ||
         item?.site ||
@@ -193,7 +213,7 @@ const SidePanel = ({
           style={[
             styles.sidePanelItemAnimatedWrap,
             {
-              opacity: sidePanelTranslateX.interpolate({
+              opacity: drawerTranslateX.interpolate({
                 inputRange: [
                   -sidePanelWidth,
                   -sidePanelWidth * 0.34,
@@ -204,7 +224,7 @@ const SidePanel = ({
               }),
               transform: [
                 {
-                  translateX: sidePanelTranslateX.interpolate({
+                  translateX: drawerTranslateX.interpolate({
                     inputRange: [-sidePanelWidth, 0],
                     outputRange: [18 + index * 4, 0],
                     extrapolate: "clamp",
@@ -230,7 +250,9 @@ const SidePanel = ({
                 <Image
                   source={{ uri: imageUri }}
                   style={styles.sidePanelThumbImage}
+                  cachePolicy="memory-disk"
                   contentFit="cover"
+                  transition={0}
                 />
               ) : (
                 <Ionicons
@@ -294,7 +316,6 @@ const SidePanel = ({
       getCategoryLabel,
       getTopPlaceMeta,
       onSelectTop,
-      sidePanelTranslateX,
       sidePanelWidth,
     ],
   );
@@ -303,6 +324,35 @@ const SidePanel = ({
     () => getPlaceImage(nearbyDisplayPlace),
     [nearbyDisplayPlace],
   );
+
+  const preloadedImageUris = useMemo(() => {
+    const uniqueUris = new Set();
+
+    if (nearbyImageUri) uniqueUris.add(nearbyImageUri);
+
+    [...topPlaces, ...bestRatedPlaces]
+      .slice(0, 8)
+      .map((item) => getPlaceImage(resolveDisplayPlace(item)))
+      .filter(Boolean)
+      .forEach((uri) => uniqueUris.add(uri));
+
+    return Array.from(uniqueUris);
+  }, [
+    bestRatedPlaces,
+    nearbyImageUri,
+    resolveDisplayPlace,
+    topPlaces,
+  ]);
+
+  useEffect(() => {
+    if (!preloadedImageUris.length || typeof Image.prefetch !== "function") {
+      return;
+    }
+
+    preloadedImageUris.forEach((uri) => {
+      Image.prefetch(uri, "memory-disk").catch(() => {});
+    });
+  }, [preloadedImageUris]);
 
   /*
    * El indicador solo aparece cuando todavía no existe información.
@@ -317,18 +367,6 @@ const SidePanel = ({
 
   const showBestRatedLoader =
     loadingTopPlaces && bestRatedPlaces.length === 0;
-
-  const panelOpenOpacity = sidePanelTranslateX.interpolate({
-    inputRange: [-sidePanelWidth, 0],
-    outputRange: [0, 1],
-    extrapolate: "clamp",
-  });
-
-  const panelDrift = sidePanelTranslateX.interpolate({
-    inputRange: [-sidePanelWidth, 0],
-    outputRange: [-18, 0],
-    extrapolate: "clamp",
-  });
 
   const routeTrailForward = particleAnim.interpolate({
     inputRange: [0, 1],
@@ -412,94 +450,26 @@ const SidePanel = ({
   );
 
   return (
-    <View
-      style={styles.sidePanelOverlayContainer}
-      pointerEvents="box-none"
-    >
-      <Animated.View
-        {...(handlePanHandlers || {})}
-        style={[
-          styles.sidePanelHandlePress,
-          {
-            transform: [
-              {
-                translateX:
-                  sidePanelTranslateX.interpolate({
-                    inputRange: [-sidePanelWidth, 0],
-                    outputRange: [
-                      0,
-                      sidePanelWidth - 13,
-                    ],
-                    extrapolate: "clamp",
-                  }),
-              },
-            ],
-          },
-        ]}
-      >
-        <Pressable
-          style={styles.sidePanelHandleTouch}
-          onPress={
-            sidePanelOpen
-              ? closeSidePanel
-              : openSidePanel
-          }
-        >
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.sidePanelHandle,
-              {
-                backgroundColor: sidePanelOpen
-                  ? "rgba(251, 146, 60, 0.68)"
-                  : "rgba(14, 116, 144, 0.46)",
-              },
-            ]}
-          />
-        </Pressable>
-      </Animated.View>
-
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={closeSidePanel}
-        pointerEvents={
-          sidePanelOpen ? "auto" : "none"
-        }
-      >
+    <EdgeDrawer
+      side="left"
+      width={sidePanelWidth}
+      open={sidePanelOpen}
+      enabled={enabled}
+      onOpen={openSidePanel}
+      onClose={closeSidePanel}
+      onMotionStart={onMotionStart}
+      onMotionEnd={onMotionEnd}
+      containerStyle={styles.sidePanelOverlayContainer}
+      panelStyle={[styles.sidePanel, styles.sidePanelSurface]}
+      handleTouchStyle={styles.sidePanelHandleTouch}
+      renderHandle={() => (
         <Animated.View
-          style={[
-            styles.sidePanelOverlay,
-            {
-              opacity:
-                sidePanelTranslateX.interpolate({
-                  inputRange: [
-                    -sidePanelWidth,
-                    0,
-                  ],
-                  outputRange: [0, 0.35],
-                  extrapolate: "clamp",
-                }),
-            },
-          ]}
+          pointerEvents="none"
+          style={styles.sidePanelHandle}
         />
-      </Pressable>
-
-      <Animated.View
-        style={[
-          styles.sidePanel,
-          {
-            width: sidePanelWidth,
-            transform: [
-              {
-                translateX: sidePanelTranslateX,
-              },
-            ],
-          },
-        ]}
-        renderToHardwareTextureAndroid
-        shouldRasterizeIOS
-      >
-        <View style={styles.sidePanelSurface}>
+      )}
+      renderDecorations={({ opacity: panelOpenOpacity, drift: panelDrift }) => (
+        <>
           {Platform.OS === "ios" ? (
             <BlurView
               pointerEvents="none"
@@ -514,7 +484,7 @@ const SidePanel = ({
                 StyleSheet.absoluteFillObject,
                 {
                   backgroundColor:
-                    "rgba(255,255,255,0.97)",
+                    "rgba(255,255,255,0.88)",
                 },
               ]}
             />
@@ -642,6 +612,14 @@ const SidePanel = ({
             ]}
           />
         </Animated.View>
+        </>
+      )}
+    >
+      {({
+        translateX: drawerTranslateX,
+        opacity: panelOpenOpacity,
+        drift: panelDrift,
+      }) => (
 
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -698,7 +676,7 @@ const SidePanel = ({
                   transform: [
                     {
                       translateY:
-                        sidePanelTranslateX.interpolate(
+                        drawerTranslateX.interpolate(
                           {
                             inputRange: [
                               -sidePanelWidth,
@@ -794,7 +772,9 @@ const SidePanel = ({
                         style={
                           styles.sidePanelNearbyImage
                         }
+                        cachePolicy="memory-disk"
                         contentFit="cover"
+                        transition={0}
                       />
                     ) : (
                       <Ionicons
@@ -943,6 +923,7 @@ const SidePanel = ({
                   {renderTopPlaceItem({
                     item,
                     index,
+                    drawerTranslateX,
                   })}
                 </View>
               ))}
@@ -1047,15 +1028,15 @@ const SidePanel = ({
                     {renderTopPlaceItem({
                       item,
                       index: index + 3,
+                      drawerTranslateX,
                     })}
                   </View>
                 ))}
             </View>
           )}
           </ScrollView>
-        </View>
-      </Animated.View>
-    </View>
+      )}
+    </EdgeDrawer>
   );
 };
 

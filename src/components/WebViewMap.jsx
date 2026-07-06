@@ -8,12 +8,18 @@ const WebViewMap = ({
     userLocation = null,
     showCircle = false,
     circleRadius = 50000,
+    pauseUpdates = false,
     onMapReady = () => { },
     onMapPress = null,
 }) => {
     const webViewRef = useRef(null);
+    const pauseUpdatesRef = useRef(pauseUpdates);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    useEffect(() => {
+        pauseUpdatesRef.current = pauseUpdates;
+    }, [pauseUpdates]);
 
     // Calculate zoom level from latitudeDelta
     const calculateZoomLevel = (latitudeDelta) => {
@@ -344,9 +350,9 @@ const WebViewMap = ({
     // Send updates to WebView when props change
     // Usar setTimeout para asegurar que el WebView está listo en APK
     useEffect(() => {
-        if (webViewRef.current && markers.length > 0 && !isLoading) {
+        if (webViewRef.current && markers.length > 0 && !isLoading && !pauseUpdates) {
             setTimeout(() => {
-                if (webViewRef.current) {
+                if (webViewRef.current && !pauseUpdatesRef.current) {
                     const message = JSON.stringify({
                         type: 'UPDATE_MARKERS',
                         markers: markers
@@ -355,12 +361,12 @@ const WebViewMap = ({
                 }
             }, 500); // Delay para asegurar que el WebView esté listo
         }
-    }, [markers, isLoading]);
+    }, [markers, isLoading, pauseUpdates]);
 
     useEffect(() => {
-        if (webViewRef.current && userLocation && !isLoading) {
+        if (webViewRef.current && userLocation && !isLoading && !pauseUpdates) {
             setTimeout(() => {
-                if (webViewRef.current) {
+                if (webViewRef.current && !pauseUpdatesRef.current) {
                     const message = JSON.stringify({
                         type: 'UPDATE_USER_LOCATION',
                         latitude: userLocation.latitude,
@@ -370,12 +376,12 @@ const WebViewMap = ({
                 }
             }, 500);
         }
-    }, [userLocation, isLoading]);
+    }, [userLocation, isLoading, pauseUpdates]);
 
     useEffect(() => {
-        if (webViewRef.current && userLocation && !isLoading) {
+        if (webViewRef.current && userLocation && !isLoading && !pauseUpdates) {
             setTimeout(() => {
-                if (webViewRef.current) {
+                if (webViewRef.current && !pauseUpdatesRef.current) {
                     const message = JSON.stringify({
                         type: 'UPDATE_CIRCLE',
                         latitude: userLocation.latitude,
@@ -387,7 +393,7 @@ const WebViewMap = ({
                 }
             }, 500);
         }
-    }, [showCircle, circleRadius, userLocation, isLoading]);
+    }, [showCircle, circleRadius, userLocation, isLoading, pauseUpdates]);
 
     const handleMessage = (event) => {
         try {
@@ -401,7 +407,7 @@ const WebViewMap = ({
 
                 // Enviar datos inmediatamente después de que el mapa esté listo
                 setTimeout(() => {
-                    if (webViewRef.current) {
+                    if (webViewRef.current && !pauseUpdatesRef.current) {
                         if (markers.length > 0) {
                             webViewRef.current.postMessage(JSON.stringify({
                                 type: 'UPDATE_MARKERS',

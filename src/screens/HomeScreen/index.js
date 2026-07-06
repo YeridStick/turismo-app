@@ -1,11 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  Easing,
   FlatList,
   KeyboardAvoidingView,
-  PanResponder,
   Platform,
   RefreshControl,
   ScrollView,
@@ -55,6 +52,8 @@ import {
 
 const AGENCY_COLUMN_WIDTH = 310;
 const AGENCY_COLUMN_GAP = 12;
+const PANEL_HANDLE_WIDTH = 25;
+const PANEL_WIDTH = screenWidth - PANEL_HANDLE_WIDTH;
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -245,355 +244,42 @@ const HomeScreen = ({ navigation }) => {
     setAgencyPageIndex(Math.max(0, Math.round(offsetX / pageWidth)));
   }, []);
 
-  // SidePanel Animation
-  const sidePanelWidth = 360;
-  const notificationPanelWidth = Math.min(screenWidth * 0.9, 410);
-  const sidePanelTranslateX = useRef(
-    new Animated.Value(-sidePanelWidth),
-  ).current;
-  const notificationPanelTranslateX = useRef(
-    new Animated.Value(notificationPanelWidth),
-  ).current;
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const edgeGestureRef = useRef(null);
+  const [panelMotionCount, setPanelMotionCount] = useState(0);
 
-  // Close SidePanel
+  const handlePanelMotionStart = useCallback(() => {
+    setPanelMotionCount((count) => count + 1);
+  }, []);
+
+  const handlePanelMotionEnd = useCallback(() => {
+    setPanelMotionCount((count) => Math.max(0, count - 1));
+  }, []);
+
   const closeSidePanel = useCallback(() => {
-    edgeGestureRef.current = null;
-    sidePanelTranslateX.stopAnimation();
-    Animated.timing(sidePanelTranslateX, {
-      toValue: -sidePanelWidth,
-      duration: 260,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => setSidePanelOpen(false));
-  }, [sidePanelTranslateX, sidePanelWidth]);
+    setSidePanelOpen(false);
+  }, []);
 
   const closeNotificationPanel = useCallback(() => {
-    edgeGestureRef.current = null;
-    notificationPanelTranslateX.stopAnimation();
-    Animated.timing(notificationPanelTranslateX, {
-      toValue: notificationPanelWidth,
-      duration: 260,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => setNotificationsVisible(false));
-  }, [notificationPanelTranslateX, notificationPanelWidth]);
+    setNotificationsVisible(false);
+  }, []);
 
   const openSidePanel = useCallback(() => {
-    edgeGestureRef.current = null;
     if (notificationsVisible) {
       closeNotificationPanel();
     }
 
     setSidePanelOpen(true);
-    Animated.timing(sidePanelTranslateX, {
-      toValue: 0,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [
-    closeNotificationPanel,
-    notificationsVisible,
-    sidePanelTranslateX,
-  ]);
+  }, [closeNotificationPanel, notificationsVisible]);
 
   const openNotificationPanel = useCallback(() => {
-    edgeGestureRef.current = null;
     if (sidePanelOpen) {
       closeSidePanel();
     }
 
-    notificationPanelTranslateX.stopAnimation();
     setNotificationsVisible(true);
-    Animated.timing(notificationPanelTranslateX, {
-      toValue: 0,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [
-    closeSidePanel,
-    notificationPanelTranslateX,
-    sidePanelOpen,
-  ]);
+  }, [closeSidePanel, sidePanelOpen]);
 
   openNotificationPanelRef.current = openNotificationPanel;
-
-  const leftHandlePanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !mapGestureLocked && !sidePanelOpen,
-        onMoveShouldSetPanResponder: (_, gesture) => {
-          if (mapGestureLocked || sidePanelOpen) return false;
-          const { dx, dy } = gesture;
-          return dx > 4 && Math.abs(dx) > Math.abs(dy);
-        },
-        onPanResponderGrant: () => {
-          edgeGestureRef.current = "left";
-          if (notificationsVisible) {
-            closeNotificationPanel();
-            edgeGestureRef.current = "left";
-          }
-          sidePanelTranslateX.stopAnimation();
-          sidePanelTranslateX.setValue(-sidePanelWidth);
-        },
-        onPanResponderMove: (_, gesture) => {
-          const nextX = Math.min(
-            0,
-            Math.max(-sidePanelWidth, -sidePanelWidth + gesture.dx),
-          );
-          sidePanelTranslateX.setValue(nextX);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          const nextX = Math.min(
-            0,
-            Math.max(-sidePanelWidth, -sidePanelWidth + gesture.dx),
-          );
-          const isTap =
-            Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
-          const shouldOpen =
-            isTap || nextX > -sidePanelWidth / 2 || gesture.vx > 0.45;
-
-          if (shouldOpen) setSidePanelOpen(true);
-          Animated.timing(sidePanelTranslateX, {
-            toValue: shouldOpen ? 0 : -sidePanelWidth,
-            duration: 240,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start(() => setSidePanelOpen(shouldOpen));
-          edgeGestureRef.current = null;
-        },
-        onPanResponderTerminate: () => {
-          Animated.timing(sidePanelTranslateX, {
-            toValue: -sidePanelWidth,
-            duration: 190,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start(() => setSidePanelOpen(false));
-          edgeGestureRef.current = null;
-        },
-      }),
-    [
-      closeNotificationPanel,
-      mapGestureLocked,
-      notificationsVisible,
-      sidePanelOpen,
-      sidePanelTranslateX,
-      sidePanelWidth,
-    ],
-  );
-
-  const rightHandlePanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () =>
-          !mapGestureLocked && Boolean(user) && !notificationsVisible,
-        onMoveShouldSetPanResponder: (_, gesture) => {
-          if (mapGestureLocked || notificationsVisible || !user) return false;
-          const { dx, dy } = gesture;
-          return dx < -4 && Math.abs(dx) > Math.abs(dy);
-        },
-        onPanResponderGrant: () => {
-          edgeGestureRef.current = "right";
-          if (sidePanelOpen) {
-            closeSidePanel();
-            edgeGestureRef.current = "right";
-          }
-          notificationPanelTranslateX.stopAnimation();
-          notificationPanelTranslateX.setValue(notificationPanelWidth);
-        },
-        onPanResponderMove: (_, gesture) => {
-          const nextX = Math.min(
-            notificationPanelWidth,
-            Math.max(0, notificationPanelWidth + gesture.dx),
-          );
-          notificationPanelTranslateX.setValue(nextX);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          const nextX = Math.min(
-            notificationPanelWidth,
-            Math.max(0, notificationPanelWidth + gesture.dx),
-          );
-          const isTap =
-            Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
-          const shouldOpen =
-            isTap || nextX < notificationPanelWidth / 2 || gesture.vx < -0.45;
-
-          Animated.timing(notificationPanelTranslateX, {
-            toValue: shouldOpen ? 0 : notificationPanelWidth,
-            duration: 240,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start(() => setNotificationsVisible(shouldOpen));
-          edgeGestureRef.current = null;
-        },
-        onPanResponderTerminate: () => {
-          Animated.timing(notificationPanelTranslateX, {
-            toValue: notificationPanelWidth,
-            duration: 190,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start(() => setNotificationsVisible(false));
-          edgeGestureRef.current = null;
-        },
-      }),
-    [
-      closeSidePanel,
-      mapGestureLocked,
-      notificationPanelTranslateX,
-      notificationPanelWidth,
-      notificationsVisible,
-      sidePanelOpen,
-      user,
-    ],
-  );
-
-  // Pan Responder Logic
-  const panResponder = useMemo(
-    () => {
-      const shouldStartPanelGesture = (gesture) => {
-        if (mapGestureLocked) return false;
-        const { dx, dy, x0 } = gesture;
-        const canUseNotifications = Boolean(user);
-        if (Math.abs(dx) < 12 || Math.abs(dx) <= Math.abs(dy) * 1.35) {
-          return false;
-        }
-
-        if (notificationsVisible && canUseNotifications) {
-          edgeGestureRef.current = "right";
-          return true;
-        }
-
-        if (sidePanelOpen) {
-          edgeGestureRef.current = "left";
-          return true;
-        }
-
-        if (x0 <= 42 && dx > 0) {
-          edgeGestureRef.current = "left";
-          return true;
-        }
-
-        if (canUseNotifications && x0 >= screenWidth - 42 && dx < 0) {
-          edgeGestureRef.current = "right";
-          return true;
-        }
-
-        return false;
-      };
-
-      return PanResponder.create({
-        onMoveShouldSetPanResponderCapture: (_, gesture) =>
-          shouldStartPanelGesture(gesture),
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          shouldStartPanelGesture(gesture),
-        onPanResponderGrant: () => {
-          if (edgeGestureRef.current === "left" && !sidePanelOpen) {
-            if (notificationsVisible) {
-              closeNotificationPanel();
-              edgeGestureRef.current = "left";
-            }
-            sidePanelTranslateX.stopAnimation();
-            sidePanelTranslateX.setValue(-sidePanelWidth);
-          }
-
-          if (edgeGestureRef.current === "right" && !notificationsVisible) {
-            if (sidePanelOpen) {
-              closeSidePanel();
-              edgeGestureRef.current = "right";
-            }
-            notificationPanelTranslateX.stopAnimation();
-            notificationPanelTranslateX.setValue(notificationPanelWidth);
-          }
-        },
-        onPanResponderMove: (_, gesture) => {
-          if (mapGestureLocked) return;
-
-          if (edgeGestureRef.current === "right") {
-            const startX = notificationsVisible ? 0 : notificationPanelWidth;
-            const nextX = Math.min(
-              notificationPanelWidth,
-              Math.max(0, startX + gesture.dx),
-            );
-            notificationPanelTranslateX.setValue(nextX);
-            return;
-          }
-
-          if (edgeGestureRef.current !== "left") return;
-
-          const startX = sidePanelOpen ? 0 : -sidePanelWidth;
-          const nextX = Math.min(
-            0,
-            Math.max(-sidePanelWidth, startX + gesture.dx),
-          );
-          sidePanelTranslateX.setValue(nextX);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          if (mapGestureLocked) return;
-
-          if (edgeGestureRef.current === "right") {
-            const startX = notificationsVisible ? 0 : notificationPanelWidth;
-            const nextX = Math.min(
-              notificationPanelWidth,
-              Math.max(0, startX + gesture.dx),
-            );
-            const isTap =
-              Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
-            const shouldOpen =
-              (!notificationsVisible && isTap) ||
-              nextX < notificationPanelWidth / 2 || gesture.vx < -0.45;
-
-            Animated.timing(notificationPanelTranslateX, {
-              toValue: shouldOpen ? 0 : notificationPanelWidth,
-              duration: 240,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }).start(() => setNotificationsVisible(shouldOpen));
-
-            edgeGestureRef.current = null;
-            return;
-          }
-
-          if (edgeGestureRef.current !== "left") {
-            edgeGestureRef.current = null;
-            return;
-          }
-
-          const startX = sidePanelOpen ? 0 : -sidePanelWidth;
-          const nextX = startX + gesture.dx;
-          const isTap =
-            Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
-          const shouldOpen =
-            (!sidePanelOpen && isTap) ||
-            nextX > -sidePanelWidth / 2 ||
-            gesture.vx > 0.5;
-          if (shouldOpen) setSidePanelOpen(true);
-
-          Animated.timing(sidePanelTranslateX, {
-            toValue: shouldOpen ? 0 : -sidePanelWidth,
-            duration: 240,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }).start(() => setSidePanelOpen(shouldOpen));
-          edgeGestureRef.current = null;
-        },
-      });
-    },
-    [
-      mapGestureLocked,
-      closeSidePanel,
-      closeNotificationPanel,
-      notificationPanelTranslateX,
-      notificationPanelWidth,
-      notificationsVisible,
-      sidePanelOpen,
-      sidePanelWidth,
-      sidePanelTranslateX,
-      user,
-    ],
-  );
 
   // Roles-based routes
   // Roles-based routes with enhanced metadata
@@ -710,7 +396,6 @@ const HomeScreen = ({ navigation }) => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      {...panResponder.panHandlers}
     >
       <AnimatedBackground />
       <ScrollView
@@ -784,6 +469,9 @@ const HomeScreen = ({ navigation }) => {
             onReloadNearby={() => loadNearby(distanceKm)}
             getTopPlaceMeta={getTopPlaceMeta}
             loadingNearby={loadingNearby}
+            pauseMapUpdates={
+              panelMotionCount > 0 || sidePanelOpen || notificationsVisible
+            }
           />
         </View>
 
@@ -1185,11 +873,12 @@ const HomeScreen = ({ navigation }) => {
       {/* Overlays */}
       <SidePanel
         sidePanelOpen={sidePanelOpen}
-        sidePanelTranslateX={sidePanelTranslateX}
-        sidePanelWidth={sidePanelWidth}
-        handlePanHandlers={leftHandlePanResponder.panHandlers}
+        enabled={!notificationsVisible && !mapGestureLocked}
+        sidePanelWidth={PANEL_WIDTH}
         openSidePanel={openSidePanel}
         closeSidePanel={closeSidePanel}
+        onMotionStart={handlePanelMotionStart}
+        onMotionEnd={handlePanelMotionEnd}
         nearbyContext={nearbyContext}
         loadingNearbyContext={loadingNearbyContext}
         nearbyDisplayPlace={nearbyContext || (nearby.length ? nearby[0] : null)}
@@ -1254,10 +943,12 @@ const HomeScreen = ({ navigation }) => {
       />
 
       <NotificationPanel
-        enabled={Boolean(user) && !sidePanelOpen}
+        enabled={Boolean(user) && !sidePanelOpen && !mapGestureLocked}
         visible={notificationsVisible}
         onOpen={openNotificationPanel}
         onClose={closeNotificationPanel}
+        onMotionStart={handlePanelMotionStart}
+        onMotionEnd={handlePanelMotionEnd}
         notifications={notifications}
         unreadCount={unreadCount}
         loading={loadingNotifications}
@@ -1269,9 +960,7 @@ const HomeScreen = ({ navigation }) => {
           closeNotificationPanel();
           navigation.navigate("MyReservations");
         }}
-        panelTranslateX={notificationPanelTranslateX}
-        panelWidth={notificationPanelWidth}
-        handlePanHandlers={rightHandlePanResponder.panHandlers}
+        panelWidth={PANEL_WIDTH}
       />
 
       <ReservationModal

@@ -1,3 +1,4 @@
+import { FontAwesome } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
@@ -8,12 +9,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { FontAwesome } from "@expo/vector-icons";
 import WebViewMap from "../../../components/WebViewMap";
-import PlaceCard from "./PlaceCard";
+import styles from "../styles";
 import { FALLBACK_CENTER } from "../utils/constants";
 import { formatDistance, getPlaceImage } from "../utils/helpers";
-import styles from "../styles";
+import PlaceCard from "./PlaceCard";
 
 const NearbyMapBlock = ({
   coords,
@@ -31,6 +31,7 @@ const NearbyMapBlock = ({
   onReloadNearby,
   getTopPlaceMeta,
   loadingNearby,
+  pauseMapUpdates = false,
 }) => {
   const lastTapRef = useRef(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -142,6 +143,7 @@ const NearbyMapBlock = ({
             }
             showCircle={true}
             circleRadius={distanceKm * 1000}
+            pauseUpdates={pauseMapUpdates}
             scrollEnabled={isInteractingWithMap || mapGestureLocked}
             zoomEnabled={isInteractingWithMap || mapGestureLocked}
           />

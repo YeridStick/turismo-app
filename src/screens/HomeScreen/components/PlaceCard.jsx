@@ -1,7 +1,9 @@
 import React, { useRef, useEffect } from "react";
 import {
   Animated,
+  Easing,
   Pressable,
+  TouchableOpacity,
   View,
   Text,
   ImageBackground,
@@ -26,9 +28,12 @@ const PlaceCard = React.memo(
     distance,
     cardWidth,
     imageHeight,
+    onArPress,
   }) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
+    const shineAnim = useRef(new Animated.Value(0)).current;
+    const pulseAnim = useRef(new Animated.Value(0)).current;
     const compactTag = badge || "Imperdible";
 
     useEffect(() => {
@@ -38,6 +43,41 @@ const PlaceCard = React.memo(
         useNativeDriver: true,
       }).start();
     }, [fadeAnim]);
+
+    useEffect(() => {
+      const shineLoop = Animated.loop(
+        Animated.timing(shineAnim, {
+          toValue: 1,
+          duration: 3600,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      );
+      const pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1800,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0,
+            duration: 1800,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
+      shineLoop.start();
+      pulseLoop.start();
+
+      return () => {
+        shineLoop.stop();
+        pulseLoop.stop();
+      };
+    }, [pulseAnim, shineAnim]);
 
     const handlePressIn = () => {
       Animated.spring(scaleAnim, {
@@ -57,7 +97,11 @@ const PlaceCard = React.memo(
 
     const renderCompact = () => (
       <Pressable
-        style={[styles.popularCard, cardWidth ? { width: cardWidth } : null]}
+        style={[
+          styles.popularCard,
+          cardWidth ? { width: cardWidth } : null,
+          imageHeight ? { height: imageHeight + 112 } : null,
+        ]}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
@@ -76,35 +120,111 @@ const PlaceCard = React.memo(
             imageStyle={styles.popularImageRadius}
           >
             <LinearGradient
-              colors={["transparent", "rgba(0,0,0,0.2)", "rgba(0,0,0,0.8)"]}
+              colors={[
+                "rgba(6, 78, 59, 0.08)",
+                "rgba(15, 23, 42, 0.12)",
+                "rgba(15, 23, 42, 0.84)",
+              ]}
               style={styles.popularFade}
               pointerEvents="none"
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.popularGlowOrb,
+                {
+                  opacity: pulseAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.18, 0.34],
+                  }),
+                  transform: [
+                    {
+                      scale: pulseAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.92, 1.08],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.popularShine,
+                {
+                  opacity: shineAnim.interpolate({
+                    inputRange: [0, 0.18, 0.52, 1],
+                    outputRange: [0, 0.22, 0.08, 0],
+                  }),
+                  transform: [
+                    {
+                      translateX: shineAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-240, 330],
+                      }),
+                    },
+                    { rotate: "18deg" },
+                  ],
+                },
+              ]}
             />
             <View style={styles.popularTopRow}>
               <View style={styles.compactBadge}>
                 <FontAwesome name="camera" size={10} color="#fff" />
                 <Text style={styles.compactBadgeText}>{compactTag}</Text>
               </View>
-              <View style={[styles.cardRating, styles.popularRating]}>
+              <View style={styles.popularRatingPill}>
                 <Text style={styles.cardRatingText}>★ {rating || "4.5"}</Text>
               </View>
             </View>
+            {distance ? (
+              <View style={styles.popularDistancePill}>
+                <FontAwesome name="location-arrow" size={10} color="#0E7490" />
+                <Text style={styles.popularDistanceText}>{distance}</Text>
+              </View>
+            ) : null}
             <View style={styles.popularTextBlock}>
-              <Text style={styles.popularTitle} numberOfLines={2}>
-                {title}
-              </Text>
-              {meta ? (
-                <View style={styles.popularMetaRow}>
-                  <FontAwesome
-                    name="map-marker"
-                    size={FONT_SIZES.md}
-                    color={COLORS.white}
-                  />
-                  <Text style={styles.popularMeta} numberOfLines={1}>
-                    {meta}
+              <View style={styles.popularGlassPanel}>
+                <Text style={styles.popularTitle} numberOfLines={2}>
+                  {title}
+                </Text>
+                {meta ? (
+                  <View style={styles.popularMetaRow}>
+                    <FontAwesome
+                      name="map-marker"
+                      size={FONT_SIZES.md}
+                      color={COLORS.white}
+                    />
+                    <Text style={styles.popularMeta} numberOfLines={1}>
+                      {meta}
+                    </Text>
+                  </View>
+                ) : null}
+                {subtitle ? (
+                  <Text style={styles.popularSubtitle} numberOfLines={2}>
+                    {subtitle}
                   </Text>
+                ) : null}
+                <View style={styles.popularActionRow}>
+                  <View style={styles.popularHintPill}>
+                    <Text style={styles.popularHintText}>Ver detalles</Text>
+                    <FontAwesome name="angle-right" size={12} color="#FFFFFF" />
+                  </View>
+                  {onArPress ? (
+                    <TouchableOpacity
+                      style={styles.popularArButton}
+                      activeOpacity={0.82}
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        onArPress?.();
+                      }}
+                    >
+                      <FontAwesome name="cube" size={12} color="#0E7490" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-              ) : null}
+              </View>
             </View>
           </ImageBackground>
         </Animated.View>

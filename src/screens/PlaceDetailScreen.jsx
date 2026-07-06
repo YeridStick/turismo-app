@@ -1095,71 +1095,99 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
         </Animated.View>
 
         <View style={styles.infoContainer}>
-          <Text style={styles.title}>{place.name || 'Lugar sin nombre'}</Text>
+          <View style={styles.detailHeroCard}>
+            <View style={styles.detailHeroTopRow}>
+              <View style={styles.detailTitleWrap}>
+                <Text style={styles.title}>{place.name || 'Lugar sin nombre'}</Text>
 
-          {place.address && (
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color="#0E7490" />
-              <Text style={styles.infoText}>{place.address}</Text>
+                {place.address && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="location-outline" size={18} color="#0E7490" />
+                    <Text style={styles.infoText}>{place.address}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.detailRatingBadge}>
+                <Ionicons name="star" size={13} color="#F59E0B" />
+                <Text style={styles.detailRatingValue}>
+                  {ratingSummary.avgRating != null ? ratingSummary.avgRating.toFixed(1) : "0.0"}
+                </Text>
+              </View>
             </View>
-          )}
 
-          {(hasValidCoordinates || arConfig?.modelUrl) && (
-            <View style={styles.actionRow}>
-              {hasValidCoordinates && (
-                <TouchableOpacity
-                  activeOpacity={0.86}
-                  style={[styles.detailCtaButton, styles.detailCtaPrimary]}
-                  onPress={() => {
-                    const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
-                    Linking.openURL(url);
-                  }}
-                >
-                  <Ionicons name="navigate-outline" size={15} color="#FFFFFF" />
-                  <Text style={styles.detailCtaPrimaryText}>Como llegar</Text>
-                </TouchableOpacity>
-              )}
+            {(hasValidCoordinates || arConfig?.modelUrl) && (
+              <View style={styles.actionRow}>
+                {hasValidCoordinates && (
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    style={[styles.detailCtaButton, styles.detailCtaPrimary]}
+                    onPress={() => {
+                      const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.latitude},${coordinates.longitude}`;
+                      Linking.openURL(url);
+                    }}
+                  >
+                    <Ionicons name="navigate-outline" size={15} color="#FFFFFF" />
+                    <Text style={styles.detailCtaPrimaryText}>Como llegar</Text>
+                  </TouchableOpacity>
+                )}
 
-              {arConfig?.modelUrl && (
-                <TouchableOpacity
-                  activeOpacity={0.86}
-                  style={[styles.detailCtaButton, styles.detailCtaSecondary]}
-                  onPress={() => {
-                    navigation.navigate('ARView', { 
-                      modelUrl: arConfig.modelUrl,
-                      placeName: place.name 
-                    });
-                  }}
-                >
-                  <Ionicons name="cube-outline" size={15} color="#0E7490" />
-                  <Text style={styles.detailCtaSecondaryText}>Realidad aumentada</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
+                {arConfig?.modelUrl && (
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    style={[styles.detailCtaButton, styles.detailCtaSecondary]}
+                    onPress={() => {
+                      navigation.navigate('ARView', { 
+                        modelUrl: arConfig.modelUrl,
+                        placeName: place.name 
+                      });
+                    }}
+                  >
+                    <Ionicons name="cube-outline" size={15} color="#0E7490" />
+                    <Text style={styles.detailCtaSecondaryText}>Realidad aumentada</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
-          {place.description && (
-            <Text style={styles.description}>{place.description}</Text>
-          )}
+            {place.description && (
+              <View style={styles.descriptionCard}>
+                <Text style={styles.description}>{place.description}</Text>
+              </View>
+            )}
+          </View>
+
           {infoDetails.length > 0 && (
             <View style={styles.detailsSection}>
-              <Text style={styles.sectionTitle}>Detalles del sitio</Text>
-              {infoDetails.map((detail, idx) => (
-                <View key={idx} style={styles.detailItem}>
-                  <View style={styles.detailIconWrapper}>
-                    <FontAwesome name={detail.icon} size={16} color="#0E7490" />
-                  </View>
-                  <View style={styles.detailTextWrapper}>
-                    <Text style={styles.detailLabel}>{detail.label}</Text>
-                    <Text style={styles.detailValue}>{detail.value}</Text>
-                  </View>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderIcon}>
+                  <Ionicons name="information-circle-outline" size={16} color="#0E7490" />
                 </View>
-              ))}
+                <Text style={styles.sectionTitle}>Detalles del sitio</Text>
+              </View>
+              <View style={styles.detailsGrid}>
+                {infoDetails.map((detail, idx) => (
+                  <View key={idx} style={styles.detailItem}>
+                    <View style={styles.detailIconWrapper}>
+                      <FontAwesome name={detail.icon} size={15} color="#0E7490" />
+                    </View>
+                    <View style={styles.detailTextWrapper}>
+                      <Text style={styles.detailLabel}>{detail.label}</Text>
+                      <Text style={styles.detailValue}>{detail.value}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
             </View>
           )}
           {Array.isArray(place.services) && place.services.length > 0 && (
             <View style={styles.amenitiesSection}>
-              <Text style={styles.sectionTitle}>Servicios y Comodidades</Text>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderIcon}>
+                  <Ionicons name="sparkles-outline" size={16} color="#0E7490" />
+                </View>
+                <Text style={styles.sectionTitle}>Servicios y Comodidades</Text>
+              </View>
               <View style={styles.amenitiesGrid}>
                 {place.services.map((service, idx) => {
                   const serviceInfo = PLACE_SERVICES.find(ps => ps.label.toLowerCase() === service.toLowerCase());
@@ -1262,12 +1290,32 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
 
           <View style={styles.reviewSection}>
             <View style={styles.reviewHeaderRow}>
-              <Text style={styles.sectionTitle}>Reseñas del sitio</Text>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderIcon}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={16} color="#0E7490" />
+                </View>
+                <Text style={styles.sectionTitle}>Reseñas del sitio</Text>
+              </View>
               {loadingReviews ? <ActivityIndicator size="small" color="#0E7490" /> : null}
             </View>
-            <Text style={styles.reviewSummaryText}>
-              {ratingSummary.avgRating != null ? `* ${ratingSummary.avgRating.toFixed(1)}` : "Sin calificacion"} - {ratingSummary.reviewsCount || 0} reseñas
-            </Text>
+            <View style={styles.reviewSummaryCard}>
+              <View style={styles.reviewScoreCircle}>
+                <Ionicons name="star" size={16} color="#F59E0B" />
+                <Text style={styles.reviewScoreText}>
+                  {ratingSummary.avgRating != null ? ratingSummary.avgRating.toFixed(1) : "0.0"}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reviewSummaryTitle}>
+                  {ratingSummary.reviewsCount || 0} reseñas registradas
+                </Text>
+                <Text style={styles.reviewSummaryText}>
+                  {reviews.length > 0
+                    ? "Opiniones recientes de visitantes."
+                    : "Aun no hay reseñas para este lugar."}
+                </Text>
+              </View>
+            </View>
             {reviews.length > 0 ? (
               <View style={styles.reviewsList}>
                 {reviews.slice(0, 4).map((item, idx) => (
@@ -1275,7 +1323,12 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                 ))}
               </View>
             ) : (
-              <Text style={styles.visitMetaText}>Aun no hay reseñas para este lugar.</Text>
+              <View style={styles.reviewEmptyState}>
+                <Ionicons name="sparkles-outline" size={22} color="#94A3B8" />
+                <Text style={styles.reviewEmptyText}>
+                  Sé de los primeros en compartir tu experiencia cuando visites este sitio.
+                </Text>
+              </View>
             )}
             {canCreateReview ? (
               <GradientParticleButton
@@ -1324,7 +1377,12 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
 
           {hasValidCoordinates ? (
             <View style={styles.locationSection}>
-              <Text style={styles.sectionTitle}>Ubicacion</Text>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderIcon}>
+                  <Ionicons name="map-outline" size={16} color="#0E7490" />
+                </View>
+                <Text style={styles.sectionTitle}>Ubicacion</Text>
+              </View>
               <TouchableOpacity
                 activeOpacity={0.88}
                 style={styles.locationMapCard}
@@ -1350,6 +1408,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                   showCircle={false}
                   showUserLocation={false}
                 />
+                  <View style={styles.locationMapScrim} pointerEvents="none" />
                   <View style={styles.locationExactPill}>
                     <Ionicons name="navigate-circle-outline" size={13} color="#0E7490" />
                     <Text style={styles.locationExactText}>Localizacion exacta</Text>
@@ -1634,16 +1693,53 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.lg,
-    backgroundColor: "#F5FBFE",
+    backgroundColor: "#F4FBFD",
+  },
+  detailHeroCard: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 24,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: "rgba(14, 116, 144, 0.12)",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.09,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
+  },
+  detailHeroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: SPACING.md,
+  },
+  detailTitleWrap: {
+    flex: 1,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
     color: "#0F172A",
     marginBottom: 4,
-    lineHeight: 26,
+    lineHeight: 29,
+  },
+  detailRatingBadge: {
+    minWidth: 58,
+    minHeight: 36,
+    borderRadius: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.22)",
+  },
+  detailRatingValue: {
+    color: "#0F172A",
+    fontSize: 13,
+    fontWeight: "900",
   },
   infoRow: {
     flexDirection: 'row',
@@ -1658,17 +1754,38 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   description: {
-    fontSize: 13,
-    color: "#111827",
-    lineHeight: 20,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.lg,
+    fontSize: 14,
+    color: "#334155",
+    lineHeight: 22,
+  },
+  descriptionCard: {
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: 18,
+    backgroundColor: "rgba(248, 250, 252, 0.86)",
+    borderWidth: 1,
+    borderColor: "rgba(226, 232, 240, 0.9)",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  sectionHeaderIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.14)",
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '900',
     color: "#0F172A",
-    marginBottom: SPACING.sm,
     lineHeight: 19,
   },
   actionButton: {
@@ -1685,14 +1802,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: "wrap",
     gap: SPACING.sm,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.md,
+    marginTop: SPACING.md,
   },
   detailCtaButton: {
-    minHeight: 36,
-    borderRadius: 8,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
+    minHeight: 48,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1709,7 +1825,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   detailCtaSecondary: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.88)",
     borderWidth: 1,
     borderColor: "rgba(14,116,144,0.22)",
   },
@@ -1775,26 +1891,34 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     gap: SPACING.sm,
   },
+  detailsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.sm,
+  },
   detailItem: {
+    flexBasis: "48%",
+    flexGrow: 1,
+    minHeight: 104,
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: SPACING.md,
-    borderRadius: 16,
-    gap: SPACING.md,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    padding: SPACING.sm + 2,
+    borderRadius: 18,
+    gap: SPACING.sm,
     borderWidth: 1,
-    borderColor: '#E8EEF5',
+    borderColor: 'rgba(14, 116, 144, 0.12)',
     shadowColor: "#0F172A",
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
+    shadowOpacity: 0.035,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
   detailIconWrapper: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
     borderRadius: 14,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#ECFEFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1802,20 +1926,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#64748B',
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   detailValue: {
-    fontSize: 15,
+    fontSize: 13,
     color: '#1E293B',
     fontWeight: '900',
     marginTop: 4,
   },
   amenitiesSection: {
-    marginTop: SPACING.lg,
+    marginTop: SPACING.xl,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderRadius: 22,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.10)",
   },
   amenitiesGrid: {
     flexDirection: 'row',
@@ -1825,9 +1954,9 @@ const styles = StyleSheet.create({
   amenityChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F7FA',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 99,
     gap: 6,
     borderWidth: 1,
@@ -1971,7 +2100,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   reviewSection: {
-    marginTop: SPACING.lg,
+    marginTop: SPACING.xl,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    borderRadius: 22,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.10)",
   },
   reviewHeaderRow: {
     flexDirection: "row",
@@ -1979,18 +2113,69 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   reviewSummaryText: {
-    marginTop: 2,
     fontSize: 12,
-    color: "#334155",
+    color: "#64748B",
     fontWeight: "600",
+    lineHeight: 17,
+  },
+  reviewSummaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 18,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.92)",
+  },
+  reviewScoreCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 20,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.24)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewScoreText: {
+    marginTop: 2,
+    color: "#0F172A",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  reviewSummaryTitle: {
+    color: "#0F172A",
+    fontSize: 14,
+    fontWeight: "900",
+    marginBottom: 3,
   },
   reviewsList: {
     marginTop: SPACING.sm,
     gap: SPACING.sm,
   },
+  reviewEmptyState: {
+    marginTop: SPACING.sm,
+    minHeight: 86,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: SPACING.md,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.92)",
+  },
+  reviewEmptyText: {
+    marginTop: 8,
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+    fontWeight: "600",
+  },
   reviewItem: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 10,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     padding: SPACING.sm,
@@ -2035,16 +2220,25 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
   },
   locationSection: {
-    marginTop: SPACING.lg,
+    marginTop: SPACING.xl,
     marginBottom: SPACING.xl,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    borderRadius: 22,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.10)",
   },
   locationMapCard: {
-    height: 140,
-    borderRadius: 12,
+    height: 170,
+    borderRadius: 18,
     overflow: "hidden",
     backgroundColor: "#AEB2C8",
     borderWidth: 1,
     borderColor: "#DCE3ED",
+  },
+  locationMapScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(14, 116, 144, 0.04)",
   },
   locationExactPill: {
     position: "absolute",
