@@ -402,7 +402,6 @@ const HomeScreen = ({ navigation }) => {
             edgeGestureRef.current = "right";
           }
           notificationPanelTranslateX.stopAnimation();
-          setNotificationsVisible(true);
           notificationPanelTranslateX.setValue(notificationPanelWidth);
         },
         onPanResponderMove: (_, gesture) => {
@@ -458,7 +457,9 @@ const HomeScreen = ({ navigation }) => {
         if (mapGestureLocked) return false;
         const { dx, dy, x0 } = gesture;
         const canUseNotifications = Boolean(user);
-        if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
+        if (Math.abs(dx) < 12 || Math.abs(dx) <= Math.abs(dy) * 1.35) {
+          return false;
+        }
 
         if (notificationsVisible && canUseNotifications) {
           edgeGestureRef.current = "right";
@@ -484,6 +485,8 @@ const HomeScreen = ({ navigation }) => {
       };
 
       return PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          shouldStartPanelGesture(gesture),
         onMoveShouldSetPanResponder: (_, gesture) =>
           shouldStartPanelGesture(gesture),
         onPanResponderGrant: () => {
@@ -502,7 +505,6 @@ const HomeScreen = ({ navigation }) => {
               edgeGestureRef.current = "right";
             }
             notificationPanelTranslateX.stopAnimation();
-            setNotificationsVisible(true);
             notificationPanelTranslateX.setValue(notificationPanelWidth);
           }
         },
