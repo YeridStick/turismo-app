@@ -20,6 +20,29 @@ export const parseUrlList = (value) => {
     .filter(Boolean);
 };
 
+export const getPlaceImage = (place) => {
+  if (!place) return null;
+  const nestedPlace = place.place || place.site || place.placeInfo || place.placeData;
+  const imageUrls = Array.isArray(place.imageUrls)
+    ? place.imageUrls
+    : parseUrlList(place.imageUrls || place.image_urls);
+  const nestedImageUrls = Array.isArray(nestedPlace?.imageUrls)
+    ? nestedPlace.imageUrls
+    : parseUrlList(nestedPlace?.imageUrls || nestedPlace?.image_urls);
+
+  return (
+    imageUrls[0] ||
+    place.imageUrl ||
+    place.image_url ||
+    place.image ||
+    nestedImageUrls[0] ||
+    nestedPlace?.imageUrl ||
+    nestedPlace?.image_url ||
+    nestedPlace?.image ||
+    null
+  );
+};
+
 export const fetchModelSize = async (url) => {
   if (!url) return null;
   try {
@@ -47,7 +70,7 @@ export const normalizePlace = (place) => {
     normalized.imageUrls = parseUrlList(normalized.image_urls);
   }
   if (normalized.imageUrls && !Array.isArray(normalized.imageUrls)) {
-    normalized.imageUrls = parseUrlList(normalized.image_urls);
+    normalized.imageUrls = parseUrlList(normalized.imageUrls);
   }
   
   if (normalized.owner_user_id && !normalized.ownerUserId) {
@@ -67,8 +90,8 @@ export const normalizePlace = (place) => {
   }
   
   // Ensure image property for PlaceCard
-  if (!normalized.image && normalized.imageUrls && normalized.imageUrls.length > 0) {
-    normalized.image = normalized.imageUrls[0];
+  if (!normalized.image) {
+    normalized.image = getPlaceImage(normalized);
   }
 
   // Ensure lat/lng for Map pins

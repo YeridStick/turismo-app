@@ -19,6 +19,7 @@ import { useAuth } from "../../context/AuthContext";
 import HomeFooter from "./components/HomeFooter";
 import HomeHeader from "./components/HomeHeader";
 import NearbyMapBlock from "./components/NearbyMapBlock";
+import NotificationPanel from "./components/NotificationPanel";
 import PackageCard from "./components/PackageCard";
 import PlaceCard from "./components/PlaceCard";
 import SidePanel from "./components/SidePanel";
@@ -28,19 +29,21 @@ import AgencyModal from "./components/modals/AgencyModal";
 import ArWebViewModal from "./components/modals/ArWebViewModal";
 import FilterModal from "./components/modals/FilterModal";
 import PackageDetailModal from "./components/modals/PackageDetailModal";
-import PaymentModal from "./components/modals/PaymentModal";
 import ProfileModal from "./components/modals/ProfileModal";
+import ReservationModal from "./components/modals/ReservationModal";
 import VerificationModal from "./components/modals/VerificationModal";
 
 // Hooks
 import useAR from "./hooks/useAR";
 import useHomeData from "./hooks/useHomeData";
-import usePayment from "./hooks/usePayment";
+import useNotifications from "./hooks/useNotifications";
+import useReservation from "./hooks/useReservation";
 import useVerification from "./hooks/useVerification";
 
 // Constants & Helpers
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import AnimatedBackground from "../../components/ui/AnimatedBackground";
+import { PremiumModal } from "../../components/ui/PremiumModal";
 import styles from "./styles";
 import { COLORS, screenWidth } from "./utils/constants";
 import {
@@ -49,6 +52,9 @@ import {
   getPackageGradient,
   getPackageImage,
 } from "./utils/helpers";
+
+const AGENCY_COLUMN_WIDTH = 310;
+const AGENCY_COLUMN_GAP = 12;
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -93,6 +99,8 @@ const HomeScreen = ({ navigation }) => {
     setAgencySearchQuery,
     coords,
     loadAll,
+    loadPackages,
+    loadAgencies,
     loadNearby,
     performSearch,
     loadMoreAgencies,
@@ -117,16 +125,47 @@ const HomeScreen = ({ navigation }) => {
     handleConfirmVerificationToken,
   } = useVerification();
 
-  // Payment Logic Hook
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const openNotificationPanelRef = useRef(null);
+  const requestOpenNotificationPanel = useCallback(() => {
+    openNotificationPanelRef.current?.();
+  }, []);
+
   const {
-    paymentVisible,
-    setPaymentVisible,
+    notifications,
+    unreadCount,
+    loadingNotifications,
+    notificationError,
+    loadNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications({
+    enabled: Boolean(user?.email),
+    accountKey: user?.email || "",
+  });
+
+  // Reservation Logic Hook
+  const {
+    reservationVisible,
     selectedPackage,
-    setSelectedPackage,
-    paymentForm,
-    handlePaymentChange,
-    closePayment,
-  } = usePayment();
+    reservationForm,
+    reservationLoading,
+    reservationStatusModal,
+    handleReservationChange,
+    openReservation,
+    closeReservation,
+    closeReservationStatusModal,
+    submitReservation,
+  } = useReservation({
+    user,
+    onRequireAuth: () => navigation.navigate("Auth"),
+    onRequireVerification: () => setEmailVerifyVisible(true),
+    onReservationCreated: requestOpenNotificationPanel,
+    onOpenReservations: () => {
+      setNotificationsVisible(false);
+      navigation.navigate("MyReservations");
+    },
+  });
 
   // AR Logic Hook
   const {
@@ -147,6 +186,7 @@ const HomeScreen = ({ navigation }) => {
   const [showMap, setShowMap] = useState(false);
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
   const [mapGestureLocked, setMapGestureLocked] = useState(false);
+  const [agencyPageIndex, setAgencyPageIndex] = useState(0);
 
   const displayPlaces = useMemo(() => {
     return query.trim() || selectedCategory !== "todos"
@@ -170,27 +210,57 @@ const HomeScreen = ({ navigation }) => {
     setAllPlacesPage(nextPage);
   }, [allPlacesPage, loadAll, setAllPlacesPage]);
 
+  const reloadPackagesSection = useCallback(() => {
+    loadPackages(0, false, selectedAgencyFilter);
+    loadAgencies(0, false, agencySearchQuery);
+  }, [agencySearchQuery, loadAgencies, loadPackages, selectedAgencyFilter]);
+
+  const shouldShowAgencyState =
+    !loadingAgencies && agencies.length === 0 && !agencySearchQuery;
+
+  const agencyColumns = useMemo(() => {
+    const columns = [];
+    for (let i = 0; i < agencies.length; i += 2) {
+      columns.push({
+        agencies: agencies.slice(i, i + 2),
+        showLoadMore: false,
+      });
+    }
+
+    if (hasMoreAgencies) {
+      const lastColumn = columns[columns.length - 1];
+      if (lastColumn && lastColumn.agencies.length === 1) {
+        lastColumn.showLoadMore = true;
+      } else {
+        columns.push({ agencies: [], showLoadMore: true });
+      }
+    }
+
+    return columns;
+  }, [agencies, hasMoreAgencies]);
+
+  const handleAgencyScrollEnd = useCallback((event) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const pageWidth = AGENCY_COLUMN_WIDTH + AGENCY_COLUMN_GAP;
+    setAgencyPageIndex(Math.max(0, Math.round(offsetX / pageWidth)));
+  }, []);
+
   // SidePanel Animation
   const sidePanelWidth = 360;
+  const notificationPanelWidth = Math.min(screenWidth * 0.9, 410);
   const sidePanelTranslateX = useRef(
     new Animated.Value(-sidePanelWidth),
   ).current;
+  const notificationPanelTranslateX = useRef(
+    new Animated.Value(notificationPanelWidth),
+  ).current;
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [panelHintDone, setPanelHintDone] = useState(false);
-  const panelHintHandleAnim = useRef(new Animated.Value(0)).current;
-
-  // Open SidePanel
-  const openSidePanel = useCallback(() => {
-    Animated.timing(sidePanelTranslateX, {
-      toValue: 0,
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => setSidePanelOpen(true));
-  }, [sidePanelTranslateX]);
+  const edgeGestureRef = useRef(null);
 
   // Close SidePanel
   const closeSidePanel = useCallback(() => {
+    edgeGestureRef.current = null;
+    sidePanelTranslateX.stopAnimation();
     Animated.timing(sidePanelTranslateX, {
       toValue: -sidePanelWidth,
       duration: 260,
@@ -199,19 +269,258 @@ const HomeScreen = ({ navigation }) => {
     }).start(() => setSidePanelOpen(false));
   }, [sidePanelTranslateX, sidePanelWidth]);
 
-  // Pan Responder Logic
-  const panResponder = useMemo(
+  const closeNotificationPanel = useCallback(() => {
+    edgeGestureRef.current = null;
+    notificationPanelTranslateX.stopAnimation();
+    Animated.timing(notificationPanelTranslateX, {
+      toValue: notificationPanelWidth,
+      duration: 260,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setNotificationsVisible(false));
+  }, [notificationPanelTranslateX, notificationPanelWidth]);
+
+  const openSidePanel = useCallback(() => {
+    edgeGestureRef.current = null;
+    if (notificationsVisible) {
+      closeNotificationPanel();
+    }
+
+    setSidePanelOpen(true);
+    Animated.timing(sidePanelTranslateX, {
+      toValue: 0,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [
+    closeNotificationPanel,
+    notificationsVisible,
+    sidePanelTranslateX,
+  ]);
+
+  const openNotificationPanel = useCallback(() => {
+    edgeGestureRef.current = null;
+    if (sidePanelOpen) {
+      closeSidePanel();
+    }
+
+    notificationPanelTranslateX.stopAnimation();
+    setNotificationsVisible(true);
+    Animated.timing(notificationPanelTranslateX, {
+      toValue: 0,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [
+    closeSidePanel,
+    notificationPanelTranslateX,
+    sidePanelOpen,
+  ]);
+
+  openNotificationPanelRef.current = openNotificationPanel;
+
+  const leftHandlePanResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => !mapGestureLocked && !sidePanelOpen,
         onMoveShouldSetPanResponder: (_, gesture) => {
-          if (mapGestureLocked) return false;
-          const { dx, dy, x0 } = gesture;
-          if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
-          if (!sidePanelOpen && x0 > 40) return false;
+          if (mapGestureLocked || sidePanelOpen) return false;
+          const { dx, dy } = gesture;
+          return dx > 4 && Math.abs(dx) > Math.abs(dy);
+        },
+        onPanResponderGrant: () => {
+          edgeGestureRef.current = "left";
+          if (notificationsVisible) {
+            closeNotificationPanel();
+            edgeGestureRef.current = "left";
+          }
+          sidePanelTranslateX.stopAnimation();
+          sidePanelTranslateX.setValue(-sidePanelWidth);
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextX = Math.min(
+            0,
+            Math.max(-sidePanelWidth, -sidePanelWidth + gesture.dx),
+          );
+          sidePanelTranslateX.setValue(nextX);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const nextX = Math.min(
+            0,
+            Math.max(-sidePanelWidth, -sidePanelWidth + gesture.dx),
+          );
+          const isTap =
+            Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
+          const shouldOpen =
+            isTap || nextX > -sidePanelWidth / 2 || gesture.vx > 0.45;
+
+          if (shouldOpen) setSidePanelOpen(true);
+          Animated.timing(sidePanelTranslateX, {
+            toValue: shouldOpen ? 0 : -sidePanelWidth,
+            duration: 240,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => setSidePanelOpen(shouldOpen));
+          edgeGestureRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          Animated.timing(sidePanelTranslateX, {
+            toValue: -sidePanelWidth,
+            duration: 190,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => setSidePanelOpen(false));
+          edgeGestureRef.current = null;
+        },
+      }),
+    [
+      closeNotificationPanel,
+      mapGestureLocked,
+      notificationsVisible,
+      sidePanelOpen,
+      sidePanelTranslateX,
+      sidePanelWidth,
+    ],
+  );
+
+  const rightHandlePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () =>
+          !mapGestureLocked && Boolean(user) && !notificationsVisible,
+        onMoveShouldSetPanResponder: (_, gesture) => {
+          if (mapGestureLocked || notificationsVisible || !user) return false;
+          const { dx, dy } = gesture;
+          return dx < -4 && Math.abs(dx) > Math.abs(dy);
+        },
+        onPanResponderGrant: () => {
+          edgeGestureRef.current = "right";
+          if (sidePanelOpen) {
+            closeSidePanel();
+            edgeGestureRef.current = "right";
+          }
+          notificationPanelTranslateX.stopAnimation();
+          setNotificationsVisible(true);
+          notificationPanelTranslateX.setValue(notificationPanelWidth);
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextX = Math.min(
+            notificationPanelWidth,
+            Math.max(0, notificationPanelWidth + gesture.dx),
+          );
+          notificationPanelTranslateX.setValue(nextX);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const nextX = Math.min(
+            notificationPanelWidth,
+            Math.max(0, notificationPanelWidth + gesture.dx),
+          );
+          const isTap =
+            Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
+          const shouldOpen =
+            isTap || nextX < notificationPanelWidth / 2 || gesture.vx < -0.45;
+
+          Animated.timing(notificationPanelTranslateX, {
+            toValue: shouldOpen ? 0 : notificationPanelWidth,
+            duration: 240,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => setNotificationsVisible(shouldOpen));
+          edgeGestureRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          Animated.timing(notificationPanelTranslateX, {
+            toValue: notificationPanelWidth,
+            duration: 190,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => setNotificationsVisible(false));
+          edgeGestureRef.current = null;
+        },
+      }),
+    [
+      closeSidePanel,
+      mapGestureLocked,
+      notificationPanelTranslateX,
+      notificationPanelWidth,
+      notificationsVisible,
+      sidePanelOpen,
+      user,
+    ],
+  );
+
+  // Pan Responder Logic
+  const panResponder = useMemo(
+    () => {
+      const shouldStartPanelGesture = (gesture) => {
+        if (mapGestureLocked) return false;
+        const { dx, dy, x0 } = gesture;
+        const canUseNotifications = Boolean(user);
+        if (Math.abs(dx) < 10 || Math.abs(dx) <= Math.abs(dy)) return false;
+
+        if (notificationsVisible && canUseNotifications) {
+          edgeGestureRef.current = "right";
           return true;
+        }
+
+        if (sidePanelOpen) {
+          edgeGestureRef.current = "left";
+          return true;
+        }
+
+        if (x0 <= 42 && dx > 0) {
+          edgeGestureRef.current = "left";
+          return true;
+        }
+
+        if (canUseNotifications && x0 >= screenWidth - 42 && dx < 0) {
+          edgeGestureRef.current = "right";
+          return true;
+        }
+
+        return false;
+      };
+
+      return PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          shouldStartPanelGesture(gesture),
+        onPanResponderGrant: () => {
+          if (edgeGestureRef.current === "left" && !sidePanelOpen) {
+            if (notificationsVisible) {
+              closeNotificationPanel();
+              edgeGestureRef.current = "left";
+            }
+            sidePanelTranslateX.stopAnimation();
+            sidePanelTranslateX.setValue(-sidePanelWidth);
+          }
+
+          if (edgeGestureRef.current === "right" && !notificationsVisible) {
+            if (sidePanelOpen) {
+              closeSidePanel();
+              edgeGestureRef.current = "right";
+            }
+            notificationPanelTranslateX.stopAnimation();
+            setNotificationsVisible(true);
+            notificationPanelTranslateX.setValue(notificationPanelWidth);
+          }
         },
         onPanResponderMove: (_, gesture) => {
           if (mapGestureLocked) return;
+
+          if (edgeGestureRef.current === "right") {
+            const startX = notificationsVisible ? 0 : notificationPanelWidth;
+            const nextX = Math.min(
+              notificationPanelWidth,
+              Math.max(0, startX + gesture.dx),
+            );
+            notificationPanelTranslateX.setValue(nextX);
+            return;
+          }
+
+          if (edgeGestureRef.current !== "left") return;
+
           const startX = sidePanelOpen ? 0 : -sidePanelWidth;
           const nextX = Math.min(
             0,
@@ -221,9 +530,44 @@ const HomeScreen = ({ navigation }) => {
         },
         onPanResponderRelease: (_, gesture) => {
           if (mapGestureLocked) return;
+
+          if (edgeGestureRef.current === "right") {
+            const startX = notificationsVisible ? 0 : notificationPanelWidth;
+            const nextX = Math.min(
+              notificationPanelWidth,
+              Math.max(0, startX + gesture.dx),
+            );
+            const isTap =
+              Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
+            const shouldOpen =
+              (!notificationsVisible && isTap) ||
+              nextX < notificationPanelWidth / 2 || gesture.vx < -0.45;
+
+            Animated.timing(notificationPanelTranslateX, {
+              toValue: shouldOpen ? 0 : notificationPanelWidth,
+              duration: 240,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }).start(() => setNotificationsVisible(shouldOpen));
+
+            edgeGestureRef.current = null;
+            return;
+          }
+
+          if (edgeGestureRef.current !== "left") {
+            edgeGestureRef.current = null;
+            return;
+          }
+
           const startX = sidePanelOpen ? 0 : -sidePanelWidth;
           const nextX = startX + gesture.dx;
-          const shouldOpen = nextX > -sidePanelWidth / 2 || gesture.vx > 0.5;
+          const isTap =
+            Math.abs(gesture.dx) < 8 && Math.abs(gesture.dy) < 8;
+          const shouldOpen =
+            (!sidePanelOpen && isTap) ||
+            nextX > -sidePanelWidth / 2 ||
+            gesture.vx > 0.5;
+          if (shouldOpen) setSidePanelOpen(true);
 
           Animated.timing(sidePanelTranslateX, {
             toValue: shouldOpen ? 0 : -sidePanelWidth,
@@ -231,9 +575,22 @@ const HomeScreen = ({ navigation }) => {
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }).start(() => setSidePanelOpen(shouldOpen));
+          edgeGestureRef.current = null;
         },
-      }),
-    [mapGestureLocked, sidePanelOpen, sidePanelWidth, sidePanelTranslateX],
+      });
+    },
+    [
+      mapGestureLocked,
+      closeSidePanel,
+      closeNotificationPanel,
+      notificationPanelTranslateX,
+      notificationPanelWidth,
+      notificationsVisible,
+      sidePanelOpen,
+      sidePanelWidth,
+      sidePanelTranslateX,
+      user,
+    ],
   );
 
   // Roles-based routes
@@ -244,6 +601,25 @@ const HomeScreen = ({ navigation }) => {
     const has = (n) => isAdmin || n.some((r) => norm.includes(r));
 
     const routes = [
+      {
+        id: "my-reservations",
+        label: "Mis reservas",
+        route: "MyReservations",
+        roles: ["user", "customer", "traveler", "tourist"],
+        always: true,
+        icon: "calendar-check-o",
+        description: "Consulta tus solicitudes y su estado con la agencia.",
+      },
+      {
+        id: "agency-reservations",
+        label: "Solicitudes de reserva",
+        route: isAdmin ? "AgencyDashboard" : "AgencyReservations",
+        roles: ["agency"],
+        icon: "calendar",
+        description: isAdmin
+          ? "Elige una agencia y revisa sus solicitudes."
+          : "Revisa y actualiza solicitudes recibidas.",
+      },
       {
         id: "manage-places",
         label: "Mis Lugares",
@@ -274,7 +650,7 @@ const HomeScreen = ({ navigation }) => {
     const seen = new Set();
     return routes.filter((r) => {
       if (seen.has(r.id)) return false;
-      const canAccess = has(r.roles);
+      const canAccess = r.always || has(r.roles);
       if (canAccess) seen.add(r.id);
       return canAccess;
     });
@@ -305,10 +681,9 @@ const HomeScreen = ({ navigation }) => {
       if (!pkg) return;
       setPackageDetailVisible(false);
       setDetailPackage(null);
-      setSelectedPackage(pkg);
-      setPaymentVisible(true);
+      openReservation(pkg);
     },
-    [setSelectedPackage, setPaymentVisible],
+    [openReservation],
   );
 
   const toggleMapGestureLock = useCallback(() => {
@@ -350,6 +725,8 @@ const HomeScreen = ({ navigation }) => {
           onPerformSearch={performSearch}
           onOpenFilters={() => setFiltersVisible(true)}
           onOpenProfile={() => setProfileVisible(true)}
+          onOpenNotifications={openNotificationPanel}
+          unreadNotifications={unreadCount}
           onLogin={() => navigation.navigate("Auth")}
           searchSuggestions={
             query.trim()
@@ -402,6 +779,7 @@ const HomeScreen = ({ navigation }) => {
               openAR(item);
             }}
             onIncreaseRadius={handleIncreaseRadius}
+            onReloadNearby={() => loadNearby(distanceKm)}
             getTopPlaceMeta={getTopPlaceMeta}
             loadingNearby={loadingNearby}
           />
@@ -486,15 +864,9 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
-              <FontAwesome
-                name={agencies.length > 0 ? "building-o" : "suitcase"}
-                size={11}
-                color="#0E7490"
-              />
+              <FontAwesome name="building-o" size={11} color="#0E7490" />
             </View>
-            <Text style={styles.sectionHeroTitle}>
-              {agencies.length > 0 ? "Agencias locales" : "Paquetes turísticos"}
-            </Text>
+            <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
           </View>
 
           {(agencies.length > 0 || agencySearchQuery || loadingAgencies) && (
@@ -528,78 +900,158 @@ const HomeScreen = ({ navigation }) => {
                   No encontramos agencias con ese nombre.
                 </Text>
               ) : (
-            <View style={styles.agencyFilterList}>
-              {agencies.map((item, idx) => {
-                const isActive = selectedAgencyFilter?.id === item?.id;
-                return (
-                <TouchableOpacity
-                  key={`${item.id || idx}-age`}
-                  style={[
-                    styles.agencyFilterCard,
-                    isActive && styles.agencyFilterCardActive,
-                  ]}
-                  activeOpacity={0.88}
-                  onPress={() => selectAgencyFilter(item)}
+                <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.agencyFilterScroller}
+              onMomentumScrollEnd={handleAgencyScrollEnd}
+              snapToInterval={AGENCY_COLUMN_WIDTH + AGENCY_COLUMN_GAP}
+              decelerationRate="fast"
+              scrollEventThrottle={16}
+            >
+              {agencyColumns.map((column, columnIndex) => (
+                <View
+                  key={`agency-column-${columnIndex}`}
+                  style={styles.agencyFilterColumn}
                 >
+                  {column.agencies.map((item, idx) => {
+                    const itemIndex = columnIndex * 2 + idx;
+                    const isActive = selectedAgencyFilter?.id === item?.id;
+                    return (
+                    <TouchableOpacity
+                      key={`${item.id || itemIndex}-age`}
+                      style={[
+                        styles.agencyFilterCard,
+                        isActive && styles.agencyFilterCardActive,
+                      ]}
+                      activeOpacity={0.88}
+                      onPress={() => selectAgencyFilter(item)}
+                    >
+                      <View
+                        style={[
+                          styles.agencyFilterIcon,
+                          isActive && styles.agencyFilterIconActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name="business-outline"
+                          size={17}
+                          color={isActive ? "#FFFFFF" : "#0E7490"}
+                        />
+                      </View>
+                      <View style={styles.agencyFilterInfo}>
+                        <Text style={styles.agencyFilterName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.agencyFilterMeta} numberOfLines={1}>
+                          {isActive ? "Filtro activo" : "Toca para filtrar paquetes"}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.agencyFilterInfoButton}
+                        onPress={(event) => {
+                          event?.stopPropagation?.();
+                          openAgency(item);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="information" size={14} color="#0E7490" />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                    );
+                  })}
+                  {column.showLoadMore ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.agencyMoreButton,
+                        column.agencies.length === 0 && styles.agencyMoreButtonFull,
+                      ]}
+                      onPress={loadMoreAgencies}
+                      disabled={loadingMoreAgencies}
+                      activeOpacity={0.86}
+                    >
+                      {loadingMoreAgencies ? (
+                        <ActivityIndicator size="small" color="#0E7490" />
+                      ) : (
+                        <>
+                          <Text style={styles.agencyMoreText}>Ver más agencias</Text>
+                          <Ionicons name="chevron-forward" size={15} color="#0E7490" />
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ))}
+            </ScrollView>
+            {agencyColumns.length > 1 ? (
+              <View style={styles.agencyPageDots}>
+                {agencyColumns.map((_, index) => (
                   <View
+                    key={`agency-dot-${index}`}
                     style={[
-                      styles.agencyFilterIcon,
-                      isActive && styles.agencyFilterIconActive,
+                      styles.agencyPageDot,
+                      index === Math.min(agencyPageIndex, agencyColumns.length - 1) &&
+                        styles.agencyPageDotActive,
                     ]}
-                  >
-                    <Ionicons
-                      name="business-outline"
-                      size={17}
-                      color={isActive ? "#FFFFFF" : "#0E7490"}
-                    />
-                  </View>
-                  <View style={styles.agencyFilterInfo}>
-                    <Text style={styles.agencyFilterName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={styles.agencyFilterMeta} numberOfLines={1}>
-                      {isActive ? "Filtro activo" : "Toca para filtrar paquetes"}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.agencyFilterInfoButton}
-                    onPress={(event) => {
-                      event?.stopPropagation?.();
-                      openAgency(item);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="information" size={14} color="#0E7490" />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-                );
-              })}
-              {hasMoreAgencies ? (
-                <TouchableOpacity
-                  style={styles.agencyMoreButton}
-                  onPress={loadMoreAgencies}
-                  disabled={loadingMoreAgencies}
-                  activeOpacity={0.86}
-                >
-                  {loadingMoreAgencies ? (
-                    <ActivityIndicator size="small" color="#0E7490" />
-                  ) : (
-                    <>
-                      <Text style={styles.agencyMoreText}>Ver más agencias</Text>
-                      <Ionicons name="chevron-down" size={15} color="#0E7490" />
-                    </>
-                  )}
-                </TouchableOpacity>
-              ) : null}
-            </View>
+                  />
+                ))}
+              </View>
+            ) : null}
+                </>
               )}
             </View>
           )}
 
+          {shouldShowAgencyState ? (
+            <View style={[styles.emptyAgencyState, styles.emptyAgencyStateCompact]}>
+              <View style={styles.emptyAgencyIcon}>
+                <Ionicons
+                  name={agenciesError ? "alert-circle-outline" : "business-outline"}
+                  size={30}
+                  color={agenciesError ? "#F97316" : COLORS.textLight}
+                />
+              </View>
+              <Text style={styles.emptyAgencyTitle}>
+                {agenciesError
+                  ? "Ups, no se pudieron cargar"
+                  : "Pronto habra agencias locales"}
+              </Text>
+              <Text style={styles.emptyAgencySub}>
+                {agenciesError
+                  ? "El backend no respondio al consultar las agencias. Puedes intentar cargar esta seccion nuevamente."
+                  : "Aqui apareceran operadores y aliados turisticos para filtrar paquetes y conocer sus servicios."}
+              </Text>
+              <View style={styles.emptyAgencyActions}>
+                <TouchableOpacity
+                  style={styles.restoreButton}
+                  onPress={reloadPackagesSection}
+                  disabled={loadingPackages || loadingAgencies}
+                  activeOpacity={0.86}
+                >
+                  {loadingPackages || loadingAgencies ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="reload" size={16} color="#FFFFFF" />
+                      <Text style={styles.restoreButtonText}>
+                        Volver a cargar
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
           <View
             style={[
               styles.sectionIntro,
-              { paddingTop: agencies.length > 0 ? 14 : 0, paddingBottom: 12 },
+              {
+                paddingTop:
+                  agencies.length > 0 || shouldShowAgencyState ? 14 : 0,
+                paddingBottom: 12,
+              },
             ]}
           >
             <View style={styles.sectionTitleAccent} />
@@ -646,6 +1098,7 @@ const HomeScreen = ({ navigation }) => {
                   onReservePress={() => openPackagePayment(item)}
                   getImage={getPackageImage}
                   getGradient={getPackageGradient}
+                  places={places}
                 />
               ))}
               {hasMorePackages ? (
@@ -666,32 +1119,61 @@ const HomeScreen = ({ navigation }) => {
                 </TouchableOpacity>
               ) : null}
             </View>
-          ) : selectedAgencyFilter ? (
+          ) : (
             <View style={styles.emptyAgencyState}>
               <View style={styles.emptyAgencyIcon}>
                 <Ionicons
-                  name="briefcase-outline"
+                  name={packagesError ? "alert-circle-outline" : "briefcase-outline"}
                   size={32}
-                  color={COLORS.textLight}
+                  color={packagesError ? "#F97316" : COLORS.textLight}
                 />
               </View>
               <Text style={styles.emptyAgencyTitle}>
-                Sin paquetes disponibles
+                {packagesError
+                  ? "Ups, no se pudo cargar"
+                  : selectedAgencyFilter
+                    ? "Pronto habra informacion"
+                    : "Pronto habra informacion"}
               </Text>
               <Text style={styles.emptyAgencySub}>
-                Esta agencia aún no ha publicado ofertas. Cambia de agencia o
-                regresa al catálogo completo.
+                {packagesError
+                  ? "Algo no salio bien al consultar los paquetes turisticos. Vuelve a intentarlo mas tarde o recarga la seccion."
+                  : selectedAgencyFilter
+                    ? "Esta agencia aun no ha publicado ofertas. Aqui veras planes, precios, fechas y servicios incluidos cuando esten disponibles."
+                    : "Aqui apareceran experiencias, recorridos, agencias, precios y servicios para planear tu proxima visita por el Huila."}
               </Text>
-              <TouchableOpacity
-                style={styles.restoreButton}
-                onPress={clearAgencyFilter}
-              >
-                <Text style={styles.restoreButtonText}>
-                  Regresar a ver todos
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.emptyAgencyActions}>
+                <TouchableOpacity
+                  style={styles.restoreButton}
+                  onPress={reloadPackagesSection}
+                  disabled={loadingPackages || loadingAgencies}
+                  activeOpacity={0.86}
+                >
+                  {loadingPackages || loadingAgencies ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="reload" size={16} color="#FFFFFF" />
+                      <Text style={styles.restoreButtonText}>
+                        Volver a cargar
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                {selectedAgencyFilter ? (
+                  <TouchableOpacity
+                    style={styles.restoreButtonSecondary}
+                    onPress={clearAgencyFilter}
+                    activeOpacity={0.86}
+                  >
+                    <Text style={styles.restoreButtonSecondaryText}>
+                      Ver todos
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
-          ) : null}
+          )}
         </View>
 
         <HomeFooter />
@@ -703,8 +1185,7 @@ const HomeScreen = ({ navigation }) => {
         sidePanelOpen={sidePanelOpen}
         sidePanelTranslateX={sidePanelTranslateX}
         sidePanelWidth={sidePanelWidth}
-        panelHintDone={panelHintDone}
-        panelHintHandleAnim={panelHintHandleAnim}
+        handlePanHandlers={leftHandlePanResponder.panHandlers}
         openSidePanel={openSidePanel}
         closeSidePanel={closeSidePanel}
         nearbyContext={nearbyContext}
@@ -715,6 +1196,7 @@ const HomeScreen = ({ navigation }) => {
         places={places}
         loadingTopPlaces={loadingTopPlaces}
         bestRatedError={bestRatedError}
+        onReloadPanelData={handleRefresh}
         getCategoryLabel={getCategoryLabel}
         getTopPlaceMeta={getTopPlaceMeta}
         onSelectTop={(item) =>
@@ -748,6 +1230,7 @@ const HomeScreen = ({ navigation }) => {
           setProfileVisible(false);
           setEmailVerifyVisible(true);
         }}
+        onAddAccount={() => navigation.navigate("Auth")}
       />
 
       <VerificationModal
@@ -768,13 +1251,46 @@ const HomeScreen = ({ navigation }) => {
         agency={selectedAgency}
       />
 
-      <PaymentModal
-        visible={paymentVisible}
-        onClose={closePayment}
+      <NotificationPanel
+        enabled={Boolean(user) && !sidePanelOpen}
+        visible={notificationsVisible}
+        onOpen={openNotificationPanel}
+        onClose={closeNotificationPanel}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        loading={loadingNotifications}
+        error={notificationError}
+        onRefresh={loadNotifications}
+        onMarkRead={markAsRead}
+        onMarkAllRead={markAllAsRead}
+        onOpenReservations={() => {
+          closeNotificationPanel();
+          navigation.navigate("MyReservations");
+        }}
+        panelTranslateX={notificationPanelTranslateX}
+        panelWidth={notificationPanelWidth}
+        handlePanHandlers={rightHandlePanResponder.panHandlers}
+      />
+
+      <ReservationModal
+        visible={reservationVisible}
+        onClose={closeReservation}
         selectedPackage={selectedPackage}
-        paymentForm={paymentForm}
-        onPaymentChange={handlePaymentChange}
+        reservationForm={reservationForm}
+        onReservationChange={handleReservationChange}
+        onSubmit={submitReservation}
+        loading={reservationLoading}
         formatPrice={formatPrice}
+      />
+
+      <PremiumModal
+        visible={reservationStatusModal.visible}
+        type={reservationStatusModal.type}
+        title={reservationStatusModal.title}
+        message={reservationStatusModal.message}
+        confirmText={reservationStatusModal.confirmText}
+        onConfirm={reservationStatusModal.onConfirm}
+        onClose={closeReservationStatusModal}
       />
 
       <PackageDetailModal
@@ -788,6 +1304,7 @@ const HomeScreen = ({ navigation }) => {
         getImage={getPackageImage}
         getGradient={getPackageGradient}
         formatPrice={formatPrice}
+        places={places}
       />
 
       <FilterModal

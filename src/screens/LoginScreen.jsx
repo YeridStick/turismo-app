@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { COLORS, FONT_SIZES, SPACING } from '../utils/constants';
+import AuthAnimatedBackground from '../components/ui/AuthAnimatedBackground';
 import { PremiumModal } from '../components/ui/PremiumModal';
 
 const LoginScreen = () => {
@@ -72,115 +73,123 @@ const LoginScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
+      <AuthAnimatedBackground />
       <View style={styles.content}>
-        <LinearGradient
-          colors={['#0B4A5F', '#0E7490']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-          <Text style={styles.heroKicker}>TurApp</Text>
-          <Text style={styles.heroTitle}>Tu proximo destino empieza aqui</Text>
-          <View style={styles.heroTags}>
-            <View style={styles.heroTag}>
-              <FontAwesome name="map-marker" size={11} color="#FDBA74" />
-              <Text style={styles.heroTagText}>Rutas</Text>
-            </View>
-            <View style={styles.heroTag}>
-              <FontAwesome name="camera" size={11} color="#A7F3D0" />
-              <Text style={styles.heroTagText}>Postales</Text>
-            </View>
-          </View>
-        </LinearGradient>
-        <Text style={styles.title}>Bienvenido</Text>
-        <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
-
-        <View style={styles.toggleRow}>
-          <TouchableOpacity
-            style={[styles.toggleButton, loginMethod === 'totp' && styles.toggleButtonActive]}
-            onPress={() => setLoginMethod('totp')}
-            disabled={loading}
+        <View style={styles.panel}>
+          <LinearGradient
+            colors={['#0B4A5F', '#0E7490']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
           >
-            <Text style={[styles.toggleText, loginMethod === 'totp' && styles.toggleTextActive]}>
-              Código
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleButton, loginMethod === 'password' && styles.toggleButtonActive]}
-            onPress={() => setLoginMethod('password')}
-            disabled={loading}
-          >
-            <Text style={[styles.toggleText, loginMethod === 'password' && styles.toggleTextActive]}>
-              Contraseña
-            </Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.heroKicker}>TurApp</Text>
+            <Text style={styles.heroTitle}>Tu proximo destino empieza aqui</Text>
+            <View style={styles.heroTags}>
+              <View style={styles.heroTag}>
+                <FontAwesome name="map-marker" size={11} color="#FDBA74" />
+                <Text style={styles.heroTagText}>Rutas</Text>
+              </View>
+              <View style={styles.heroTag}>
+                <FontAwesome name="camera" size={11} color="#A7F3D0" />
+                <Text style={styles.heroTagText}>Postales</Text>
+              </View>
+            </View>
+          </LinearGradient>
+          <Text style={styles.title}>Bienvenido</Text>
+          <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!loading}
-        />
-
-        {loginMethod === 'password' ? (
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Contraseña"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              editable={!loading}
-            />
+          <View style={styles.toggleRow}>
             <TouchableOpacity
-              style={styles.eyeIcon}
-              onPress={() => setShowPassword(!showPassword)}
+              style={[styles.toggleButton, loginMethod === 'totp' && styles.toggleButtonActive]}
+              onPress={() => setLoginMethod('totp')}
+              disabled={loading}
             >
-              <FontAwesome name={showPassword ? "eye" : "eye-slash"} size={20} color={COLORS.textLight} />
+              <Text style={[styles.toggleText, loginMethod === 'totp' && styles.toggleTextActive]}>
+                Código
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, loginMethod === 'password' && styles.toggleButtonActive]}
+              onPress={() => setLoginMethod('password')}
+              disabled={loading}
+            >
+              <Text style={[styles.toggleText, loginMethod === 'password' && styles.toggleTextActive]}>
+                Contraseña
+              </Text>
             </TouchableOpacity>
           </View>
-        ) : (
+
           <TextInput
             style={styles.input}
-            placeholder="Código TOTP"
-            value={totpCode}
-            onChangeText={setTotpCode}
-            keyboardType="number-pad"
-            maxLength={6}
+            placeholder="Email"
+            placeholderTextColor="#94A3B8"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
             editable={!loading}
           />
-        )}
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={COLORS.white} />
+          {loginMethod === 'password' ? (
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Contraseña"
+                placeholderTextColor="#94A3B8"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <FontAwesome name={showPassword ? "eye" : "eye-slash"} size={20} color={COLORS.textLight} />
+              </TouchableOpacity>
+            </View>
           ) : (
-            <Text style={styles.buttonText}>Iniciar Sesión</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Código TOTP"
+              placeholderTextColor="#94A3B8"
+              value={totpCode}
+              onChangeText={setTotpCode}
+              keyboardType="number-pad"
+              maxLength={6}
+              editable={!loading}
+            />
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.navigate('Auth', { showRecovery: true })}
-          disabled={loading}
-        >
-          <Text style={styles.linkText}>¿Perdiste tu acceso?</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => navigation.navigate('Auth')}
-          disabled={loading}
-        >
-          <Text style={styles.linkText}>Crear cuenta</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.buttonText}>Iniciar Sesión</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.linksRow}>
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => navigation.navigate('Auth', { showRecovery: true })}
+              disabled={loading}
+            >
+              <Text style={styles.linkText}>¿Perdiste tu acceso?</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => navigation.navigate('Auth')}
+              disabled={loading}
+            >
+              <Text style={styles.linkText}>Crear cuenta</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <PremiumModal
@@ -204,11 +213,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: SPACING.lg,
   },
+  panel: {
+    width: '100%',
+    maxWidth: 430,
+    alignSelf: 'center',
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 116, 144, 0.14)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: SPACING.lg,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 9,
+  },
   heroCard: {
-    borderRadius: 18,
+    borderRadius: 24,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.lg,
     marginBottom: SPACING.lg,
+    shadowColor: '#0E7490',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   heroKicker: {
     color: '#CCFBF1',
@@ -220,9 +249,9 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '800',
-    lineHeight: 24,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '900',
+    lineHeight: 30,
     marginBottom: SPACING.sm,
   },
   heroTags: {
@@ -247,7 +276,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: FONT_SIZES.xxl,
-    fontWeight: 'bold',
+    fontWeight: '900',
     color: COLORS.text,
     marginBottom: SPACING.sm,
     textAlign: 'center',
@@ -255,26 +284,38 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: FONT_SIZES.md,
     color: COLORS.textLight,
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
     textAlign: 'center',
+    fontWeight: '600',
   },
   input: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
+    borderColor: '#D9EAF0',
+    borderRadius: 18,
     padding: SPACING.md,
     marginBottom: SPACING.md,
     fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    shadowColor: '#0E7490',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
+    borderColor: '#D9EAF0',
+    borderRadius: 18,
     marginBottom: SPACING.md,
+    shadowColor: '#0E7490',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   passwordInput: {
     flex: 1,
@@ -285,29 +326,45 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   button: {
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.primary,
     padding: SPACING.md,
-    borderRadius: 8,
+    borderRadius: 18,
     alignItems: 'center',
     marginTop: SPACING.md,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   toggleRow: {
     flexDirection: 'row',
     gap: SPACING.sm,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.lg,
+    padding: 5,
+    borderRadius: 999,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   toggleButton: {
     flex: 1,
+    minHeight: 42,
     paddingVertical: SPACING.xs,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderWidth: 0,
+    borderColor: 'transparent',
     alignItems: 'center',
     backgroundColor: COLORS.white,
   },
   toggleButtonActive: {
-    backgroundColor: COLORS.secondary,
-    borderColor: COLORS.secondary,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4,
   },
   toggleText: {
     color: COLORS.textLight,
@@ -323,7 +380,11 @@ const styles = StyleSheet.create({
   },
   linkText: {
     color: COLORS.primary,
-    fontWeight: '600',
+    fontWeight: '800',
+  },
+  linksRow: {
+    marginTop: SPACING.md,
+    gap: SPACING.xs,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -336,4 +397,3 @@ const styles = StyleSheet.create({
 });
 
 export default LoginScreen;
-

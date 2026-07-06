@@ -16,6 +16,10 @@ import {
 
 export const AuthContext = createContext();
 
+const ACTIVE_TOKEN_KEY = 'token';
+const ACTIVE_USER_KEY = 'user';
+const SAVED_ACCOUNTS_KEY = 'turismo_saved_accounts';
+
 const extractApiErrorMessage = (error, fallback) => {
   const data = error?.response?.data;
   if (typeof data?.message === 'string' && data.message.trim()) return data.message.trim();
@@ -63,9 +67,26 @@ const decodeJwtPayload = (token) => {
   return null;
 };
 
+const getTokenExpirationMs = (token) => {
+  const payload = decodeJwtPayload(token);
+  return typeof payload?.exp === 'number' ? payload.exp * 1000 : null;
+};
+
+const isTokenExpired = (token) => {
+  const expiresAt = getTokenExpirationMs(token);
+  return !expiresAt || Date.now() >= expiresAt;
+};
+
+const sortSavedAccounts = (accounts) => {
+  return [...accounts].sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
+};
+
+const MAX_SAVED_ACCOUNTS = 2;
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [roles, setRoles] = useState([]);
+  const [savedAccounts, setSavedAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -74,19 +95,99 @@ export const AuthProvider = ({ children }) => {
 
   const loadUser = async () => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const userString = await AsyncStorage.getItem('user');
+      const token = await AsyncStorage.getItem(ACTIVE_TOKEN_KEY);
+      const userString = await AsyncStorage.getItem(ACTIVE_USER_KEY);
+      await loadSavedAccounts();
 
       if (token && userString) {
-        setUser(JSON.parse(userString));
+        if (isTokenExpired(token)) {
+          await AsyncStorage.removeItem(ACTIVE_TOKEN_KEY);
+          await AsyncStorage.removeItem(ACTIVE_USER_KEY);
+          return;
+        }
+        const parsedUser = JSON.parse(userString);
+        setUser(parsedUser);
         const payload = decodeJwtPayload(token);
         setRoles(Array.isArray(payload?.roles) ? payload.roles : []);
+        await rememberAccount({ token, userData: parsedUser, email: parsedUser.email });
       }
     } catch (error) {
       console.error('Error loading user:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSavedAccounts = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(SAVED_ACCOUNTS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const valid = (Array.isArray(parsed) ? parsed : [])
+        .filter((account) => account?.token && !isTokenExpired(account.token))
+        .slice(0, MAX_SAVED_ACCOUNTS);
+      if (raw) {
+        await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(sortSavedAccounts(valid)));
+      }
+      setSavedAccounts(sortSavedAccounts(valid));
+      return valid;
+    } catch (_err) {
+      setSavedAccounts([]);
+      return [];
+    }
+  };
+
+  const persistSavedAccounts = async (accounts) => {
+    const sorted = sortSavedAccounts(accounts);
+    await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(sorted));
+    setSavedAccounts(sorted);
+    return sorted;
+  };
+
+  const rememberAccount = async ({ token, userData, email }) => {
+    if (!token || !userData?.email && !email) return;
+
+    const accountEmail = String(userData?.email || email).trim().toLowerCase();
+    const existing = await loadSavedAccounts();
+    const nextAccount = {
+      email: accountEmail,
+      token,
+      user: { ...userData, email: userData?.email || email },
+      roles: Array.isArray(decodeJwtPayload(token)?.roles)
+        ? decodeJwtPayload(token).roles
+        : [],
+      expiresAt: getTokenExpirationMs(token),
+      lastUsedAt: Date.now(),
+    };
+
+    await persistSavedAccounts([
+      nextAccount,
+      ...existing.filter((account) => String(account.email).toLowerCase() !== accountEmail),
+    ].slice(0, MAX_SAVED_ACCOUNTS));
+  };
+
+  const activateSession = async ({ token, userData, email, remember = true }) => {
+    if (!token || isTokenExpired(token)) {
+      return { success: false, error: 'La sesion guardada expiro. Inicia sesion nuevamente.' };
+    }
+
+    await AsyncStorage.setItem(ACTIVE_TOKEN_KEY, token);
+    const jwtPayload = decodeJwtPayload(token);
+    const nextRoles = Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : [];
+    setRoles(nextRoles);
+
+    const nextUser = userData || await fetchUserInfo(email);
+    if (!nextUser) {
+      return { success: false, error: 'No pudimos cargar la informacion de esta cuenta.' };
+    }
+
+    await AsyncStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(nextUser));
+    setUser(nextUser);
+
+    if (remember) {
+      await rememberAccount({ token, userData: nextUser, email });
+    }
+
+    return { success: true };
   };
 
   const fetchUserInfo = async (email) => {
@@ -139,15 +240,8 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      await AsyncStorage.setItem('token', token);
-      const jwtPayload = decodeJwtPayload(token);
-      setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
       const userData = await fetchUserInfo(email);
-      if (userData) {
-        await AsyncStorage.setItem('user', JSON.stringify(userData));
-        setUser(userData);
-      }
-      return { success: true };
+      return activateSession({ token, userData, email });
     } catch (error) {
       const status = error?.response?.status;
       const fallback = status === 401 || status === 403
@@ -178,15 +272,8 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      await AsyncStorage.setItem('token', token);
-      const jwtPayload = decodeJwtPayload(token);
-      setRoles(Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : []);
       const userData = await fetchUserInfo(email);
-      if (userData) {
-        await AsyncStorage.setItem('user', JSON.stringify(userData));
-        setUser(userData);
-      }
-      return { success: true };
+      return activateSession({ token, userData, email });
     } catch (error) {
       const status = error?.response?.status;
       const fallback = status === 401 || status === 403
@@ -249,8 +336,8 @@ export const AuthProvider = ({ children }) => {
     
     try {
       // 2. Limpiar almacenamiento persistente
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem(ACTIVE_TOKEN_KEY);
+      await AsyncStorage.removeItem(ACTIVE_USER_KEY);
       
       // 3. Notificar al backend en segundo plano (no bloqueante)
       api.post(ENDPOINTS.LOGOUT).catch(err => 
@@ -259,6 +346,36 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error during logout process:', error);
     }
+  };
+
+  const switchAccount = async (email) => {
+    const accountEmail = String(email || '').trim().toLowerCase();
+    const accounts = await loadSavedAccounts();
+    const account = accounts.find((item) => String(item.email).toLowerCase() === accountEmail);
+
+    if (!account) {
+      return { success: false, error: 'No encontramos esa cuenta guardada.' };
+    }
+
+    if (isTokenExpired(account.token)) {
+      await persistSavedAccounts(accounts.filter((item) => String(item.email).toLowerCase() !== accountEmail));
+      return { success: false, error: 'La sesion de esa cuenta expiro. Inicia sesion nuevamente.' };
+    }
+
+    const result = await activateSession({
+      token: account.token,
+      userData: account.user,
+      email: account.email,
+      remember: true,
+    });
+
+    return result;
+  };
+
+  const removeSavedAccount = async (email) => {
+    const accountEmail = String(email || '').trim().toLowerCase();
+    const accounts = await loadSavedAccounts();
+    await persistSavedAccounts(accounts.filter((item) => String(item.email).toLowerCase() !== accountEmail));
   };
 
 
@@ -277,8 +394,12 @@ export const AuthProvider = ({ children }) => {
   const updateUser = async (newUserData) => {
     try {
       const updatedUser = { ...user, ...newUserData };
-      await AsyncStorage.setItem('user', JSON.stringify(updatedUser)); 
+      await AsyncStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(updatedUser)); 
       setUser(updatedUser); 
+      const token = await AsyncStorage.getItem(ACTIVE_TOKEN_KEY);
+      if (token) {
+        await rememberAccount({ token, userData: updatedUser, email: updatedUser.email });
+      }
       return { success: true };
     } catch (error) {
       console.error('Error updating user in context:', error);
@@ -291,11 +412,14 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         roles,
+        savedAccounts,
         loading,
         login,
         loginWithPassword,
         register,
         logout,
+        switchAccount,
+        removeSavedAccount,
         updateUser,
         setupTotp: setupTotpService,
         confirmTotp: confirmTotpService,
@@ -319,4 +443,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

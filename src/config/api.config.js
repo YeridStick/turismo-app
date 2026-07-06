@@ -1,5 +1,5 @@
 // Cambia esta URL por la de tu backend
-export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com';//https://turismo-back-uv7n.onrender.com // http://localhost:8082 
+export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com';//https://turismo-back-uv7n.onrender.com //http://192.168.20.152:7860  http://localhost:8082 
 
 // O si estás probando localmente en LAN:
 // export const API_BASE_URL = 'http://192.168.1.X:8082'; // Reemplaza X con tu IP local
@@ -46,9 +46,27 @@ export const ENDPOINTS = {
   AGENCIES: "/api/agencies",
   AGENCIES_SEARCH: "/api/agencies/search",
   AGENCY_BY_USER: "/api/agencies/by-user",
-  AGENCY_MY: "/api/agencies/by-user",
+  AGENCY_MY: "/api/agencies/my",
   AGENCY_PACKAGES: (id) => `/api/agencies/${id}/packages`,
   AGENCY_DASHBOARD: "/api/agencies/dashboard",
+  RESERVATIONS: "/api/reservations",
+  RESERVATIONS_ME: "/api/reservations/me",
+  RESERVATION_DETAIL: (id) => `/api/reservations/${id}`,
+  RESERVATION_MESSAGES: (id) => `/api/reservations/${id}/messages`,
+  RESERVATION_PAYMENT_CHECKOUT: (id) => `/api/reservations/${id}/payment/checkout`,
+  RESERVATION_PAYMENT_STATUS: (id) => `/api/reservations/${id}/payment/status`,
+  AGENCY_RESERVATIONS: "/api/agencies/me/reservations",
+  AGENCY_RESERVATION_DETAIL: (id) => `/api/agencies/me/reservations/${id}`,
+  AGENCY_RESERVATION_STATUS: (id) => `/api/agencies/me/reservations/${id}/status`,
+  AGENCY_RESERVATION_MESSAGES: (id) => `/api/agencies/me/reservations/${id}/messages`,
+  AGENCY_SCOPED_RESERVATIONS: (agencyId) => `/api/agencies/${agencyId}/reservations`,
+  AGENCY_SCOPED_RESERVATION_DETAIL: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}`,
+  AGENCY_SCOPED_RESERVATION_STATUS: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}/status`,
+  AGENCY_SCOPED_RESERVATION_MESSAGES: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}/messages`,
+  NOTIFICATIONS_STREAM: "/api/notifications/stream",
+  NOTIFICATIONS: "/api/notifications",
+  NOTIFICATION_READ: (id) => `/api/notifications/${id}/read`,
+  NOTIFICATIONS_READ_ALL: "/api/notifications/read-all",
   GEOCODE: "/api/tools/geocode",
   CATEGORIES: "/api/categories",
   

@@ -509,6 +509,8 @@ const useHomeData = (user) => {
     
     // Actions
     loadAll,
+    loadPackages,
+    loadAgencies,
     loadNearby,
     loadNearbyContext,
     loadMoreAgencies,

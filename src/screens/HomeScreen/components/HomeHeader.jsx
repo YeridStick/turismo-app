@@ -20,7 +20,9 @@ const HomeHeader = ({
   onPerformSearch,
   onOpenFilters,
   onOpenProfile,
+  onOpenNotifications,
   onLogin,
+  unreadNotifications = 0,
   searchSuggestions,
   onSelectSuggestion,
 }) => {
@@ -96,24 +98,41 @@ const HomeHeader = ({
         <View style={styles.topBar}>
           <Text style={styles.locationValue}>Cerca de ti</Text>
           {user ? (
-            <TouchableOpacity
-              style={styles.profileButton}
-              onPress={onOpenProfile}
-            >
-              <View style={styles.profileAvatarSmall}>
-                {user.urlAvatar || user.avatar ? (
-                  <Image
-                    source={{ uri: user.urlAvatar || user.avatar }}
-                    style={{ width: "100%", height: "100%", borderRadius: 14 }}
-                  />
-                ) : (
-                  <FontAwesome name="user" size={14} color="#fff" />
-                )}
-              </View>
-              <Text style={styles.profileButtonName} numberOfLines={1}>
-                {(user.fullName || user.email || "Usuario").split(" ")[0]}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={onOpenNotifications}
+                activeOpacity={0.86}
+              >
+                <FontAwesome name="bell-o" size={15} color={COLORS.primary} />
+                {unreadNotifications > 0 ? (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.profileButton}
+                onPress={onOpenProfile}
+              >
+                <View style={styles.profileAvatarSmall}>
+                  {user.urlAvatar || user.avatar ? (
+                    <Image
+                      source={{ uri: user.urlAvatar || user.avatar }}
+                      style={{ width: "100%", height: "100%", borderRadius: 14 }}
+                    />
+                  ) : (
+                    <FontAwesome name="user" size={14} color="#fff" />
+                  )}
+                </View>
+                <Text style={styles.profileButtonName} numberOfLines={1}>
+                  {(user.fullName || user.email || "Usuario").split(" ")[0]}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity style={styles.loginButton} onPress={onLogin}>
               <Text style={styles.loginButtonText}>Iniciar sesion</Text>

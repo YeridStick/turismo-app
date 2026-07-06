@@ -12,7 +12,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import WebViewMap from "../../../components/WebViewMap";
 import PlaceCard from "./PlaceCard";
 import { FALLBACK_CENTER } from "../utils/constants";
-import { formatDistance } from "../utils/helpers";
+import { formatDistance, getPlaceImage } from "../utils/helpers";
 import styles from "../styles";
 
 const NearbyMapBlock = ({
@@ -28,6 +28,7 @@ const NearbyMapBlock = ({
   onPlacePress,
   onArPress,
   onIncreaseRadius,
+  onReloadNearby,
   getTopPlaceMeta,
   loadingNearby,
 }) => {
@@ -199,7 +200,7 @@ const NearbyMapBlock = ({
                 title={item.name}
                 subtitle={item.description}
                 meta={getTopPlaceMeta(item)}
-                image={item.image}
+                image={getPlaceImage(item)}
                 rating={item.rating}
                 distance={item.distance}
                 variant="compact"
@@ -218,17 +219,36 @@ const NearbyMapBlock = ({
             <View style={{ alignItems: "center" }}>
               <Text style={styles.mapEmptyTitle}>Sin sitios cercanos</Text>
               <Text style={styles.mapEmptyDesc}>
-                No hay lugares en tu rango actual ({distanceKm}km).
+                No hay lugares en tu rango actual ({distanceKm}km). Aqui
+                apareceran destinos, rutas y experiencias cercanas cuando
+                tengamos informacion disponible.
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.mapEmptyButton}
-              onPress={onIncreaseRadius}
-              activeOpacity={0.8}
-            >
-              <FontAwesome name="search-plus" size={16} color="#FFF" />
-              <Text style={styles.mapEmptyButtonText}>Explorar mas lejos</Text>
-            </TouchableOpacity>
+            <View style={styles.mapEmptyActions}>
+              <TouchableOpacity
+                style={styles.mapEmptyButton}
+                onPress={onIncreaseRadius}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="search-plus" size={16} color="#FFF" />
+                <Text style={styles.mapEmptyButtonText}>Explorar mas lejos</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.mapEmptyButton, styles.mapEmptyButtonSecondary]}
+                onPress={onReloadNearby}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="refresh" size={15} color="#0E7490" />
+                <Text
+                  style={[
+                    styles.mapEmptyButtonText,
+                    styles.mapEmptyButtonSecondaryText,
+                  ]}
+                >
+                  Volver a cargar
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </Animated.View>

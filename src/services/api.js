@@ -56,8 +56,66 @@ export const searchAgencies = (params = {}) => api.get(ENDPOINTS.AGENCIES_SEARCH
 export const createAgency = (data) => api.post(ENDPOINTS.AGENCIES, data);
 export const getAgencyByEmail = (email) => 
   api.get(ENDPOINTS.AGENCY_BY_USER, { params: { email, userEmail: email } });
-export const getMyAgencies = (email) => api.get(ENDPOINTS.AGENCY_MY, { params: { email } });
+export const getMyAgencies = () => api.get(ENDPOINTS.AGENCY_MY);
 export const getAgencyPackages = (id, params = {}) => api.get(ENDPOINTS.AGENCY_PACKAGES(id), { params });
+
+// Reservations
+export const createReservation = (data) => api.post(ENDPOINTS.RESERVATIONS, data);
+export const getMyReservations = (params = {}) => api.get(ENDPOINTS.RESERVATIONS_ME, { params });
+export const getReservationById = (id) => api.get(ENDPOINTS.RESERVATION_DETAIL(id));
+export const updateReservation = (id, data) => api.patch(ENDPOINTS.RESERVATION_DETAIL(id), data);
+export const deleteReservation = (id) => api.delete(ENDPOINTS.RESERVATION_DETAIL(id));
+export const getReservationMessages = (id, params = {}) =>
+  api.get(ENDPOINTS.RESERVATION_MESSAGES(id), { params });
+export const sendReservationMessage = (id, message) =>
+  api.post(ENDPOINTS.RESERVATION_MESSAGES(id), { message });
+export const initiateReservationPayment = (id, data = {}) =>
+  api.post(ENDPOINTS.RESERVATION_PAYMENT_CHECKOUT(id), data);
+export const getReservationPaymentStatus = (id) =>
+  api.get(ENDPOINTS.RESERVATION_PAYMENT_STATUS(id));
+export const getAgencyReservations = (params = {}, options = {}) => {
+  const endpoint = options.agencyId
+    ? ENDPOINTS.AGENCY_SCOPED_RESERVATIONS(options.agencyId)
+    : ENDPOINTS.AGENCY_RESERVATIONS;
+
+  return api.get(endpoint, { params });
+};
+export const getAgencyReservationById = (id, options = {}) => {
+  const endpoint = options.agencyId
+    ? ENDPOINTS.AGENCY_SCOPED_RESERVATION_DETAIL(options.agencyId, id)
+    : ENDPOINTS.AGENCY_RESERVATION_DETAIL(id);
+
+  return api.get(endpoint);
+};
+export const updateAgencyReservationStatus = (id, status, notes = "", options = {}) => {
+  const endpoint = options.agencyId
+    ? ENDPOINTS.AGENCY_SCOPED_RESERVATION_STATUS(options.agencyId, id)
+    : ENDPOINTS.AGENCY_RESERVATION_STATUS(id);
+
+  return api.patch(endpoint, { status, notes });
+};
+export const getAgencyReservationMessages = (id, params = {}, options = {}) => {
+  const endpoint = options.agencyId
+    ? ENDPOINTS.AGENCY_SCOPED_RESERVATION_MESSAGES(options.agencyId, id)
+    : ENDPOINTS.AGENCY_RESERVATION_MESSAGES(id);
+
+  return api.get(endpoint, { params });
+};
+export const sendAgencyReservationMessage = (id, message, options = {}) => {
+  const endpoint = options.agencyId
+    ? ENDPOINTS.AGENCY_SCOPED_RESERVATION_MESSAGES(options.agencyId, id)
+    : ENDPOINTS.AGENCY_RESERVATION_MESSAGES(id);
+
+  return api.post(endpoint, { message });
+};
+
+// Notifications
+export const getNotifications = (params = {}) =>
+  api.get(ENDPOINTS.NOTIFICATIONS, { params });
+export const markNotificationRead = (id) =>
+  api.patch(ENDPOINTS.NOTIFICATION_READ(id));
+export const markAllNotificationsRead = () =>
+  api.patch(ENDPOINTS.NOTIFICATIONS_READ_ALL);
 
 // Agency User Management
 export const getAgencyUsers = (id) => api.get(ENDPOINTS.AGENCY_USERS(id));

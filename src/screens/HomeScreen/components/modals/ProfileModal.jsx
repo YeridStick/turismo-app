@@ -29,8 +29,9 @@ const ProfileModal = ({
   allowedRoutes, 
   onRoutePress,
   onOpenVerification,
+  onAddAccount,
 }) => {
-  const { updateUser } = useAuth();
+  const { updateUser, savedAccounts, switchAccount, removeSavedAccount } = useAuth();
   const [currentView, setCurrentView] = useState('summary'); // 'summary' | 'settings'
 
   // Feedback State
@@ -57,6 +58,7 @@ const ProfileModal = ({
   // UI State
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingPassword, setLoadingPassword] = useState(false);
+  const [switchingEmail, setSwitchingEmail] = useState("");
 
   useEffect(() => {
     if (visible && user) {
@@ -186,6 +188,48 @@ const ProfileModal = ({
     }
   };
 
+  const handleSwitchAccount = async (account) => {
+    if (!account?.email || account.email === user.email) return;
+
+    setSwitchingEmail(account.email);
+    const result = await switchAccount(account.email);
+    setSwitchingEmail("");
+
+    if (result.success) {
+      setStatusModal({
+        visible: true,
+        type: "success",
+        title: "Cuenta cambiada",
+        message: `Ahora estas usando ${account.user?.fullName || account.email}.`,
+        confirmText: "Entendido",
+        onConfirm: () => {
+          setStatusModal((prev) => ({ ...prev, visible: false }));
+          onClose?.();
+        },
+      });
+      return;
+    }
+
+    setStatusModal({
+      visible: true,
+      type: "warning",
+      title: "Sesion expirada",
+      message: result.error || "Debes iniciar sesion nuevamente con esa cuenta.",
+      confirmText: "Entendido",
+      onConfirm: () => setStatusModal((prev) => ({ ...prev, visible: false })),
+    });
+  };
+
+  const handleRemoveSavedAccount = async (account) => {
+    if (!account?.email || account.email === user.email) return;
+    await removeSavedAccount(account.email);
+  };
+
+  const handleAddAccount = () => {
+    onClose?.();
+    onAddAccount?.();
+  };
+
   if (!user) return null;
 
   const avatar =
@@ -195,6 +239,13 @@ const ProfileModal = ({
     "https://api.dicebear.com/7.x/miniavs/svg?seed=" + (user.email || "turismo");
 
   const fullDisplayName = user.fullName || user.email || "Usuario";
+  const rememberedAccounts = (savedAccounts || []).filter(
+    (account) => account?.email && account.email !== user.email,
+  );
+  const currentAccountStored = (savedAccounts || []).some(
+    (account) => account?.email === user.email,
+  );
+  const canAddAccount = (savedAccounts || []).length < 2;
 
   const formatDate = (dateString) => {
     if (!dateString) return "No disponible";
@@ -269,6 +320,112 @@ const ProfileModal = ({
                     <FontAwesome name="calendar" size={13} color="#0E7490" style={{ width: 20 }} />
                     <Text style={styles.profileItemText}><Text style={{ fontWeight: "bold" }}>Miembro desde: </Text>{formatDate(user.createdAt)}</Text>
                   </View>
+                </View>
+
+                <View style={styles.profileInfoGroup}>
+                  <Text style={styles.profileItemLabel}>Cuentas</Text>
+                  <View style={styles.savedAccountItem}>
+                    <View style={[styles.savedAccountMain, styles.savedAccountCurrent]}>
+                      <Image
+                        source={{ uri: avatar }}
+                        style={styles.savedAccountAvatar}
+                        contentFit="cover"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.savedAccountName} numberOfLines={1}>
+                          {fullDisplayName}
+                        </Text>
+                        <Text style={styles.savedAccountEmail} numberOfLines={1}>
+                          {user.email}
+                        </Text>
+                      </View>
+                      <View style={styles.currentAccountBadge}>
+                        <Text style={styles.currentAccountBadgeText}>
+                          Actual
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {rememberedAccounts.length > 0 ? (
+                    <>
+                    {rememberedAccounts.map((account) => {
+                      const accountName =
+                        account.user?.fullName ||
+                        account.user?.name ||
+                        account.email;
+                      const accountAvatar =
+                        account.user?.urlAvatar ||
+                        account.user?.avatar ||
+                        "https://api.dicebear.com/7.x/miniavs/svg?seed=" + account.email;
+                      const switching = switchingEmail === account.email;
+
+                      return (
+                        <View key={account.email} style={styles.savedAccountItem}>
+                          <TouchableOpacity
+                            style={styles.savedAccountMain}
+                            onPress={() => handleSwitchAccount(account)}
+                            disabled={switching}
+                            activeOpacity={0.86}
+                          >
+                            <Image
+                              source={{ uri: accountAvatar }}
+                              style={styles.savedAccountAvatar}
+                              contentFit="cover"
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.savedAccountName} numberOfLines={1}>
+                                {accountName}
+                              </Text>
+                              <Text style={styles.savedAccountEmail} numberOfLines={1}>
+                                {account.email}
+                              </Text>
+                            </View>
+                            {switching ? (
+                              <ActivityIndicator size="small" color="#0E7490" />
+                            ) : (
+                              <FontAwesome name="exchange" size={15} color="#0E7490" />
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.savedAccountRemove}
+                            onPress={() => handleRemoveSavedAccount(account)}
+                            disabled={switching}
+                          >
+                            <Feather name="x" size={16} color="#94A3B8" />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                    </>
+                  ) : (
+                    <Text style={styles.savedAccountHint}>
+                      Agrega otra cuenta para alternar sin cerrar esta sesión.
+                    </Text>
+                  )}
+
+                  {canAddAccount ? (
+                    <TouchableOpacity
+                      style={styles.addAccountButton}
+                      onPress={handleAddAccount}
+                      activeOpacity={0.86}
+                    >
+                      <Feather name="user-plus" size={16} color="#0E7490" />
+                      <Text style={styles.addAccountButtonText}>
+                        Agregar otra cuenta
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.savedAccountHint}>
+                      Máximo 2 cuentas guardadas. Elimina una para agregar otra.
+                    </Text>
+                  )}
+
+                  {!currentAccountStored ? (
+                    <Text style={styles.savedAccountHint}>
+                      Esta cuenta quedará recordada al iniciar sesión nuevamente.
+                    </Text>
+                  ) : null}
                 </View>
 
                 {allowedRoutes && allowedRoutes.length > 0 && (
@@ -427,4 +584,3 @@ const ProfileModal = ({
 };
 
 export default React.memo(ProfileModal);
-

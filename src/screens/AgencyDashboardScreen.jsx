@@ -296,6 +296,25 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                     </View>
                                 </LinearGradient>
 
+                                <TouchableOpacity
+                                    style={styles.reservationsShortcut}
+                                    onPress={() =>
+                                        navigation.navigate("AgencyReservations", {
+                                            agencyId: activeAgency?.id,
+                                            agencyName: activeAgency?.name,
+                                        })
+                                    }
+                                >
+                                    <View style={styles.reservationsShortcutIcon}>
+                                        <FontAwesome name="calendar-check-o" size={18} color={ACCENT} />
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.reservationsShortcutTitle}>Solicitudes de reserva</Text>
+                                        <Text style={styles.reservationsShortcutText}>Revisa clientes, disponibilidad y estado de pago.</Text>
+                                    </View>
+                                    <Ionicons name="chevron-forward" size={20} color={ACCENT} />
+                                </TouchableOpacity>
+
                                 {fetchingDashboard ? (
                                     <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
                                 ) : (
@@ -564,6 +583,35 @@ const styles = StyleSheet.create({
     heroDetail: {
         fontSize: 12,
         color: "rgba(255,255,255,0.9)",
+    },
+    reservationsShortcut: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        backgroundColor: "#F8FAFC",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        borderRadius: 18,
+        padding: 14,
+        marginBottom: 18,
+    },
+    reservationsShortcutIcon: {
+        width: 42,
+        height: 42,
+        borderRadius: 14,
+        backgroundColor: "#ECFEFF",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    reservationsShortcutTitle: {
+        color: "#0F172A",
+        fontWeight: "800",
+        fontSize: 15,
+    },
+    reservationsShortcutText: {
+        color: "#64748B",
+        fontSize: 12,
+        marginTop: 2,
     },
     heroLogoWrap: {
         width: 60,

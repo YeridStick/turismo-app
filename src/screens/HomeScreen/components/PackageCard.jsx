@@ -6,6 +6,7 @@ import {
   Pressable,
   Animated,
   Easing,
+  ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,6 +22,7 @@ const PackageCard = ({
   onReservePress,
   getImage,
   getGradient,
+  places = [],
 }) => {
   const revealAnim = useRef(new Animated.Value(0)).current;
 
@@ -42,6 +44,34 @@ const PackageCard = ({
   const packageImage = getImage(pkg);
   const hasImage = Boolean(packageImage);
   const fallbackGradient = getGradient(pkg);
+  const placeLookup = new Map(
+    (places || [])
+      .filter((place) => place?.id != null)
+      .map((place) => [String(place.id), place]),
+  );
+  const rawPackagePlaces =
+    (Array.isArray(pkg.places) && pkg.places) ||
+    (Array.isArray(pkg.sites) && pkg.sites) ||
+    (Array.isArray(pkg.destinations) && pkg.destinations) ||
+    [];
+  const placeIds =
+    (Array.isArray(pkg.placeIds) && pkg.placeIds) ||
+    (Array.isArray(pkg.place_ids) && pkg.place_ids) ||
+    (Array.isArray(pkg.siteIds) && pkg.siteIds) ||
+    (Array.isArray(pkg.site_ids) && pkg.site_ids) ||
+    [];
+  const routePlaces = rawPackagePlaces.length
+    ? rawPackagePlaces
+        .map((place) => {
+          const placeId = place?.place_id ?? place?.placeId ?? place?.id ?? place;
+          const found = placeLookup.get(String(placeId));
+          return found || place;
+        })
+        .filter(Boolean)
+    : placeIds
+        .map((placeId) => placeLookup.get(String(placeId)) || { id: placeId })
+        .filter(Boolean);
+  const visibleRoutePlaces = routePlaces.slice(0, 6);
   const vibeTags = [
     pkg.days >= 3 ? "Ruta extendida" : "Escapada",
     "Experiencia local",
@@ -146,6 +176,75 @@ const PackageCard = ({
                 <FontAwesome name="user" size={12} color="#94A3B8" />
                 <Text style={styles.packageMetaCleanText}>{pkg.people}</Text>
               </View>
+            </View>
+
+            <View style={styles.packageRouteBlock}>
+              <View style={styles.packageRouteHeader}>
+                <FontAwesome name="map-signs" size={11} color="#0E7490" />
+                <Text style={styles.packageRouteTitle}>Sitios del paquete</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.packageRouteScroller}
+                nestedScrollEnabled
+                directionalLockEnabled
+                keyboardShouldPersistTaps="handled"
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onTouchStart={(event) => event.stopPropagation?.()}
+                onTouchMove={(event) => event.stopPropagation?.()}
+              >
+                {visibleRoutePlaces.length > 0 ? (
+                  visibleRoutePlaces.map((place, idx) => {
+                    const placeId =
+                      place?.place_id ?? place?.placeId ?? place?.id ?? idx;
+                    const placeName =
+                      place?.name ||
+                      place?.placeName ||
+                      place?.title ||
+                      `Sitio #${placeId}`;
+                    const placeMeta =
+                      place?.categoryName ||
+                      place?.category?.name ||
+                      place?.city ||
+                      place?.location ||
+                      "Destino";
+                    return (
+                      <View
+                        key={`${pkg.id}-route-${placeId}-${idx}`}
+                        style={styles.packageRouteChip}
+                      >
+                        <View style={styles.packageRouteIndex}>
+                          <Text style={styles.packageRouteIndexText}>{idx + 1}</Text>
+                        </View>
+                        <View style={styles.packageRouteInfo}>
+                          <Text style={styles.packageRouteName} numberOfLines={1}>
+                            {placeName}
+                          </Text>
+                          <Text style={styles.packageRouteMeta} numberOfLines={1}>
+                            {placeMeta}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <View style={styles.packageRouteChipMuted}>
+                    <FontAwesome name="map-marker" size={11} color="#64748B" />
+                    <Text style={styles.packageRouteMutedText}>
+                      Sitios por confirmar
+                    </Text>
+                  </View>
+                )}
+                {routePlaces.length > visibleRoutePlaces.length ? (
+                  <View style={styles.packageRouteMoreChip}>
+                    <Text style={styles.packageRouteMoreText}>
+                      +{routePlaces.length - visibleRoutePlaces.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </ScrollView>
             </View>
 
             {includeList.length > 0 && (

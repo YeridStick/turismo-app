@@ -282,6 +282,10 @@ export const sectionStyles = {
     textAlign: "center",
     lineHeight: 18,
   },
+  mapEmptyActions: {
+    alignSelf: "stretch",
+    gap: SPACING.sm,
+  },
   mapEmptyButton: {
     backgroundColor: "#0284C7",
     paddingHorizontal: SPACING.xl,
@@ -296,10 +300,20 @@ export const sectionStyles = {
     shadowOffset: { width: 0, height: 5 },
     elevation: 4,
   },
+  mapEmptyButtonSecondary: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(14, 116, 144, 0.24)",
+    shadowOpacity: 0.08,
+    elevation: 2,
+  },
   mapEmptyButtonText: {
     color: "#FFFFFF",
     fontWeight: "700",
     fontSize: FONT_SIZES.sm,
+  },
+  mapEmptyButtonSecondaryText: {
+    color: "#0E7490",
   },
   mapLoadingOverlay: {
     backgroundColor: "rgba(255, 255, 255, 0.85)",
