@@ -76,6 +76,21 @@ const extractItems = (payload) => {
   return [];
 };
 
+const orderChatMessages = (messages = []) => {
+  const ordered = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const current = messages[index];
+    const next = messages[index + 1];
+    if (current?.senderType === "SYSTEM" && next?.senderType === "AGENCY") {
+      ordered.push(next, current);
+      index += 1;
+    } else {
+      ordered.push(current);
+    }
+  }
+  return ordered;
+};
+
 const extractReservation = (payload) =>
   payload?.data?.data ?? payload?.data ?? payload ?? null;
 
@@ -318,7 +333,7 @@ const MyReservationsScreen = ({ navigation }) => {
         size: 50,
       });
 
-      setMessages(extractItems(response));
+      setMessages(orderChatMessages(extractItems(response)));
     } catch (_err) {
       setMessages([]);
     } finally {
@@ -1177,6 +1192,7 @@ const MyReservationsScreen = ({ navigation }) => {
                   ) : (
                     <View style={styles.chatList}>
                       {messages.map((message) => {
+                        const system = message.senderType === "SYSTEM";
                         const fromCustomer =
                           message.senderType === "CUSTOMER";
 
@@ -1185,18 +1201,32 @@ const MyReservationsScreen = ({ navigation }) => {
                             key={String(message.id)}
                             style={[
                               styles.chatBubble,
-                              fromCustomer
+                              system
+                                ? styles.chatBubbleSystem
+                                : fromCustomer
                                 ? styles.chatBubbleMine
                                 : styles.chatBubbleAgency,
                             ]}
                           >
-                            <Text style={styles.chatSender}>
-                              {fromCustomer
+                            <Text
+                              style={[
+                                styles.chatSender,
+                                system && styles.chatSenderSystem,
+                              ]}
+                            >
+                              {system
+                                ? "Sistema"
+                                : fromCustomer
                                 ? "Tú"
                                 : "Agencia"}
                             </Text>
 
-                            <Text style={styles.chatMessage}>
+                            <Text
+                              style={[
+                                styles.chatMessage,
+                                system && styles.chatMessageSystem,
+                              ]}
+                            >
                               {message.message}
                             </Text>
                           </View>
@@ -1888,6 +1918,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
 
+  chatBubbleSystem: {
+    alignSelf: "center",
+    maxWidth: "90%",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 13,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
   chatSender: {
     marginBottom: 3,
     color: COLORS.textLight,
@@ -1895,9 +1936,22 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  chatSenderSystem: {
+    color: "#64748B",
+    fontSize: 9,
+    textAlign: "center",
+  },
+
   chatMessage: {
     color: COLORS.text,
     lineHeight: 19,
+  },
+
+  chatMessageSystem: {
+    color: "#475569",
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
   },
 
   chatClosedText: {

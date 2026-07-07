@@ -9,6 +9,19 @@ export const loginPassword = async ({ email, password }) => {
   return api.post(ENDPOINTS.LOGIN_PASSWORD, { email, password });
 };
 
+export const refreshJwt = async (token) => {
+  return api.post(
+    ENDPOINTS.REFRESH,
+    { token },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      skipAuthCleanup: true,
+    },
+  );
+};
+
 export const registerUser = async (payload = {}) => {
   // Adapt local camelCase fields to API expected snake_case
   const body = {

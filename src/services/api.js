@@ -15,7 +15,9 @@ api.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem('token');
-      if (token) {
+      const hasExplicitAuth =
+        config.headers?.Authorization || config.headers?.authorization;
+      if (token && !hasExplicitAuth) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
@@ -32,7 +34,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !error.config?.skipAuthCleanup) {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
     }
@@ -136,6 +138,9 @@ export const createVisit = (data) => api.post(ENDPOINTS.VISITS_CREATE, data);
 export const createPlaceVisit = (placeId, data) => api.post(ENDPOINTS.PLACE_VISITS_CREATE(placeId), data);
 export const checkinPlaceVisit = (placeId, data) => api.post(ENDPOINTS.PLACE_CHECKIN(placeId), data);
 export const confirmVisit = (visitId, data) => api.patch(ENDPOINTS.VISIT_CONFIRM(visitId), data);
+export const getFavoritePlaces = (params = {}) => api.get(ENDPOINTS.FAVORITES, { params });
+export const addFavoritePlace = (placeId) => api.post(ENDPOINTS.FAVORITE_PLACE(placeId));
+export const removeFavoritePlace = (placeId) => api.delete(ENDPOINTS.FAVORITE_PLACE(placeId));
 
 export const getMyPlaces = () => api.get(ENDPOINTS.PLACES_MINE);
 export const createPlace = (data) => api.post(ENDPOINTS.PLACES_CREATE, data);

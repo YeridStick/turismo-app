@@ -7,6 +7,12 @@ import {
   markNotificationRead,
 } from "../../../services/api";
 
+const NOTIFICATION_STREAM_EVENTS = [
+  "RESERVATION_REQUEST_CREATED",
+  "RESERVATION_MESSAGE",
+  "RESERVATION_STATUS_CHANGED",
+];
+
 const extractItems = (payload) => {
   const data = payload?.data?.data ?? payload?.data ?? payload;
 
@@ -39,11 +45,21 @@ const normalizeNotification = (item) => {
       payload?.body ||
       "Hay una actualización en tus solicitudes.",
     read: Boolean(item?.read ?? item?.readAt),
+    recipientEmail:
+      item?.recipientEmail ||
+      item?.recipient_email ||
+      payload?.recipientEmail ||
+      payload?.recipient_email,
     reservationId:
       item?.reservationId ||
       item?.reservation_id ||
       payload?.reservationId ||
       payload?.reservation_id,
+    agencyId:
+      item?.agencyId ||
+      item?.agency_id ||
+      payload?.agencyId ||
+      payload?.agency_id,
     createdAt: item?.createdAt || item?.created_at || payload?.createdAt,
   };
 };
@@ -161,7 +177,7 @@ const useNotifications = ({ enabled = false, accountKey = "" } = {}) => {
 
         eventSourceRef.current = source;
 
-        source.onmessage = (event) => {
+        const handleStreamEvent = (event) => {
           try {
             const data = JSON.parse(event.data);
             setNotifications((prev) => mergeNotification(prev, data));
@@ -170,14 +186,10 @@ const useNotifications = ({ enabled = false, accountKey = "" } = {}) => {
           }
         };
 
-        source.addEventListener?.("RESERVATION_MESSAGE", (event) => {
-          const data = JSON.parse(event.data);
-          setNotifications((prev) => mergeNotification(prev, data));
-        });
+        source.onmessage = handleStreamEvent;
 
-        source.addEventListener?.("RESERVATION_STATUS_CHANGED", (event) => {
-          const data = JSON.parse(event.data);
-          setNotifications((prev) => mergeNotification(prev, data));
+        NOTIFICATION_STREAM_EVENTS.forEach((eventName) => {
+          source.addEventListener?.(eventName, handleStreamEvent);
         });
 
         source.onerror = () => {

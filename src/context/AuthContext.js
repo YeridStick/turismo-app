@@ -8,6 +8,7 @@ import {
   requestEmailValidation as requestEmailValidationService,
   loginPassword,
   loginTotp,
+  refreshJwt,
   registerUser,
   requestRecovery as requestRecoveryService,
   setupTotp as setupTotpService,
@@ -35,6 +36,11 @@ const extractApiErrorMessage = (error, fallback) => {
 
 const extractLoginPayload = (response) => {
   return response?.data?.data || response?.data || {};
+};
+
+const extractRefreshToken = (response) => {
+  const payload = response?.data?.data || response?.data || {};
+  return payload?.token || payload?.accessToken || payload?.access_token || null;
 };
 
 const isPayloadAuthFailure = (payload) => {
@@ -95,15 +101,20 @@ export const AuthProvider = ({ children }) => {
 
   const loadUser = async () => {
     try {
-      const token = await AsyncStorage.getItem(ACTIVE_TOKEN_KEY);
+      let token = await AsyncStorage.getItem(ACTIVE_TOKEN_KEY);
       const userString = await AsyncStorage.getItem(ACTIVE_USER_KEY);
       await loadSavedAccounts();
 
       if (token && userString) {
         if (isTokenExpired(token)) {
-          await AsyncStorage.removeItem(ACTIVE_TOKEN_KEY);
-          await AsyncStorage.removeItem(ACTIVE_USER_KEY);
-          return;
+          const refreshed = await refreshStoredToken(token);
+          if (!refreshed.success) {
+            await AsyncStorage.removeItem(ACTIVE_TOKEN_KEY);
+            await AsyncStorage.removeItem(ACTIVE_USER_KEY);
+            return;
+          }
+          token = refreshed.token;
+          await AsyncStorage.setItem(ACTIVE_TOKEN_KEY, token);
         }
         const parsedUser = JSON.parse(userString);
         setUser(parsedUser);
@@ -123,7 +134,7 @@ export const AuthProvider = ({ children }) => {
       const raw = await AsyncStorage.getItem(SAVED_ACCOUNTS_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
       const valid = (Array.isArray(parsed) ? parsed : [])
-        .filter((account) => account?.token && !isTokenExpired(account.token))
+        .filter((account) => account?.token)
         .slice(0, MAX_SAVED_ACCOUNTS);
       if (raw) {
         await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(sortSavedAccounts(valid)));
@@ -141,6 +152,26 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(sorted));
     setSavedAccounts(sorted);
     return sorted;
+  };
+
+  const refreshStoredToken = async (token) => {
+    if (!token || typeof token !== 'string') {
+      return { success: false, unauthorized: true };
+    }
+
+    try {
+      const response = await refreshJwt(token);
+      const nextToken = extractRefreshToken(response);
+      if (!nextToken || typeof nextToken !== 'string') {
+        return { success: false };
+      }
+      return { success: true, token: nextToken };
+    } catch (error) {
+      return {
+        success: false,
+        unauthorized: error?.response?.status === 401,
+      };
+    }
   };
 
   const rememberAccount = async ({ token, userData, email }) => {
@@ -357,13 +388,18 @@ export const AuthProvider = ({ children }) => {
       return { success: false, error: 'No encontramos esa cuenta guardada.' };
     }
 
-    if (isTokenExpired(account.token)) {
+    let token = account.token;
+    const refreshResult = await refreshStoredToken(token);
+
+    if (refreshResult.success) {
+      token = refreshResult.token;
+    } else if (refreshResult.unauthorized || isTokenExpired(token)) {
       await persistSavedAccounts(accounts.filter((item) => String(item.email).toLowerCase() !== accountEmail));
       return { success: false, error: 'La sesion de esa cuenta expiro. Inicia sesion nuevamente.' };
     }
 
     const result = await activateSession({
-      token: account.token,
+      token,
       userData: account.user,
       email: account.email,
       remember: true,

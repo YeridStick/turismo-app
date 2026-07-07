@@ -1,5 +1,5 @@
 // Cambia esta URL por la de tu backend
-export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com';//https://turismo-back-uv7n.onrender.com //http://192.168.20.152:7860  http://localhost:8082 
+export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com';//https://turismo-back-uv7n.onrender.com //http://192.168.80.113:7860 http://localhost:8082 
 
 // O si estás probando localmente en LAN:
 // export const API_BASE_URL = 'http://192.168.1.X:8082'; // Reemplaza X con tu IP local
@@ -40,6 +40,8 @@ export const ENDPOINTS = {
   VISITS_CREATE: "/api/pruebas/visits",
   VISIT_CONFIRM: (id) => `/api/pruebas/visits/${id}/confirm`,
   PLACE_VISITS_CREATE: (id) => `/api/pruebas/places/${id}/visits`,
+  FAVORITES: "/api/pruebas/users/me/favorites",
+  FAVORITE_PLACE: (placeId) => `/api/pruebas/users/me/favorites/${placeId}`,
 
   // Packages / Agencies
   PACKAGES: "/api/packages",

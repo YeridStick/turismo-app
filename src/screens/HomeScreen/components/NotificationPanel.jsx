@@ -1,7 +1,9 @@
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,14 +12,35 @@ import {
   View,
 } from "react-native";
 import {
+  getAgencyReservationMessages,
+  getAgencyReservations,
+  getFavoritePlaces,
   getMyReservations,
   getReservationMessages,
+  sendAgencyReservationMessage,
   sendReservationMessage,
+  updateAgencyReservationStatus,
 } from "../../../services/api";
 import EdgeDrawer from "../../../components/ui/EdgeDrawer";
 import { COLORS, FONT_SIZES, SPACING } from "../../../utils/constants";
 
 const FINAL_STATUSES = ["confirmed", "rejected", "cancelled"];
+const ACTIVE_CHAT_STATUSES = ["requested", "contacted", "awaiting_payment"];
+
+const CHAT_STATUS_ACTIONS = {
+  contacted: {
+    nextStatus: "awaiting_payment",
+    label: "Solicitar pago",
+    icon: "card-outline",
+    notes: "La agencia solicitó continuar con el pago.",
+  },
+  awaiting_payment: {
+    nextStatus: "confirmed",
+    label: "Confirmar",
+    icon: "checkmark-circle-outline",
+    notes: "",
+  },
+};
 
 const STATUS_LABELS = {
   requested: "Solicitada",
@@ -29,6 +52,11 @@ const STATUS_LABELS = {
 };
 
 const TYPE_META = {
+  RESERVATION_REQUEST_CREATED: {
+    icon: "calendar-outline",
+    color: "#F97316",
+    label: "Solicitud",
+  },
   RESERVATION_MESSAGE: {
     icon: "chatbubble-ellipses-outline",
     color: "#0E7490",
@@ -49,6 +77,21 @@ const extractItems = (payload) => {
   return [];
 };
 
+const orderChatMessages = (messages = []) => {
+  const ordered = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const current = messages[index];
+    const next = messages[index + 1];
+    if (current?.senderType === "SYSTEM" && next?.senderType === "AGENCY") {
+      ordered.push(next, current);
+      index += 1;
+    } else {
+      ordered.push(current);
+    }
+  }
+  return ordered;
+};
+
 const formatDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -62,11 +105,37 @@ const formatDate = (value) => {
   }).format(date);
 };
 
+const formatReservationDate = (value) => {
+  if (!value) return "-";
+
+  const [year, month, day] = String(value).split("-");
+  if (!year || !month || !day) return String(value);
+
+  return `${day}/${month}/${year}`;
+};
+
+const formatCurrency = (value, currency = "COP") => {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "$ 0";
+  }
+
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(value));
+};
+
 const hasMessageNotification = (notifications) => {
   return notifications.some(
     (item) => item.type === "RESERVATION_MESSAGE" && !item.read,
   );
 };
+
+const normalizeRole = (role) =>
+  String(role || "")
+    .toLowerCase()
+    .replace(/^role_/, "");
 
 const NotificationPanel = ({
   enabled = false,
@@ -81,9 +150,11 @@ const NotificationPanel = ({
   onMarkRead,
   onMarkAllRead,
   onOpenReservations,
+  onOpenFavoritePlace,
   panelWidth,
   onMotionStart,
   onMotionEnd,
+  roles = [],
 }) => {
   const [activeView, setActiveView] = useState("notifications");
   const [chatReservations, setChatReservations] = useState([]);
@@ -92,8 +163,29 @@ const NotificationPanel = ({
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [chatActionError, setChatActionError] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [updatingChatStatus, setUpdatingChatStatus] = useState(false);
+  const [historyPackages, setHistoryPackages] = useState([]);
+  const [favoritePlaces, setFavoritePlaces] = useState([]);
+  const [activeHistorySection, setActiveHistorySection] = useState("purchases");
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [favoritesError, setFavoritesError] = useState("");
+  const preferredChatRef = useRef(null);
+  const selectedChatIdRef = useRef(null);
+  const messagesByChatRef = useRef({});
+  const chatsLoadedRef = useRef(false);
+  const historyLoadedRef = useRef(false);
+  const favoritesLoadedRef = useRef(false);
+  const normalizedRoles = useMemo(() => roles.map(normalizeRole), [roles]);
+  const isAdmin = normalizedRoles.includes("admin");
+  const usesAgencyInbox =
+    isAdmin ||
+    normalizedRoles.includes("agency") ||
+    normalizedRoles.includes("agencia");
   const messageAttention = useMemo(
     () => hasMessageNotification(notifications),
     [notifications],
@@ -107,51 +199,143 @@ const NotificationPanel = ({
     [chatReservations, selectedChatId],
   );
 
-  const loadMessages = useCallback(async (reservationId) => {
+  const updateSelectedChatId = useCallback((chatId) => {
+    selectedChatIdRef.current = chatId || null;
+    setSelectedChatId(chatId || null);
+  }, []);
+
+  const rememberChatMessages = useCallback((chatKey, nextMessages) => {
+    messagesByChatRef.current = {
+      ...messagesByChatRef.current,
+      [chatKey]: nextMessages,
+    };
+  }, []);
+
+  const getAgencyOptions = useCallback(
+    (reservation) => {
+      if (!isAdmin || !reservation?.agencyId) return {};
+      return { agencyId: reservation.agencyId };
+    },
+    [isAdmin],
+  );
+
+  const loadMessages = useCallback(async (reservationOrId, options = {}) => {
+    const reservation =
+      typeof reservationOrId === "object" ? reservationOrId : null;
+    const reservationId = reservation?.id || reservationOrId;
     if (!reservationId) {
       setChatMessages([]);
       return;
     }
 
-    setLoadingMessages(true);
-    try {
-      const response = await getReservationMessages(reservationId, {
-        page: 0,
-        size: 60,
-      });
-      setChatMessages(extractItems(response));
-    } catch (_err) {
-      setChatMessages([]);
-    } finally {
-      setLoadingMessages(false);
-    }
-  }, []);
+    const chatKey = String(reservationId);
+    const cachedMessages = messagesByChatRef.current[chatKey];
+    const showLoader = options.forceLoader || !cachedMessages;
 
-  const loadChats = useCallback(async () => {
-    setLoadingChats(true);
+    if (cachedMessages) {
+      setChatMessages(cachedMessages);
+    }
+
+    if (showLoader) {
+      setLoadingMessages(true);
+    }
+    try {
+      const params = { page: 0, size: 60 };
+      const response = usesAgencyInbox
+        ? await getAgencyReservationMessages(
+            reservationId,
+            params,
+            getAgencyOptions(reservation),
+          )
+        : await getReservationMessages(reservationId, params);
+      const nextMessages = orderChatMessages(extractItems(response));
+      rememberChatMessages(chatKey, nextMessages);
+      if (String(selectedChatIdRef.current) === chatKey) {
+        setChatMessages(nextMessages);
+      }
+    } catch (_err) {
+      if (!cachedMessages && String(selectedChatIdRef.current) === chatKey) {
+        setChatMessages([]);
+      }
+    } finally {
+      if (showLoader) {
+        setLoadingMessages(false);
+      }
+    }
+  }, [getAgencyOptions, rememberChatMessages, usesAgencyInbox]);
+
+  const loadChats = useCallback(async (options = {}) => {
+    const showLoader = options.forceLoader || !chatsLoadedRef.current;
+    if (showLoader) {
+      setLoadingChats(true);
+    }
     setChatError("");
 
     try {
-      const response = await getMyReservations({ page: 0, size: 50 });
-      const activeChats = extractItems(response).filter(
-        (reservation) => !FINAL_STATUSES.includes(reservation.status),
-      );
+      const params = { page: 0, size: 50 };
+      const preferredChat = preferredChatRef.current;
+      const agencyOptions =
+        isAdmin && preferredChat?.agencyId
+          ? { agencyId: preferredChat.agencyId }
+          : {};
+      const items = usesAgencyInbox
+        ? (
+            await Promise.allSettled(
+              ACTIVE_CHAT_STATUSES.map((status) =>
+                getAgencyReservations({ ...params, status }, agencyOptions),
+              ),
+            )
+          ).flatMap((result) =>
+            result.status === "fulfilled" ? extractItems(result.value) : [],
+          )
+        : extractItems(await getMyReservations(params));
+      const seen = new Set();
+      const activeChats = items.filter((reservation) => {
+        const id = reservation?.id;
+        if (id == null || FINAL_STATUSES.includes(reservation.status)) {
+          return false;
+        }
+        const key = String(id);
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
 
       setChatReservations(activeChats);
+      chatsLoadedRef.current = true;
       const nextSelected =
-        activeChats.find((item) => String(item.id) === String(selectedChatId)) ||
+        activeChats.find(
+          (item) =>
+            preferredChat?.reservationId &&
+            String(item.id) === String(preferredChat.reservationId),
+        ) ||
+        activeChats.find(
+          (item) => String(item.id) === String(selectedChatIdRef.current),
+        ) ||
         activeChats[0];
-      setSelectedChatId(nextSelected?.id || null);
-      await loadMessages(nextSelected?.id);
+      updateSelectedChatId(nextSelected?.id || null);
+      preferredChatRef.current = null;
+      await loadMessages(nextSelected, { forceLoader: showLoader });
     } catch (err) {
       setChatError(
         err?.response?.data?.message ||
-          "No pudimos cargar tus chats de reserva.",
+          (usesAgencyInbox
+            ? "No pudimos cargar los chats de solicitudes asignadas a tu agencia."
+            : "No pudimos cargar tus chats de reserva."),
       );
     } finally {
-      setLoadingChats(false);
+      if (showLoader) {
+        setLoadingChats(false);
+      }
     }
-  }, [loadMessages, selectedChatId]);
+  }, [
+    isAdmin,
+    loadMessages,
+    updateSelectedChatId,
+    usesAgencyInbox,
+  ]);
 
   useEffect(() => {
     if (visible && activeView === "chats") {
@@ -159,9 +343,86 @@ const NotificationPanel = ({
     }
   }, [activeView, loadChats, visible]);
 
+  const loadHistory = useCallback(async (options = {}) => {
+    const showLoader = options.forceLoader || !historyLoadedRef.current;
+    if (showLoader) {
+      setLoadingHistory(true);
+    }
+    setHistoryError("");
+
+    try {
+      const response = await getMyReservations({ page: 0, size: 80 });
+      const confirmedPackages = extractItems(response)
+        .filter((reservation) => reservation.status === "confirmed")
+        .sort((a, b) => {
+          const bTime = new Date(b.updatedAt || b.createdAt || b.startDate || 0).getTime();
+          const aTime = new Date(a.updatedAt || a.createdAt || a.startDate || 0).getTime();
+          return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+        });
+
+      setHistoryPackages(confirmedPackages);
+      historyLoadedRef.current = true;
+    } catch (err) {
+      setHistoryError(
+        err?.response?.data?.message ||
+          "No pudimos cargar tus paquetes confirmados.",
+      );
+    } finally {
+      if (showLoader) {
+        setLoadingHistory(false);
+      }
+    }
+  }, []);
+
+  const loadFavorites = useCallback(async (options = {}) => {
+    const showLoader = options.forceLoader || !favoritesLoadedRef.current;
+    if (showLoader) {
+      setLoadingFavorites(true);
+    }
+    setFavoritesError("");
+
+    try {
+      const response = await getFavoritePlaces({ limit: 80, offset: 0 });
+      setFavoritePlaces(extractItems(response));
+      favoritesLoadedRef.current = true;
+    } catch (err) {
+      setFavoritesError(
+        err?.response?.data?.message ||
+          "No pudimos cargar tus sitios favoritos.",
+      );
+    } finally {
+      if (showLoader) {
+        setLoadingFavorites(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible && activeView === "history") {
+      loadHistory();
+      if (activeHistorySection === "favorites") {
+        loadFavorites();
+      }
+    }
+  }, [activeHistorySection, activeView, loadFavorites, loadHistory, visible]);
+
+  const handleHistorySection = (section) => {
+    setActiveHistorySection(section);
+    if (section === "favorites") {
+      loadFavorites();
+    }
+  };
+
   const handleOpenNotification = (notification) => {
     onMarkRead?.(notification);
-    if (notification.type === "RESERVATION_MESSAGE") {
+    if (
+      notification.type === "RESERVATION_MESSAGE" ||
+      notification.type === "RESERVATION_REQUEST_CREATED"
+    ) {
+      preferredChatRef.current = {
+        reservationId: notification.reservationId || null,
+        agencyId: notification.agencyId || null,
+      };
       setActiveView("chats");
       return;
     }
@@ -169,9 +430,13 @@ const NotificationPanel = ({
   };
 
   const handleSelectChat = async (reservation) => {
-    setSelectedChatId(reservation.id);
+    const chatKey = String(reservation.id);
+    const cachedMessages = messagesByChatRef.current[chatKey];
+    updateSelectedChatId(reservation.id);
+    setChatActionError("");
     setMessageDraft("");
-    await loadMessages(reservation.id);
+    setChatMessages(cachedMessages || []);
+    loadMessages(reservation, { forceLoader: !cachedMessages });
   };
 
   const handleSendMessage = async () => {
@@ -180,13 +445,57 @@ const NotificationPanel = ({
 
     setSendingMessage(true);
     try {
-      await sendReservationMessage(selectedReservation.id, text);
+      if (usesAgencyInbox) {
+        await sendAgencyReservationMessage(
+          selectedReservation.id,
+          text,
+          getAgencyOptions(selectedReservation),
+        );
+      } else {
+        await sendReservationMessage(selectedReservation.id, text);
+      }
       setMessageDraft("");
-      await loadMessages(selectedReservation.id);
+      await loadMessages(selectedReservation, { forceLoader: false });
     } catch (_err) {
       setChatError("No pudimos enviar el mensaje. Intenta nuevamente.");
     } finally {
       setSendingMessage(false);
+    }
+  };
+
+  const handleAdvanceChatStatus = async () => {
+    const action = CHAT_STATUS_ACTIONS[selectedReservation?.status];
+    if (!usesAgencyInbox || !selectedReservation?.id || !action || updatingChatStatus) {
+      return;
+    }
+
+    setUpdatingChatStatus(true);
+    setChatActionError("");
+
+    try {
+      const response = await updateAgencyReservationStatus(
+        selectedReservation.id,
+        action.nextStatus,
+        action.notes,
+        getAgencyOptions(selectedReservation),
+      );
+      const updated = response?.data?.data ?? response?.data ?? null;
+
+      if (updated?.id) {
+        setChatReservations((prev) =>
+          prev.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
+        );
+      }
+
+      await loadMessages(updated || selectedReservation, { forceLoader: false });
+      await loadChats({ forceLoader: false });
+    } catch (err) {
+      setChatActionError(
+        err?.response?.data?.message ||
+          "No pudimos actualizar el estado de esta solicitud.",
+      );
+    } finally {
+      setUpdatingChatStatus(false);
     }
   };
 
@@ -327,10 +636,22 @@ const NotificationPanel = ({
   const renderChats = () => (
     <View style={panelStyles.viewFill}>
       <View style={panelStyles.chatIntro}>
-        <Text style={panelStyles.viewTitle}>Chats de solicitudes</Text>
-        <Text style={panelStyles.viewText}>
-          Muévete entre paquetes y agencias con solicitudes activas. Los chats cerrados desaparecen de esta vista.
-        </Text>
+        <View style={panelStyles.chatIntroIcon}>
+          <Ionicons name="chatbubbles-outline" size={18} color="#0E7490" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={panelStyles.viewTitle}>Chats activos</Text>
+          <Text style={panelStyles.viewText}>
+            {usesAgencyInbox
+              ? "Solicitudes abiertas y mensajes de clientes."
+              : "Solicitudes abiertas y mensajes de agencias."}
+          </Text>
+        </View>
+        {chatReservations.length > 0 ? (
+          <View style={panelStyles.chatCountPill}>
+            <Text style={panelStyles.chatCountText}>{chatReservations.length}</Text>
+          </View>
+        ) : null}
       </View>
 
       {loadingChats ? (
@@ -355,39 +676,52 @@ const NotificationPanel = ({
         </View>
       ) : (
         <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={panelStyles.chatTabs}
-          >
-            {chatReservations.map((reservation) => {
-              const active = String(reservation.id) === String(selectedChatId);
-              return (
-                <TouchableOpacity
-                  key={String(reservation.id)}
-                  style={[panelStyles.chatTab, active && panelStyles.chatTabActive]}
-                  onPress={() => handleSelectChat(reservation)}
-                  activeOpacity={0.86}
-                >
-                  <Text
-                    style={[panelStyles.chatTabTitle, active && panelStyles.chatTabTitleActive]}
-                    numberOfLines={1}
+          <View style={panelStyles.chatTabsWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={panelStyles.chatTabs}
+            >
+              {chatReservations.map((reservation) => {
+                const active = String(reservation.id) === String(selectedChatId);
+                return (
+                  <TouchableOpacity
+                    key={String(reservation.id)}
+                    style={[panelStyles.chatTab, active && panelStyles.chatTabActive]}
+                    onPress={() => handleSelectChat(reservation)}
+                    activeOpacity={0.86}
                   >
-                    {reservation.packageTitle || "Paquete"}
-                  </Text>
-                  <Text
-                    style={[panelStyles.chatTabMeta, active && panelStyles.chatTabMetaActive]}
-                    numberOfLines={1}
-                  >
-                    {STATUS_LABELS[reservation.status] || reservation.status}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                    <View style={panelStyles.chatStatusDotRow}>
+                      <View
+                        style={[
+                          panelStyles.chatStatusDot,
+                          active && panelStyles.chatStatusDotActive,
+                        ]}
+                      />
+                      <Text
+                        style={[panelStyles.chatTabMeta, active && panelStyles.chatTabMetaActive]}
+                        numberOfLines={1}
+                      >
+                        {STATUS_LABELS[reservation.status] || reservation.status}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[panelStyles.chatTabTitle, active && panelStyles.chatTabTitleActive]}
+                      numberOfLines={1}
+                    >
+                      {reservation.packageTitle || "Paquete"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           <View style={panelStyles.chatSurface}>
             <View style={panelStyles.chatHeader}>
+              <View style={panelStyles.chatHeaderIcon}>
+                <Ionicons name="briefcase-outline" size={17} color="#0E7490" />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={panelStyles.chatTitle} numberOfLines={1}>
                   {selectedReservation?.packageTitle || "Solicitud"}
@@ -398,10 +732,72 @@ const NotificationPanel = ({
                     "Agencia pendiente"}
                 </Text>
               </View>
-              <TouchableOpacity style={panelStyles.ghostButton} onPress={() => loadMessages(selectedChatId)}>
+              <TouchableOpacity
+                style={panelStyles.ghostButton}
+                onPress={() => loadMessages(selectedReservation || selectedChatId)}
+              >
                 <Ionicons name="refresh" size={15} color="#0E7490" />
               </TouchableOpacity>
             </View>
+
+            {usesAgencyInbox && selectedReservation ? (
+              <View style={panelStyles.chatStatusPanel}>
+                <View style={panelStyles.chatStatusInfo}>
+                  <Text style={panelStyles.chatStatusLabel}>Estado</Text>
+                  <Text style={panelStyles.chatStatusValue}>
+                    {STATUS_LABELS[selectedReservation.status] ||
+                      selectedReservation.status ||
+                      "-"}
+                  </Text>
+                  {chatActionError ? (
+                    <Text style={panelStyles.chatStatusError}>{chatActionError}</Text>
+                  ) : null}
+                </View>
+                {CHAT_STATUS_ACTIONS[selectedReservation.status] ? (
+                  <TouchableOpacity
+                    style={[
+                      panelStyles.chatStatusButton,
+                      updatingChatStatus && panelStyles.disabled,
+                    ]}
+                    onPress={handleAdvanceChatStatus}
+                    disabled={updatingChatStatus}
+                    activeOpacity={0.86}
+                  >
+                    {updatingChatStatus ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Ionicons
+                        name={CHAT_STATUS_ACTIONS[selectedReservation.status].icon}
+                        size={15}
+                        color="#FFFFFF"
+                      />
+                    )}
+                    <Text style={panelStyles.chatStatusButtonText}>
+                      {CHAT_STATUS_ACTIONS[selectedReservation.status].label}
+                    </Text>
+                  </TouchableOpacity>
+                ) : selectedReservation.status === "requested" ? (
+                  <View style={panelStyles.chatStatusHint}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={13} color="#0E7490" />
+                    <Text style={panelStyles.chatStatusHintText}>
+                      Responde para contactar
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : !usesAgencyInbox && selectedReservation?.status === "awaiting_payment" ? (
+              <View style={panelStyles.clientPaymentPanel}>
+                <View style={panelStyles.clientPaymentIcon}>
+                  <Ionicons name="card-outline" size={16} color="#D97706" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={panelStyles.clientPaymentTitle}>Pago solicitado</Text>
+                  <Text style={panelStyles.clientPaymentText}>
+                    Revisa en el chat las instrucciones enviadas por la agencia.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
 
             {loadingMessages ? (
               <View style={panelStyles.messagesLoading}>
@@ -411,26 +807,60 @@ const NotificationPanel = ({
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={panelStyles.messagesList}
+                keyboardShouldPersistTaps="handled"
               >
                 {chatMessages.length === 0 ? (
-                  <Text style={panelStyles.centerText}>
-                    Aún no hay mensajes en esta solicitud.
-                  </Text>
+                  <View style={panelStyles.chatEmptyState}>
+                    <View style={panelStyles.chatEmptyIcon}>
+                      <Ionicons name="chatbubble-outline" size={24} color="#94A3B8" />
+                    </View>
+                    <Text style={panelStyles.chatEmptyTitle}>Sin mensajes todavía</Text>
+                    <Text style={panelStyles.chatEmptyText}>
+                      Escribe abajo para iniciar la conversación sobre esta solicitud.
+                    </Text>
+                  </View>
                 ) : (
                   chatMessages.map((message, index) => {
-                    const mine = message.senderType === "CUSTOMER";
+                    const system = message.senderType === "SYSTEM";
+                    const mine = usesAgencyInbox
+                      ? message.senderType === "AGENCY"
+                      : message.senderType === "CUSTOMER";
                     return (
                       <View
                         key={String(message.id || index)}
                         style={[
                           panelStyles.messageBubble,
-                          mine ? panelStyles.messageMine : panelStyles.messageAgency,
+                          system
+                            ? panelStyles.messageSystem
+                            : mine
+                              ? panelStyles.messageMine
+                              : panelStyles.messageAgency,
                         ]}
                       >
-                        <Text style={panelStyles.messageSender}>
-                          {mine ? "Tú" : "Agencia"}
+                        <Text
+                          style={[
+                            panelStyles.messageSender,
+                            system && panelStyles.messageSenderSystem,
+                            !system && mine && panelStyles.messageSenderMine,
+                          ]}
+                        >
+                          {system
+                            ? "Sistema"
+                            : mine
+                              ? "Tú"
+                              : usesAgencyInbox
+                                ? "Cliente"
+                                : "Agencia"}
                         </Text>
-                        <Text style={panelStyles.messageText}>{message.message}</Text>
+                        <Text
+                          style={[
+                            panelStyles.messageText,
+                            system && panelStyles.messageTextSystem,
+                            !system && mine && panelStyles.messageTextMine,
+                          ]}
+                        >
+                          {message.message}
+                        </Text>
                       </View>
                     );
                   })
@@ -445,6 +875,7 @@ const NotificationPanel = ({
                 multiline
                 maxLength={2000}
                 placeholder="Responder al chat"
+                placeholderTextColor="#94A3B8"
                 onChangeText={setMessageDraft}
               />
               <TouchableOpacity
@@ -471,28 +902,221 @@ const NotificationPanel = ({
   const renderHistory = () => (
     <View style={panelStyles.viewFill}>
       <View style={panelStyles.historyHero}>
-        <Ionicons name="time-outline" size={28} color="#0E7490" />
-        <Text style={panelStyles.viewTitle}>Historial turístico</Text>
-        <Text style={panelStyles.viewText}>
-          Esta vista queda lista para mostrar paquetes comprados, reservas completadas y sitios favoritos cuando el backend exponga el servicio.
-        </Text>
-      </View>
-
-      <View style={panelStyles.historyCard}>
-        <FontAwesome name="suitcase" size={18} color="#0E7490" />
+        <View style={panelStyles.historyHeroIcon}>
+          <Ionicons
+            name={activeHistorySection === "favorites" ? "heart-outline" : "bag-check-outline"}
+            size={20}
+            color="#0E7490"
+          />
+        </View>
         <View style={{ flex: 1 }}>
-          <Text style={panelStyles.historyTitle}>Paquetes comprados</Text>
-          <Text style={panelStyles.historyText}>Próximamente desde historial de pagos y reservas confirmadas.</Text>
+          <Text style={panelStyles.viewTitle}>
+            {activeHistorySection === "favorites"
+              ? "Sitios favoritos"
+              : "Paquetes comprados"}
+          </Text>
+          <Text style={panelStyles.viewText}>
+            {activeHistorySection === "favorites"
+              ? "Lugares guardados para visitar después."
+              : "Reservas confirmadas y listas para tu viaje."}
+          </Text>
+        </View>
+        <View style={panelStyles.chatCountPill}>
+          <Text style={panelStyles.chatCountText}>
+            {activeHistorySection === "favorites"
+              ? favoritePlaces.length
+              : historyPackages.length}
+          </Text>
         </View>
       </View>
 
-      <View style={panelStyles.historyCard}>
-        <FontAwesome name="heart-o" size={18} color="#FB923C" />
-        <View style={{ flex: 1 }}>
-          <Text style={panelStyles.historyTitle}>Sitios favoritos</Text>
-          <Text style={panelStyles.historyText}>Espacio preparado para favoritos y visitas guardadas.</Text>
-        </View>
+      <View style={panelStyles.historySwitch}>
+        <TouchableOpacity
+          style={[
+            panelStyles.historySwitchButton,
+            activeHistorySection === "purchases" && panelStyles.historySwitchButtonActive,
+          ]}
+          onPress={() => handleHistorySection("purchases")}
+          activeOpacity={0.86}
+        >
+          <Ionicons
+            name="bag-check-outline"
+            size={14}
+            color={activeHistorySection === "purchases" ? "#FFFFFF" : "#0E7490"}
+          />
+          <Text
+            style={[
+              panelStyles.historySwitchText,
+              activeHistorySection === "purchases" && panelStyles.historySwitchTextActive,
+            ]}
+          >
+            Comprados
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            panelStyles.historySwitchButton,
+            activeHistorySection === "favorites" && panelStyles.historySwitchButtonActive,
+          ]}
+          onPress={() => handleHistorySection("favorites")}
+          activeOpacity={0.86}
+        >
+          <Ionicons
+            name="heart-outline"
+            size={14}
+            color={activeHistorySection === "favorites" ? "#FFFFFF" : "#0E7490"}
+          />
+          <Text
+            style={[
+              panelStyles.historySwitchText,
+              activeHistorySection === "favorites" && panelStyles.historySwitchTextActive,
+            ]}
+          >
+            Favoritos
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {activeHistorySection === "favorites" ? (
+        loadingFavorites ? (
+          <View style={panelStyles.centerState}>
+            <ActivityIndicator color={COLORS.primary} />
+            <Text style={panelStyles.centerText}>Cargando favoritos...</Text>
+          </View>
+        ) : favoritesError ? (
+          <View style={panelStyles.centerState}>
+            <Ionicons name="alert-circle-outline" size={28} color="#F97316" />
+            <Text style={panelStyles.centerText}>{favoritesError}</Text>
+            <TouchableOpacity
+              style={panelStyles.primaryButtonWide}
+              onPress={() => loadFavorites({ forceLoader: true })}
+            >
+              <Text style={panelStyles.primaryButtonText}>Reintentar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : favoritePlaces.length === 0 ? (
+          <View style={panelStyles.centerState}>
+            <Ionicons name="heart-outline" size={34} color="#94A3B8" />
+            <Text style={panelStyles.centerText}>
+              Guarda sitios con el corazón para encontrarlos aquí.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={panelStyles.historyList}
+          >
+            {favoritePlaces.map((favorite, index) => {
+              const place = favorite?.place || {};
+              return (
+                <TouchableOpacity
+                  key={String(place.id || index)}
+                  style={panelStyles.favoritePlaceCard}
+                  activeOpacity={0.88}
+                  onPress={() => onOpenFavoritePlace?.(place)}
+                >
+                  <View style={panelStyles.favoritePlaceIcon}>
+                    <Ionicons name="location-outline" size={17} color="#0E7490" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={panelStyles.historyTitle} numberOfLines={2}>
+                      {place.name || "Sitio turístico"}
+                    </Text>
+                    <Text style={panelStyles.historyText} numberOfLines={2}>
+                      {place.address || place.description || "Lugar guardado"}
+                    </Text>
+                    <Text style={panelStyles.favoritePlaceDate}>
+                      Guardado {formatDate(favorite.favorited_at)}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )
+      ) : loadingHistory ? (
+        <View style={panelStyles.centerState}>
+          <ActivityIndicator color={COLORS.primary} />
+          <Text style={panelStyles.centerText}>Cargando historial...</Text>
+        </View>
+      ) : historyError ? (
+        <View style={panelStyles.centerState}>
+          <Ionicons name="alert-circle-outline" size={28} color="#F97316" />
+          <Text style={panelStyles.centerText}>{historyError}</Text>
+          <TouchableOpacity
+            style={panelStyles.primaryButtonWide}
+            onPress={() => loadHistory({ forceLoader: true })}
+          >
+            <Text style={panelStyles.primaryButtonText}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : historyPackages.length === 0 ? (
+        <View style={panelStyles.centerState}>
+          <Ionicons name="bag-check-outline" size={34} color="#94A3B8" />
+          <Text style={panelStyles.centerText}>
+            Cuando una agencia confirme tus compras, aparecerán aquí.
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={panelStyles.historyList}
+        >
+          {historyPackages.map((reservation) => (
+            <View key={String(reservation.id)} style={panelStyles.historyPackageCard}>
+              <View style={panelStyles.historyPackageTop}>
+                <View style={panelStyles.historyPackageIcon}>
+                  <FontAwesome name="suitcase" size={16} color="#0E7490" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={panelStyles.historyTitle} numberOfLines={2}>
+                    {reservation.packageTitle || "Paquete turístico"}
+                  </Text>
+                  <Text style={panelStyles.historyText} numberOfLines={1}>
+                    {reservation.agencyName || "Agencia turística"}
+                  </Text>
+                </View>
+                <View style={panelStyles.confirmedBadge}>
+                  <Ionicons name="checkmark-circle" size={13} color="#059669" />
+                  <Text style={panelStyles.confirmedBadgeText}>Confirmado</Text>
+                </View>
+              </View>
+
+              <View style={panelStyles.historyMetaGrid}>
+                <View style={panelStyles.historyMetaItem}>
+                  <Ionicons name="calendar-outline" size={14} color="#64748B" />
+                  <Text style={panelStyles.historyMetaText}>
+                    {formatReservationDate(reservation.startDate)}
+                    {reservation.endDate
+                      ? ` - ${formatReservationDate(reservation.endDate)}`
+                      : ""}
+                  </Text>
+                </View>
+                <View style={panelStyles.historyMetaItem}>
+                  <Ionicons name="people-outline" size={14} color="#64748B" />
+                  <Text style={panelStyles.historyMetaText}>
+                    {reservation.travelers || 1} persona
+                    {Number(reservation.travelers || 1) === 1 ? "" : "s"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={panelStyles.historyPackageFooter}>
+                <View>
+                  <Text style={panelStyles.historyAmountLabel}>Total</Text>
+                  <Text style={panelStyles.historyAmount}>
+                    {formatCurrency(reservation.totalAmount, reservation.currency || "COP")}
+                  </Text>
+                </View>
+                <Text style={panelStyles.historyDate}>
+                  {formatDate(reservation.updatedAt || reservation.createdAt)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 
@@ -525,7 +1149,11 @@ const NotificationPanel = ({
         </>
       )}
     >
-      <View style={panelStyles.content}>
+      <KeyboardAvoidingView
+        style={panelStyles.content}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+      >
         <View style={panelStyles.header}>
           <View style={panelStyles.headerIcon}>
             <Ionicons
@@ -566,7 +1194,7 @@ const NotificationPanel = ({
           : activeView === "chats"
             ? renderChats()
             : renderHistory()}
-      </View>
+      </KeyboardAvoidingView>
     </EdgeDrawer>
   );
 };
@@ -583,6 +1211,7 @@ const panelStyles = StyleSheet.create({
     height: "100%",
     paddingTop: 52,
     paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
     backgroundColor: "rgba(248, 250, 252, 0.92)",
     borderTopLeftRadius: 28,
     borderBottomLeftRadius: 28,
@@ -860,12 +1489,40 @@ const panelStyles = StyleSheet.create({
     flex: 1,
   },
   chatIntro: {
-    padding: SPACING.md,
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "rgba(14,116,144,0.12)",
     marginBottom: SPACING.sm,
+  },
+  chatIntroIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.14)",
+  },
+  chatCountPill: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#0E7490",
+  },
+  chatCountText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: FONT_SIZES.xs,
   },
   viewTitle: {
     color: COLORS.text,
@@ -873,69 +1530,203 @@ const panelStyles = StyleSheet.create({
     fontWeight: "900",
   },
   viewText: {
-    marginTop: 5,
+    marginTop: 3,
     color: COLORS.textLight,
     fontSize: FONT_SIZES.xs,
     lineHeight: 18,
   },
+  chatTabsWrap: {
+    marginBottom: SPACING.sm,
+  },
   chatTabs: {
     gap: 8,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 2,
+    paddingRight: SPACING.md,
   },
   chatTab: {
-    width: 150,
-    padding: 10,
-    borderRadius: 14,
+    width: 132,
+    minHeight: 52,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
+    borderColor: "rgba(14,116,144,0.12)",
+    backgroundColor: "rgba(255,255,255,0.92)",
   },
   chatTabActive: {
     borderColor: "#0E7490",
-    backgroundColor: "#ECFEFF",
+    backgroundColor: "#0E7490",
+  },
+  chatTabTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 7,
+  },
+  chatStatusDotRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginBottom: 5,
+  },
+  chatStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#CCFBF1",
+  },
+  chatStatusDotActive: {
+    backgroundColor: "#FB923C",
   },
   chatTabTitle: {
     color: COLORS.text,
     fontWeight: "900",
-    fontSize: 12,
+    fontSize: 11,
   },
   chatTabTitleActive: {
-    color: "#0E7490",
+    color: "#FFFFFF",
   },
   chatTabMeta: {
-    marginTop: 3,
     color: COLORS.textLight,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
   },
   chatTabMetaActive: {
-    color: "#0E7490",
+    color: "rgba(255,255,255,0.78)",
   },
   chatSurface: {
     flex: 1,
-    minHeight: 360,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    minHeight: 0,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.94)",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "rgba(14,116,144,0.12)",
     overflow: "hidden",
   },
   chatHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",
+    backgroundColor: "rgba(248,250,252,0.72)",
+  },
+  chatHeaderIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFEFF",
   },
   chatTitle: {
     color: COLORS.text,
     fontWeight: "900",
+    fontSize: FONT_SIZES.sm,
   },
   chatMeta: {
     marginTop: 2,
     color: COLORS.textLight,
     fontSize: 11,
+  },
+  chatStatusPanel: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    backgroundColor: "rgba(255,255,255,0.82)",
+  },
+  chatStatusInfo: {
+    flex: 1,
+  },
+  chatStatusLabel: {
+    color: "#94A3B8",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  chatStatusValue: {
+    marginTop: 1,
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  chatStatusError: {
+    marginTop: 2,
+    color: "#DC2626",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  chatStatusButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#0E7490",
+  },
+  chatStatusButtonText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  chatStatusHint: {
+    minHeight: 32,
+    maxWidth: 132,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "#A5F3FC",
+  },
+  chatStatusHintText: {
+    flexShrink: 1,
+    color: "#0E7490",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  clientPaymentPanel: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#FED7AA",
+    backgroundColor: "#FFFBEB",
+  },
+  clientPaymentIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF3C7",
+  },
+  clientPaymentTitle: {
+    color: "#92400E",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  clientPaymentText: {
+    marginTop: 2,
+    color: "#A16207",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
   },
   messagesLoading: {
     flex: 1,
@@ -944,20 +1735,36 @@ const panelStyles = StyleSheet.create({
   },
   messagesList: {
     gap: 8,
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
+    flexGrow: 1,
   },
   messageBubble: {
     maxWidth: "88%",
-    padding: 10,
-    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
   },
   messageMine: {
     alignSelf: "flex-end",
-    backgroundColor: "#ECFEFF",
+    backgroundColor: "#0E7490",
   },
   messageAgency: {
     alignSelf: "flex-start",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  messageSystem: {
+    alignSelf: "center",
+    maxWidth: "90%",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 13,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   messageSender: {
     color: COLORS.textLight,
@@ -965,34 +1772,83 @@ const panelStyles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 3,
   },
+  messageSenderMine: {
+    color: "rgba(255,255,255,0.76)",
+  },
+  messageSenderSystem: {
+    color: "#64748B",
+    fontSize: 9,
+    textAlign: "center",
+  },
   messageText: {
     color: COLORS.text,
     lineHeight: 19,
+  },
+  messageTextMine: {
+    color: "#FFFFFF",
+  },
+  messageTextSystem: {
+    color: "#475569",
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  chatEmptyState: {
+    flex: 1,
+    minHeight: 160,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.lg,
+  },
+  chatEmptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  chatEmptyTitle: {
+    marginTop: SPACING.sm,
+    color: COLORS.text,
+    fontWeight: "900",
+  },
+  chatEmptyText: {
+    marginTop: 4,
+    color: COLORS.textLight,
+    textAlign: "center",
+    lineHeight: 19,
+    fontSize: FONT_SIZES.xs,
   },
   chatInputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 8,
-    padding: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xl,
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
+    backgroundColor: "rgba(248,250,252,0.84)",
   },
   chatInput: {
     flex: 1,
-    minHeight: 42,
-    maxHeight: 90,
-    borderRadius: 14,
+    minHeight: 44,
+    maxHeight: 76,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: "#D5E3EA",
     paddingHorizontal: 12,
     paddingVertical: 9,
     color: COLORS.text,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
   },
   sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#0E7490",
@@ -1001,24 +1857,110 @@ const panelStyles = StyleSheet.create({
     opacity: 0.58,
   },
   historyHero: {
-    alignItems: "center",
-    padding: SPACING.lg,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginBottom: SPACING.md,
-  },
-  historyCard: {
+    minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.12)",
+    marginBottom: SPACING.sm,
+  },
+  historyHeroIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.14)",
+  },
+  historySwitch: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  historySwitchButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.12)",
+  },
+  historySwitchButtonActive: {
+    backgroundColor: "#0E7490",
+    borderColor: "#0E7490",
+  },
+  historySwitchText: {
+    color: "#0E7490",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  historySwitchTextActive: {
+    color: "#FFFFFF",
+  },
+  historyList: {
+    gap: SPACING.sm,
+    paddingBottom: SPACING.xxl,
+  },
+  favoritePlaceCard: {
+    minHeight: 86,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
     padding: SPACING.md,
     borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.94)",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    marginBottom: SPACING.sm,
+    borderColor: "rgba(14,116,144,0.12)",
+  },
+  favoritePlaceIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFEFF",
+  },
+  favoritePlaceDate: {
+    marginTop: 5,
+    color: "#0E7490",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  historyPackageCard: {
+    padding: SPACING.md,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(14,116,144,0.12)",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  historyPackageTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  historyPackageIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFEFF",
   },
   historyTitle: {
     color: COLORS.text,
@@ -1029,6 +1971,73 @@ const panelStyles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: FONT_SIZES.xs,
     lineHeight: 18,
+  },
+  confirmedBadge: {
+    minHeight: 26,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  confirmedBadgeText: {
+    color: "#059669",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  historyMetaGrid: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: SPACING.md,
+  },
+  historyMetaItem: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  historyMetaText: {
+    flex: 1,
+    color: COLORS.textLight,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  historyPackageFooter: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: SPACING.sm,
+  },
+  historyAmountLabel: {
+    color: "#94A3B8",
+    fontSize: 9,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  historyAmount: {
+    marginTop: 2,
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+    fontWeight: "900",
+  },
+  historyDate: {
+    color: COLORS.textLight,
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "right",
   },
 });
 

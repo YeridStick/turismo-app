@@ -5,9 +5,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Dimensions,
     Image,
     Modal,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -17,12 +17,15 @@ import {
 } from "react-native";
 import { ENDPOINTS } from "../config/api.config";
 import { useAuth } from "../context/AuthContext";
-import api, { createAgency, getAgencies, getAgencyByEmail, getMyAgencies, getPackages, getAgencyPackages } from "../services/api";
+import api, {
+    createAgency,
+    getAgencyPackages,
+    getAgencyReservations,
+    getMyAgencies,
+} from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
-import { RefreshControl } from "react-native";
-
-const { width } = Dimensions.get("window");
 const ACCENT = "#0E7490";
+const ACTIVE_RESERVATION_STATUSES = ["requested", "contacted", "awaiting_payment"];
 
 // --- Sub-componente: Modal de Creación de Agencia ---
 const CreateAgencyModal = ({ visible, onClose, onSuccess }) => {
@@ -48,7 +51,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess }) => {
             onSuccess();
             onClose();
             setForm({ name: "", description: "", phone: "", email: "", website: "", logoUrl: "https://i.pinimg.com/originals/68/1e/ca/681eca13696a2d964975dc49a7506a4b.png" });
-        } catch (error) {
+        } catch (_error) {
             Alert.alert("Error", "No se pudo crear la agencia.");
         } finally {
             setLoading(false);
@@ -134,6 +137,14 @@ const formatCurrency = (value) => {
     }).format(Number(value));
 };
 
+const extractItems = (payload) => {
+    const data = payload?.data?.data ?? payload?.data ?? payload;
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.content)) return data.content;
+    if (Array.isArray(data?.items)) return data.items;
+    return [];
+};
+
 const AgencyDashboardScreen = ({ navigation }) => {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
@@ -141,6 +152,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
     const [agencies, setAgencies] = useState([]); // Todas las agencias vinculadas
     const [activeAgency, setActiveAgency] = useState(null); // Agencia seleccionada actualmente
     const [dashboard, setDashboard] = useState(null);
+    const [reservationCounts, setReservationCounts] = useState({});
     const [error, setError] = useState("");
     const [refreshing, setRefreshing] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -157,6 +169,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
             const agenciesResp = await getMyAgencies(user.email);
             const myAgencies = agenciesResp.data?.data || [];
             setAgencies(myAgencies);
+            loadAgencyReservationCounts(myAgencies);
 
             if (myAgencies.length > 0) {
                 const defaultAgency = activeAgency || myAgencies[0];
@@ -215,6 +228,50 @@ const AgencyDashboardScreen = ({ navigation }) => {
         }
     };
 
+    const loadAgencyReservationCounts = async (agencyList = []) => {
+        if (!Array.isArray(agencyList) || agencyList.length === 0) {
+            setReservationCounts({});
+            return;
+        }
+
+        const results = await Promise.allSettled(
+            agencyList.map(async (agency) => {
+                const responses = await Promise.allSettled(
+                    ACTIVE_RESERVATION_STATUSES.map((status) =>
+                        getAgencyReservations(
+                            { status, page: 0, size: 50 },
+                            { agencyId: agency.id },
+                        ),
+                    ),
+                );
+                const seen = new Set();
+                const total = responses.reduce((count, result) => {
+                    if (result.status !== "fulfilled") return count;
+                    const items = extractItems(result.value);
+                    const unique = items.filter((item) => {
+                        if (item?.id == null) return false;
+                        const key = String(item.id);
+                        if (seen.has(key)) return false;
+                        seen.add(key);
+                        return true;
+                    });
+                    return count + unique.length;
+                }, 0);
+
+                return [String(agency.id), total];
+            }),
+        );
+
+        const nextCounts = {};
+        results.forEach((result) => {
+            if (result.status === "fulfilled") {
+                const [agencyId, total] = result.value;
+                nextCounts[agencyId] = total;
+            }
+        });
+        setReservationCounts(nextCounts);
+    };
+
     const switchAgency = (target) => {
         setActiveAgency(target);
         loadAgencyDashboard(target);
@@ -247,19 +304,29 @@ const AgencyDashboardScreen = ({ navigation }) => {
                         <View style={styles.agencySelectorRow}>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
                                 {agencies.map(item => (
-                                    <TouchableOpacity 
-                                        key={item.id} 
-                                        onPress={() => switchAgency(item)}
-                                        style={[
-                                            styles.agencyTab, 
-                                            activeAgency?.id === item.id && styles.activeAgencyTab
-                                        ]}
-                                    >
-                                        <Image source={{ uri: item.logoUrl }} style={styles.tabLogo} />
-                                        <Text style={[styles.tabName, activeAgency?.id === item.id && styles.activeTabName]}>
-                                            {item.name}
-                                        </Text>
-                                    </TouchableOpacity>
+                                    <View key={item.id} style={styles.agencyTabWrap}>
+                                        <TouchableOpacity
+                                            onPress={() => switchAgency(item)}
+                                            style={[
+                                                styles.agencyTab,
+                                                activeAgency?.id === item.id && styles.activeAgencyTab
+                                            ]}
+                                        >
+                                            <Image source={{ uri: item.logoUrl }} style={styles.tabLogo} />
+                                            <Text style={[styles.tabName, activeAgency?.id === item.id && styles.activeTabName]}>
+                                                {item.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                        {reservationCounts[String(item.id)] > 0 ? (
+                                            <View style={styles.agencyRequestBadge}>
+                                                <Text style={styles.agencyRequestBadgeText}>
+                                                    {reservationCounts[String(item.id)] > 9
+                                                        ? "9+"
+                                                        : reservationCounts[String(item.id)]}
+                                                </Text>
+                                            </View>
+                                        ) : null}
+                                    </View>
                                 ))}
                             </ScrollView>
                         </View>
@@ -310,8 +377,19 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                     </View>
                                     <View style={{ flex: 1 }}>
                                         <Text style={styles.reservationsShortcutTitle}>Solicitudes de reserva</Text>
-                                        <Text style={styles.reservationsShortcutText}>Revisa clientes, disponibilidad y estado de pago.</Text>
+                                        <Text style={styles.reservationsShortcutText}>
+                                            {reservationCounts[String(activeAgency.id)] > 0
+                                                ? `${reservationCounts[String(activeAgency.id)]} solicitud${reservationCounts[String(activeAgency.id)] === 1 ? "" : "es"} activa${reservationCounts[String(activeAgency.id)] === 1 ? "" : "s"} por revisar.`
+                                                : "Revisa clientes, disponibilidad y estado de pago."}
+                                        </Text>
                                     </View>
+                                    {reservationCounts[String(activeAgency.id)] > 0 ? (
+                                        <View style={styles.reservationsShortcutBadge}>
+                                            <Text style={styles.reservationsShortcutBadgeText}>
+                                                {reservationCounts[String(activeAgency.id)]}
+                                            </Text>
+                                        </View>
+                                    ) : null}
                                     <Ionicons name="chevron-forward" size={20} color={ACCENT} />
                                 </TouchableOpacity>
 
@@ -453,6 +531,10 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: "rgba(0,0,0,0.03)",
     },
+    agencyTabWrap: {
+        position: "relative",
+        marginRight: 10,
+    },
     agencyTab: {
         flexDirection: "row",
         alignItems: "center",
@@ -460,7 +542,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 20,
-        marginRight: 10,
         borderWidth: 1,
         borderColor: "transparent",
     },
@@ -481,6 +562,25 @@ const styles = StyleSheet.create({
     },
     activeTabName: {
         color: ACCENT,
+    },
+    agencyRequestBadge: {
+        position: "absolute",
+        top: -6,
+        right: -4,
+        minWidth: 19,
+        height: 19,
+        paddingHorizontal: 5,
+        borderRadius: 999,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#F97316",
+        borderWidth: 2,
+        borderColor: "#FFFFFF",
+    },
+    agencyRequestBadgeText: {
+        color: "#FFFFFF",
+        fontSize: 9,
+        fontWeight: "900",
     },
     sectionCount: {
         fontSize: 12,
@@ -612,6 +712,19 @@ const styles = StyleSheet.create({
         color: "#64748B",
         fontSize: 12,
         marginTop: 2,
+    },
+    reservationsShortcutBadge: {
+        minWidth: 30,
+        height: 30,
+        borderRadius: 15,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#F97316",
+    },
+    reservationsShortcutBadgeText: {
+        color: "#FFFFFF",
+        fontSize: 12,
+        fontWeight: "900",
     },
     heroLogoWrap: {
         width: 60,

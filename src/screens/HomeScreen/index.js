@@ -949,6 +949,7 @@ const HomeScreen = ({ navigation }) => {
         onClose={closeNotificationPanel}
         onMotionStart={handlePanelMotionStart}
         onMotionEnd={handlePanelMotionEnd}
+        roles={roles}
         notifications={notifications}
         unreadCount={unreadCount}
         loading={loadingNotifications}
@@ -959,6 +960,14 @@ const HomeScreen = ({ navigation }) => {
         onOpenReservations={() => {
           closeNotificationPanel();
           navigation.navigate("MyReservations");
+        }}
+        onOpenFavoritePlace={(favoritePlace) => {
+          closeNotificationPanel();
+          navigation.navigate("PlaceDetail", {
+            place: favoritePlace,
+            places: [favoritePlace],
+            initialIndex: 0,
+          });
         }}
         panelWidth={PANEL_WIDTH}
       />

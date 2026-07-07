@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import {
   Animated,
   ActivityIndicator,
+  Alert,
   Easing,
   Linking,
   Platform,
@@ -25,7 +26,11 @@ import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants'
 import { BREAKPOINTS } from '../utils/responsive';
 import { getPlaceArConfig } from '../services/ar';
 import { formatDistance } from '../utils/utils';
-import api from '../services/api';
+import api, {
+  addFavoritePlace,
+  getFavoritePlaces,
+  removeFavoritePlace,
+} from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 import { useAuth } from '../context/AuthContext';
 import { PremiumModal } from '../components/ui/PremiumModal';
@@ -94,6 +99,13 @@ const AUTO_VISIT_PREF_KEY = "turismo_auto_visit_enabled";
 
 const getApiData = (response) => response?.data?.data ?? response?.data ?? null;
 const ensureArray = (value) => (Array.isArray(value) ? value : []);
+const extractItems = (payload) => {
+  const data = payload?.data?.data ?? payload?.data ?? payload;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+};
 const normalizeReviewsPayload = (value) => {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.data)) return value.data;
@@ -1580,13 +1592,92 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
 PlaceDetailContent.displayName = 'PlaceDetailContent';
 
 const PlaceDetailScreen = ({ route, navigation }) => {
+  const { user } = useAuth();
   const { places = [], initialIndex = 0, place } = route?.params || {};
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [favoriteIds, setFavoriteIds] = useState(() => new Set());
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   
   const displayPlaces = useMemo(() => {
     if (places.length > 0) return places;
     if (place) return [place];
     return [];
   }, [places, place]);
+  const currentPlace = displayPlaces[currentIndex] || displayPlaces[0];
+  const currentPlaceId = currentPlace?.id;
+  const isFavorite = currentPlaceId != null && favoriteIds.has(String(currentPlaceId));
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadFavorites = async () => {
+      if (!user) {
+        setFavoriteIds(new Set());
+        return;
+      }
+
+      try {
+        const response = await getFavoritePlaces({ limit: 100, offset: 0 });
+        if (!mounted) return;
+        const nextIds = new Set(
+          extractItems(response)
+            .map((item) => item?.place?.id)
+            .filter((id) => id != null)
+            .map((id) => String(id)),
+        );
+        setFavoriteIds(nextIds);
+      } catch (_err) {
+        if (mounted) setFavoriteIds(new Set());
+      }
+    };
+
+    loadFavorites();
+    return () => {
+      mounted = false;
+    };
+  }, [user]);
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (!currentPlaceId || favoriteLoading) return;
+    if (!user) {
+      navigation.navigate("Auth");
+      return;
+    }
+
+    const placeKey = String(currentPlaceId);
+    const nextFavorite = !favoriteIds.has(placeKey);
+    const previousIds = new Set(favoriteIds);
+    const optimisticIds = new Set(favoriteIds);
+
+    if (nextFavorite) {
+      optimisticIds.add(placeKey);
+    } else {
+      optimisticIds.delete(placeKey);
+    }
+
+    setFavoriteIds(optimisticIds);
+    setFavoriteLoading(true);
+
+    try {
+      if (nextFavorite) {
+        await addFavoritePlace(currentPlaceId);
+      } else {
+        await removeFavoritePlace(currentPlaceId);
+      }
+    } catch (err) {
+      setFavoriteIds(previousIds);
+      if (err?.response?.status === 401) {
+        navigation.navigate("Auth");
+        return;
+      }
+      Alert.alert(
+        "Favoritos",
+        getBackendErrorMessage(err) || "No pudimos actualizar este favorito.",
+      );
+    } finally {
+      setFavoriteLoading(false);
+    }
+  }, [currentPlaceId, favoriteIds, favoriteLoading, navigation, user]);
 
   if (displayPlaces.length === 0) return null;
 
@@ -1599,8 +1690,25 @@ const PlaceDetailScreen = ({ route, navigation }) => {
         >
           <Ionicons name="arrow-back" size={24} color={COLORS.white} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.favoriteButton}>
-          <Ionicons name="heart-outline" size={24} color={COLORS.white} />
+        <TouchableOpacity
+          style={[
+            styles.favoriteButton,
+            isFavorite && styles.favoriteButtonActive,
+            favoriteLoading && styles.favoriteButtonLoading,
+          ]}
+          onPress={handleToggleFavorite}
+          disabled={favoriteLoading}
+          activeOpacity={0.86}
+        >
+          {favoriteLoading ? (
+            <ActivityIndicator size="small" color={COLORS.white} />
+          ) : (
+            <Ionicons
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={24}
+              color={isFavorite ? "#FB7185" : COLORS.white}
+            />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -1616,6 +1724,12 @@ const PlaceDetailScreen = ({ route, navigation }) => {
         removeClippedSubviews={Platform.OS === 'android'}
         onScrollToIndexFailed={(info) => {
           console.warn('Scroll failed:', info);
+        }}
+        onMomentumScrollEnd={(event) => {
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+          if (nextIndex !== currentIndex) {
+            setCurrentIndex(nextIndex);
+          }
         }}
         getItemLayout={(data, index) => ({
           length: SCREEN_WIDTH,
@@ -1662,6 +1776,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  favoriteButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  favoriteButtonLoading: {
+    opacity: 0.72,
   },
   content: {
     flex: 1,

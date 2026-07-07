@@ -34,7 +34,7 @@ const STATUS_LABELS = {
 const STATUS_FILTERS = ["requested", "contacted", "awaiting_payment", "confirmed", "rejected", "cancelled"];
 
 const TRANSITIONS = {
-  requested: ["contacted", "rejected", "cancelled"],
+  requested: ["rejected", "cancelled"],
   contacted: ["awaiting_payment", "rejected", "cancelled"],
   awaiting_payment: ["confirmed", "rejected", "cancelled"],
 };
@@ -47,6 +47,21 @@ const extractItems = (payload) => {
   if (Array.isArray(data?.content)) return data.content;
   if (Array.isArray(data?.items)) return data.items;
   return [];
+};
+
+const orderChatMessages = (messages = []) => {
+  const ordered = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const current = messages[index];
+    const next = messages[index + 1];
+    if (current?.senderType === "SYSTEM" && next?.senderType === "AGENCY") {
+      ordered.push(next, current);
+      index += 1;
+    } else {
+      ordered.push(current);
+    }
+  }
+  return ordered;
 };
 
 const extractReservation = (payload) =>
@@ -92,6 +107,14 @@ const AgencyReservationCard = ({ item, onOpen, onStatusPress, updating }) => {
         <Text style={styles.detailValue}>{item.contactPreference || "-"}</Text>
       </View>
       {item.message ? <Text style={styles.message}>{item.message}</Text> : null}
+      {item.status === "requested" ? (
+        <View style={styles.contactHint}>
+          <Ionicons name="chatbubble-ellipses-outline" size={14} color="#0E7490" />
+          <Text style={styles.contactHintText}>
+            Responde por chat para pasarla automáticamente a contactada.
+          </Text>
+        </View>
+      ) : null}
 
       {actions.length > 0 ? (
         <View style={styles.actionsRow}>
@@ -173,7 +196,7 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
         { agencyId },
       );
 
-      setMessages(extractItems(response));
+      setMessages(orderChatMessages(extractItems(response)));
     } catch (_err) {
       setMessages([]);
     } finally {
@@ -281,7 +304,15 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
     try {
       await sendAgencyReservationMessage(selectedReservation.id, text, { agencyId });
       setMessageText("");
-      await loadMessages(selectedReservation.id);
+      const [detailResult] = await Promise.allSettled([
+        getAgencyReservationById(selectedReservation.id, { agencyId }),
+        loadMessages(selectedReservation.id),
+        loadReservations(),
+      ]);
+
+      if (detailResult.status === "fulfilled") {
+        setSelectedReservation(extractReservation(detailResult.value));
+      }
     } catch (err) {
       Alert.alert(
         "No se pudo enviar",
@@ -462,19 +493,36 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
                   ) : (
                     <View style={styles.chatList}>
                       {messages.map((message) => {
+                        const system = message.senderType === "SYSTEM";
                         const fromAgency = message.senderType === "AGENCY";
                         return (
                           <View
                             key={String(message.id)}
                             style={[
                               styles.chatBubble,
-                              fromAgency ? styles.chatBubbleMine : styles.chatBubbleCustomer,
+                              system
+                                ? styles.chatBubbleSystem
+                                : fromAgency
+                                  ? styles.chatBubbleMine
+                                  : styles.chatBubbleCustomer,
                             ]}
                           >
-                            <Text style={styles.chatSender}>
-                              {fromAgency ? "Agencia" : "Cliente"}
+                            <Text
+                              style={[
+                                styles.chatSender,
+                                system && styles.chatSenderSystem,
+                              ]}
+                            >
+                              {system ? "Sistema" : fromAgency ? "Agencia" : "Cliente"}
                             </Text>
-                            <Text style={styles.chatMessage}>{message.message}</Text>
+                            <Text
+                              style={[
+                                styles.chatMessage,
+                                system && styles.chatMessageSystem,
+                              ]}
+                            >
+                              {message.message}
+                            </Text>
                           </View>
                         );
                       })}
@@ -646,6 +694,25 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     lineHeight: 18,
+  },
+  contactHint: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#ECFEFF",
+    borderWidth: 1,
+    borderColor: "#A5F3FC",
+  },
+  contactHintText: {
+    flex: 1,
+    color: "#0E7490",
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 16,
   },
   actionsRow: {
     flexDirection: "row",
@@ -837,15 +904,36 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: "#F1F5F9",
   },
+  chatBubbleSystem: {
+    alignSelf: "center",
+    maxWidth: "90%",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 13,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
   chatSender: {
     marginBottom: 3,
     color: COLORS.textLight,
     fontSize: 10,
     fontWeight: "800",
   },
+  chatSenderSystem: {
+    color: "#64748B",
+    fontSize: 9,
+    textAlign: "center",
+  },
   chatMessage: {
     color: COLORS.text,
     lineHeight: 19,
+  },
+  chatMessageSystem: {
+    color: "#475569",
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
   },
   chatClosedText: {
     marginTop: 10,
