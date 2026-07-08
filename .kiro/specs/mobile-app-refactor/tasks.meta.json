@@ -1,0 +1,995 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "Import modalHelpers in HomeScreen; verify no import errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022140
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526032471
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526556523
+      }
+    ],
+    "Call createInitialModalState() and verify returns object with all 7 modal keys": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022203
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526561757
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526913561
+      }
+    ],
+    "Call createInitialModalData() and verify returns { selectedAgency: null, selectedPackage: null }": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022270
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526562262
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526913959
+      }
+    ],
+    "Call toggleModal('profile', {profile: false, ...}) and verify returns {profile: true, ...}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022316
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526562757
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526914296
+      }
+    ],
+    "Verify all functions include JSDoc @param and @returns tags": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022365
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526563306
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526914809
+      }
+    ],
+    "Verify no console errors or warnings in IDE": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022403
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526563791
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526915288
+      }
+    ],
+    "Import useModalState in HomeScreen; verify no import errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022449
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526921780
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527621434
+      }
+    ],
+    "Call hook in a test component; verify returns object with all expected properties": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022487
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527624093
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528698159
+      }
+    ],
+    "Verify modals object has all 7 modal keys (profile, filter, agency, etc.)": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022531
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527624647
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528698635
+      }
+    ],
+    "Verify modalData object has selectedAgency and selectedPackage": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022585
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527625111
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528697501
+      }
+    ],
+    "Call openModal('profile') and verify modals.profile = true": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022636
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527625562
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528695157
+      }
+    ],
+    "Call closeModal('profile') and verify modals.profile = false": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022697
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527626068
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528696409
+      }
+    ],
+    "Call openModal('agency', {selectedAgency: testAgency}) and verify data is stored": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022731
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527626510
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528696073
+      }
+    ],
+    "Call closeModal('agency', true) and verify selectedAgency = null": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022769
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527626946
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528695577
+      }
+    ],
+    "Verify closeModal('agency', false) does NOT reset selectedAgency": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022815
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527628534
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528697038
+      }
+    ],
+    "Call updateModalData() and verify state updates correctly": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022854
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783527628746
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528697842
+      }
+    ],
+    "Navigate to src/screens/HomeScreen/utils/; verify modalHelpers.js exists": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022913
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528704768
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528754707
+      }
+    ],
+    "Navigate to src/screens/HomeScreen/hooks/; verify useModalState.js exists": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022939
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528705143
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528755069
+      }
+    ],
+    "Open HomeScreen (index.js); verify no new import errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526022988
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528705680
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528755519
+      }
+    ],
+    "Hover over useModalState import in IDE; verify JSDoc appears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023034
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528706092
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528755990
+      }
+    ],
+    "Check IDE output panel; verify no TypeScript or eslint errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023070
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528706576
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528756468
+      }
+    ],
+    "Read modalHelpers.js; understand purpose and functions within 3 minutes": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023115
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528707179
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528756796
+      }
+    ],
+    "Read useModalState.js; understand hook interface within 5 minutes": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023153
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528707541
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528757207
+      }
+    ],
+    "Confirm all 7 modal names match HomeScreen's current modals": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023197
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528708222
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528757619
+      }
+    ],
+    "Phase 1 sign-off: Ready to proceed to Phase 2": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023234
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528761039
+      }
+    ],
+    "Read HomeScreen code; identify all modal useState declarations": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023282
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528771785
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528939878
+      }
+    ],
+    "Count modal useState declarations; document at least 7": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023320
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528938604
+      }
+    ],
+    "Count modal-related callbacks (open/close handlers); document count": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023366
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528937753
+      }
+    ],
+    "For each modal, note: component name, visibility prop, data props, handlers": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023403
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528939008
+      }
+    ],
+    "Identify edge cases: conditional modals, nested dependencies, navigation triggers": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023438
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528938242
+      }
+    ],
+    "Create analysis document; save for Phase 2 reference": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023483
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528939461
+      }
+    ],
+    "Search HomeScreen for \"useState(false)\" for modals; count instances before change": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023522
+      }
+    ],
+    "Search HomeScreen for \"useState(null)\" for modal data; count instances before change": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023596
+      }
+    ],
+    "After modification, search again; verify all modal-related useState declarations removed": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023633
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528947810
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529935796
+      }
+    ],
+    "Verify useModalState hook is imported correctly": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023671
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528948278
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529934895
+      }
+    ],
+    "Verify { modals, modalData, openModal, closeModal, updateModalData } destructuring is present": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023716
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528948972
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529936547
+      }
+    ],
+    "Verify no syntax errors in HomeScreen": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023754
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528949325
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529935484
+      }
+    ],
+    "Verify IDE shows no missing variable errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023786
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783528949753
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529935163
+      }
+    ],
+    "Search for \"setProfileVisible\"; verify all replaced with openModal/closeModal": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023829
+      }
+    ],
+    "Search for \"setFiltersVisible\"; verify all replaced": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023868
+      }
+    ],
+    "Search for \"setAgencyVisible\"; verify all replaced": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023915
+      }
+    ],
+    "Search for \"setPackageDetailVisible\"; verify all replaced": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023955
+      }
+    ],
+    "Search for \"setEmailVerifyVisible\"; verify all replaced": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526023998
+      }
+    ],
+    "Search for \"setArVisible\"; verify all replaced": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024038
+      }
+    ],
+    "Search for \"setReservationVisible\" if it exists; verify replaced": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024081
+      }
+    ],
+    "Verify no remaining useState setters for modal visibility": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024120
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529945662
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783531114779
+      }
+    ],
+    "Verify IDE shows no \"undefined variable\" errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024165
+      }
+    ],
+    "Verify callbacks use useCallback with correct dependencies": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024206
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783529954901
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783531114342
+      }
+    ],
+    "Find ProfileModal component; verify visible={modals.profile}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024251
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783531121038
+      },
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783536412534
+      }
+    ],
+    "Find FilterModal component; verify visible={modals.filter}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024302
+      }
+    ],
+    "Find AgencyModal component; verify visible={modals.agency}, agency={modalData.selectedAgency}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024351
+      }
+    ],
+    "Find PackageDetailModal component; verify visible={modals.packageDetail}, pkg={modalData.selectedPackage}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024401
+      }
+    ],
+    "Find VerificationModal component; verify visible={modals.verification}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024440
+      }
+    ],
+    "Find ArWebViewModal component; verify visible={modals.ar}": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024481
+      }
+    ],
+    "Verify all onClose props use closeModal() function": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024521
+      }
+    ],
+    "Verify no remaining references to old state variables in modal props": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024564
+      }
+    ],
+    "Verify IDE shows no missing prop type errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024635
+      }
+    ],
+    "Verify no TypeScript errors": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024683
+      }
+    ],
+    "Open app and navigate to HomeScreen": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024729
+      }
+    ],
+    "Click profile icon (top-left); ProfileModal appears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024764
+      }
+    ],
+    "Click close button on ProfileModal; modal disappears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024803
+      }
+    ],
+    "Click filter icon (top-right); FilterModal appears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024847
+      }
+    ],
+    "Click close on FilterModal; modal disappears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024885
+      }
+    ],
+    "In Packages section, click on an agency card": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024922
+      }
+    ],
+    "Click info icon on agency card; AgencyModal appears with agency details": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526024982
+      }
+    ],
+    "Close AgencyModal; modal disappears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025022
+      }
+    ],
+    "In Packages section, click on a package card": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025056
+      }
+    ],
+    "Click details button; PackageDetailModal appears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025098
+      }
+    ],
+    "Close PackageDetailModal; modal disappears": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025139
+      }
+    ],
+    "Open profile menu; click \"Verify Email\" option": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025183
+      }
+    ],
+    "VerificationModal appears; close it": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025230
+      }
+    ],
+    "In Catalog or Nearby section, click AR button on a place card": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025271
+      }
+    ],
+    "ArWebViewModal appears with AR content; close it": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025305
+      }
+    ],
+    "Open 2-3 modals in sequence; verify all open/close correctly": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025346
+      }
+    ],
+    "Check browser console; no errors or warnings": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025388
+      }
+    ],
+    "App responsive and no crashes observed": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025430
+      }
+    ],
+    "P2.1 Complete: Analysis document created and accurate": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025471
+      }
+    ],
+    "P2.2 Complete: useModalState hook integrated into HomeScreen": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025506
+      }
+    ],
+    "P2.3 Complete: All modal handlers updated to use openModal/closeModal": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025549
+      }
+    ],
+    "P2.4 Complete: All modal components updated with new prop bindings": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025589
+      }
+    ],
+    "P2.5 Complete: Manual testing passed; all modals functional": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025667
+      }
+    ],
+    "Code quality: No new linting errors or warnings": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025705
+      }
+    ],
+    "Code style: Changes follow existing project conventions": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025746
+      }
+    ],
+    "Peer review: At least one developer reviewed and approved changes": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025783
+      }
+    ],
+    "Git commits: Changes committed with clear, descriptive messages": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025829
+      }
+    ],
+    "Documentation: Added comments explaining useModalState usage in HomeScreen": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025867
+      }
+    ],
+    "Performance: No noticeable performance regression observed": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025912
+      }
+    ],
+    "Backwards compatibility: All existing imports and APIs unchanged": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025947
+      }
+    ],
+    "Ready for merge: All sign-off criteria met; ready to merge to main branch": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526025998
+      }
+    ],
+    "Create `PHASE_2_VALIDATION.md` documenting completion and sign-off": [
+      {
+        "executionId": "96cd51d3-4b5b-4877-874d-77b31981d615",
+        "chatSessionId": "sess_704528be-2158-4690-ad1b-61228494a12e",
+        "timestamp": 1783526026046
+      }
+    ]
+  }
+}

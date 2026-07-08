@@ -1,22 +1,22 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  ImageBackground,
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    ImageBackground,
+    KeyboardAvoidingView,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 // Modular Components
+import HeroMediaBackground from "./components/HeroMediaBackground";
 import HomeFooter from "./components/HomeFooter";
 import HomeHeader from "./components/HomeHeader";
-import HeroMediaBackground from "./components/HeroMediaBackground";
 import NearbyMapBlock from "./components/NearbyMapBlock";
 import NotificationPanel from "./components/NotificationPanel";
 import PackageCard from "./components/PackageCard";
@@ -35,6 +35,7 @@ import VerificationModal from "./components/modals/VerificationModal";
 // Hooks
 import useAR from "./hooks/useAR";
 import useHomeData from "./hooks/useHomeData";
+import { useModalState } from "./hooks/useModalState";
 import useNotifications from "./hooks/useNotifications";
 import useReservation from "./hooks/useReservation";
 import useVerification from "./hooks/useVerification";
@@ -46,12 +47,12 @@ import { PremiumModal } from "../../components/ui/PremiumModal";
 import styles from "./styles";
 import { COLORS, HERO_IMAGE, HERO_VIDEO, screenWidth } from "./utils/constants";
 import {
-  formatPrice,
-  getCategoryLabel,
-  getPlaceImages,
-  getPackageGradient,
-  getPackageImage,
-  getPlaceVideo,
+    formatPrice,
+    getCategoryLabel,
+    getPackageGradient,
+    getPackageImage,
+    getPlaceImages,
+    getPlaceVideo,
 } from "./utils/helpers";
 
 const AGENCY_COLUMN_WIDTH = 310;
@@ -162,7 +163,7 @@ const HomeScreen = ({ navigation }) => {
   } = useReservation({
     user,
     onRequireAuth: () => navigation.navigate("Auth"),
-    onRequireVerification: () => setEmailVerifyVisible(true),
+    onRequireVerification: () => openModal('verification'),
     onReservationCreated: requestOpenNotificationPanel,
     onOpenReservations: () => {
       setNotificationsVisible(false);
@@ -179,16 +180,14 @@ const HomeScreen = ({ navigation }) => {
     generateArHtml,
   } = useAR();
 
+  // Modal State Management
+  const { modals, modalData, openModal, closeModal, updateModalData } = useModalState();
+
   // Local UI State
-  const [filtersVisible, setFiltersVisible] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(false);
-  const [agencyVisible, setAgencyVisible] = useState(false);
-  const [selectedAgency, setSelectedAgency] = useState(null);
-  const [packageDetailVisible, setPackageDetailVisible] = useState(false);
-  const [detailPackage, setDetailPackage] = useState(null);
-  const [showMap, setShowMap] = useState(false);
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
   const [mapGestureLocked, setMapGestureLocked] = useState(false);
+  const [sidePanelOpen, setSidePanelOpen] = useState(false);
+  const [panelMotionCount, setPanelMotionCount] = useState(0);
   const [agencyPageIndex, setAgencyPageIndex] = useState(0);
   const visualSeedRef = useRef(Math.floor(Math.random() * 100000));
 
@@ -311,9 +310,6 @@ const HomeScreen = ({ navigation }) => {
     setAgencyPageIndex(Math.max(0, Math.round(offsetX / pageWidth)));
   }, []);
 
-  const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [panelMotionCount, setPanelMotionCount] = useState(0);
-
   const handlePanelMotionStart = useCallback(() => {
     setPanelMotionCount((count) => count + 1);
   }, []);
@@ -411,11 +407,10 @@ const HomeScreen = ({ navigation }) => {
     });
   }, [roles]);
 
-  const openAgency = (agency) => {
-    setSelectedAgency(agency);
-    setAgencyVisible(true);
+  const openAgency = useCallback((agency) => {
+    openModal('agency', { selectedAgency: agency });
     setSelectedAgencyFilter(agency);
-  };
+  }, [openModal, setSelectedAgencyFilter]);
 
   const selectAgencyFilter = useCallback(
     (agency) => {
@@ -427,18 +422,16 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const openPackageDetail = useCallback((pkg) => {
-    setDetailPackage(pkg);
-    setPackageDetailVisible(true);
-  }, []);
+    openModal('packageDetail', { selectedPackage: pkg });
+  }, [openModal]);
 
   const openPackagePayment = useCallback(
     (pkg) => {
       if (!pkg) return;
-      setPackageDetailVisible(false);
-      setDetailPackage(null);
+      closeModal('packageDetail', false);
       openReservation(pkg);
     },
-    [openReservation],
+    [closeModal, openReservation],
   );
 
   const toggleMapGestureLock = useCallback(() => {
@@ -480,8 +473,8 @@ const HomeScreen = ({ navigation }) => {
               query={query}
               setQuery={setQuery}
               onPerformSearch={performSearch}
-              onOpenFilters={() => setFiltersVisible(true)}
-              onOpenProfile={() => setProfileVisible(true)}
+              onOpenFilters={() => openModal('filter')}
+              onOpenProfile={() => openModal('profile')}
               onOpenNotifications={openNotificationPanel}
               unreadNotifications={unreadCount}
               onLogin={() => navigation.navigate("Auth")}
@@ -1012,25 +1005,25 @@ const HomeScreen = ({ navigation }) => {
 
       {/* Modals */}
       <ProfileModal
-        visible={profileVisible}
-        onClose={() => setProfileVisible(false)}
+        visible={modals.profile}
+        onClose={() => closeModal('profile')}
         user={user}
         logout={logout}
         allowedRoutes={allowedRoutes}
         onRoutePress={(r) => {
-          setProfileVisible(false);
+          closeModal('profile');
           navigation.navigate(r);
         }}
         onOpenVerification={() => {
-          setProfileVisible(false);
-          setEmailVerifyVisible(true);
+          closeModal('profile');
+          openModal('verification');
         }}
         onAddAccount={() => navigation.navigate("Auth")}
       />
 
       <VerificationModal
-        visible={emailVerifyVisible}
-        onClose={() => setEmailVerifyVisible(false)}
+        visible={modals.verification}
+        onClose={() => closeModal('verification')}
         email={user?.email}
         loading={emailVerifyLoading}
         status={emailVerifyStatus}
@@ -1041,9 +1034,9 @@ const HomeScreen = ({ navigation }) => {
       />
 
       <AgencyModal
-        visible={agencyVisible}
-        onClose={() => setAgencyVisible(false)}
-        agency={selectedAgency}
+        visible={modals.agency}
+        onClose={() => closeModal('agency')}
+        agency={modalData.selectedAgency}
       />
 
       <NotificationPanel
@@ -1098,13 +1091,10 @@ const HomeScreen = ({ navigation }) => {
       />
 
       <PackageDetailModal
-        visible={packageDetailVisible}
-        pkg={detailPackage}
-        onClose={() => {
-          setPackageDetailVisible(false);
-          setDetailPackage(null);
-        }}
-        onReserve={() => openPackagePayment(detailPackage)}
+        visible={modals.packageDetail}
+        pkg={modalData.selectedPackage}
+        onClose={() => closeModal('packageDetail')}
+        onReserve={() => openPackagePayment(modalData.selectedPackage)}
         getImage={getPackageImage}
         getGradient={getPackageGradient}
         formatPrice={formatPrice}
@@ -1112,22 +1102,22 @@ const HomeScreen = ({ navigation }) => {
       />
 
       <FilterModal
-        visible={filtersVisible}
-        onClose={() => setFiltersVisible(false)}
+        visible={modals.filter}
+        onClose={() => closeModal('filter')}
         selectedCategory={selectedCategory}
         setSelectedCategory={setSelectedCategory}
         distanceKm={distanceKm}
         setDistanceKm={setDistanceKm}
         categories={categories}
         onApply={() => {
-          setFiltersVisible(false);
+          closeModal('filter');
           performSearch();
         }}
       />
 
       <ArWebViewModal
-        visible={arVisible}
-        onClose={() => setArVisible(false)}
+        visible={modals.ar}
+        onClose={() => closeModal('ar')}
         html={generateArHtml()}
         onShouldStartLoadWithRequest={handleShouldStartLoad}
       />
