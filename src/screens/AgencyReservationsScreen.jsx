@@ -31,6 +31,21 @@ const STATUS_LABELS = {
   cancelled: "Cancelada",
 };
 
+const PAYMENT_STATUS_LABELS = {
+  pending: "Pendiente",
+  checkout_created: "Pago iniciado",
+  processing: "Validando pago",
+  paid: "Pagado",
+  failed: "Pago rechazado",
+  expired: "Pago expirado",
+  verified_by_agency: "Pago verificado por agencia",
+};
+
+const PAYMENT_PROVIDER_LABELS = {
+  agency_managed: "Gestionado por la agencia",
+  wompi: "Wompi",
+};
+
 const STATUS_FILTERS = ["requested", "contacted", "awaiting_payment", "confirmed", "rejected", "cancelled"];
 
 const TRANSITIONS = {
@@ -477,7 +492,7 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
                     {STATUS_LABELS[selectedReservation?.status] || selectedReservation?.status || "-"}
                   </Text>
                   <Text style={styles.detailBoxText}>
-                    {selectedReservation?.paymentStatus || "pending"} · {selectedReservation?.paymentProvider || "agency_managed"}
+                    {PAYMENT_STATUS_LABELS[selectedReservation?.paymentStatus] || selectedReservation?.paymentStatus || "Pendiente"} · {PAYMENT_PROVIDER_LABELS[selectedReservation?.paymentProvider] || selectedReservation?.paymentProvider || "Gestionado por la agencia"}
                   </Text>
                   {selectedReservation?.agencyNotes ? (
                     <Text style={styles.message}>{selectedReservation.agencyNotes}</Text>

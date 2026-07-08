@@ -204,6 +204,66 @@ export default StyleSheet.create({
     color: PANEL_COLORS.title,
   },
 
+  sidePanelPhotoBannerWrap: {
+    marginBottom: SPACING.lg,
+  },
+
+  sidePanelPhotoBanner: {
+    height: 148,
+    borderRadius: 22,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+    backgroundColor: PANEL_COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.62)",
+    shadowColor: PANEL_COLORS.primaryDark,
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: 9,
+    },
+    elevation: 5,
+  },
+
+  sidePanelPhotoImage: {
+    borderRadius: 22,
+    transform: [{ scale: 1.03 }],
+  },
+
+  sidePanelPhotoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.24)",
+  },
+
+  sidePanelPhotoTextBlock: {
+    padding: SPACING.md,
+    gap: 5,
+  },
+
+  sidePanelPhotoKicker: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    color: PANEL_COLORS.primary,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+
+  sidePanelPhotoTitle: {
+    color: "#FFFFFF",
+    fontSize: FONT_SIZES.md,
+    lineHeight: 21,
+    fontWeight: "900",
+    textShadowColor: "rgba(15, 23, 42, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 7,
+  },
+
   /*
    * Área táctil más amplia que el indicador visual.
    * Esto permite abrir/cerrar el panel con mayor facilidad.
@@ -265,6 +325,27 @@ export default StyleSheet.create({
     justifyContent: "space-between",
 
     gap: SPACING.md,
+  },
+
+  sidePanelSectionPhoto: {
+    height: 92,
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.md,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: PANEL_COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.58)",
+  },
+
+  sidePanelSectionPhotoImage: {
+    borderRadius: 20,
+    transform: [{ scale: 1.04 }],
+  },
+
+  sidePanelSectionPhotoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(14, 116, 144, 0.16)",
   },
 
   sidePanelTitle: {

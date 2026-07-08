@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Animated,
+  ImageBackground,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,8 @@ import {
 import EdgeDrawer from "../../../components/ui/EdgeDrawer";
 import { COLORS } from "../../../utils/constants";
 import styles from "../styles/SidePanel.styles";
-import { getPlaceImage } from "../utils/helpers";
+import { HERO_IMAGE } from "../utils/constants";
+import { getPlaceImage, getPlaceImages } from "../utils/helpers";
 
 const SidePanel = ({
   sidePanelOpen,
@@ -43,6 +45,7 @@ const SidePanel = ({
   categories = [],
 }) => {
   const particleAnim = useRef(new Animated.Value(0)).current;
+  const visualSeedRef = useRef(Math.floor(Math.random() * 100000));
 
   useEffect(() => {
     if (!sidePanelOpen) {
@@ -324,6 +327,46 @@ const SidePanel = ({
     () => getPlaceImage(nearbyDisplayPlace),
     [nearbyDisplayPlace],
   );
+
+  const panelImageUris = useMemo(() => {
+    const uniqueUris = new Set();
+
+    [
+      nearbyDisplayPlace,
+      ...topPlaces,
+      ...bestRatedPlaces,
+      ...places,
+    ]
+      .flatMap((item) => getPlaceImages(resolveDisplayPlace(item)))
+      .filter(Boolean)
+      .forEach((uri) => uniqueUris.add(uri));
+
+    return Array.from(uniqueUris);
+  }, [
+    bestRatedPlaces,
+    nearbyDisplayPlace,
+    places,
+    resolveDisplayPlace,
+    topPlaces,
+  ]);
+
+  const pickPanelImage = useCallback(
+    (offset = 0, fallback = HERO_IMAGE) => {
+      if (!panelImageUris.length) return fallback;
+      const index =
+        (visualSeedRef.current + offset) % panelImageUris.length;
+      return panelImageUris[index] || fallback;
+    },
+    [panelImageUris],
+  );
+
+  const panelHeroImageUri = useMemo(() => {
+    return pickPanelImage(2, HERO_IMAGE);
+  }, [pickPanelImage]);
+
+  const bestRatedBannerImageUri = useMemo(() => {
+    return pickPanelImage(6, panelHeroImageUri);
+  }, [panelHeroImageUri, pickPanelImage]);
 
   const preloadedImageUris = useMemo(() => {
     const uniqueUris = new Set();
@@ -663,6 +706,33 @@ const SidePanel = ({
             </View>
           </Animated.View>
 
+          <Animated.View
+            style={[
+              styles.sidePanelPhotoBannerWrap,
+              {
+                opacity: panelOpenOpacity,
+                transform: [{ translateX: panelDrift }],
+              },
+            ]}
+          >
+            <ImageBackground
+              source={{ uri: panelHeroImageUri }}
+              style={styles.sidePanelPhotoBanner}
+              imageStyle={styles.sidePanelPhotoImage}
+              resizeMode="cover"
+            >
+              <View style={styles.sidePanelPhotoOverlay} />
+              <View style={styles.sidePanelPhotoTextBlock}>
+                <Text style={styles.sidePanelPhotoKicker}>
+                  Mirada rapida
+                </Text>
+                <Text style={styles.sidePanelPhotoTitle} numberOfLines={2}>
+                  Sitios destacados para abrir el mapa con ganas
+                </Text>
+              </View>
+            </ImageBackground>
+          </Animated.View>
+
           {showNearbyLoader ? (
             <ActivityIndicator
               color={COLORS.primary}
@@ -929,6 +999,15 @@ const SidePanel = ({
               ))}
             </View>
           )}
+
+          <ImageBackground
+            source={{ uri: bestRatedBannerImageUri }}
+            style={styles.sidePanelSectionPhoto}
+            imageStyle={styles.sidePanelSectionPhotoImage}
+            resizeMode="cover"
+          >
+            <View style={styles.sidePanelSectionPhotoOverlay} />
+          </ImageBackground>
 
           <View style={styles.sidePanelHeader}>
             <View>

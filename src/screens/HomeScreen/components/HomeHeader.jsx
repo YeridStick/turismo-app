@@ -94,7 +94,7 @@ const HomeHeader = ({
 
   return (
     <View>
-      <BlurView intensity={80} tint="light" style={styles.heroOverlay}>
+      <BlurView intensity={54} tint="light" style={styles.heroOverlay}>
         <View style={styles.topBar}>
           <Text style={styles.locationValue}>Cerca de ti</Text>
           {user ? (

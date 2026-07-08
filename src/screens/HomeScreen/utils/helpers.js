@@ -43,6 +43,51 @@ export const getPlaceImage = (place) => {
   );
 };
 
+export const getPlaceImages = (place) => {
+  if (!place) return [];
+  const nestedPlace = place.place || place.site || place.placeInfo || place.placeData;
+  const imageUrls = Array.isArray(place.imageUrls)
+    ? place.imageUrls
+    : parseUrlList(place.imageUrls || place.image_urls);
+  const nestedImageUrls = Array.isArray(nestedPlace?.imageUrls)
+    ? nestedPlace.imageUrls
+    : parseUrlList(nestedPlace?.imageUrls || nestedPlace?.image_urls);
+
+  return [
+    ...imageUrls,
+    place.imageUrl,
+    place.image_url,
+    place.image,
+    ...nestedImageUrls,
+    nestedPlace?.imageUrl,
+    nestedPlace?.image_url,
+    nestedPlace?.image,
+  ].filter(Boolean);
+};
+
+export const getPlaceVideo = (place) => {
+  if (!place) return null;
+  const nestedPlace = place.place || place.site || place.placeInfo || place.placeData;
+  const videoUrls = Array.isArray(place.videoUrls)
+    ? place.videoUrls
+    : parseUrlList(place.videoUrls || place.video_urls);
+  const nestedVideoUrls = Array.isArray(nestedPlace?.videoUrls)
+    ? nestedPlace.videoUrls
+    : parseUrlList(nestedPlace?.videoUrls || nestedPlace?.video_urls);
+
+  return (
+    videoUrls[0] ||
+    place.videoUrl ||
+    place.video_url ||
+    place.video ||
+    nestedVideoUrls[0] ||
+    nestedPlace?.videoUrl ||
+    nestedPlace?.video_url ||
+    nestedPlace?.video ||
+    null
+  );
+};
+
 export const fetchModelSize = async (url) => {
   if (!url) return null;
   try {
@@ -71,6 +116,12 @@ export const normalizePlace = (place) => {
   }
   if (normalized.imageUrls && !Array.isArray(normalized.imageUrls)) {
     normalized.imageUrls = parseUrlList(normalized.imageUrls);
+  }
+  if (normalized.video_urls && !normalized.videoUrls) {
+    normalized.videoUrls = parseUrlList(normalized.video_urls);
+  }
+  if (normalized.videoUrls && !Array.isArray(normalized.videoUrls)) {
+    normalized.videoUrls = parseUrlList(normalized.videoUrls);
   }
   
   if (normalized.owner_user_id && !normalized.ownerUserId) {
@@ -177,11 +228,29 @@ export const formatPrice = (value) => {
 
 export const getPackageImage = (pkg) => {
   if (!pkg) return null;
-  if (pkg.imageUrl) return pkg.imageUrl;
-  if (pkg.image_url) return pkg.image_url;
-  if (Array.isArray(pkg.imageUrls) && pkg.imageUrls.length) return pkg.imageUrls[0];
-  if (Array.isArray(pkg.image_urls) && pkg.image_urls.length) return pkg.image_urls[0];
-  return null;
+  const imageUrls = Array.isArray(pkg.imageUrls)
+    ? pkg.imageUrls
+    : parseUrlList(pkg.imageUrls || pkg.image_urls);
+
+  return (
+    pkg.coverImageUrl ||
+    pkg.cover_image_url ||
+    pkg.coverImage ||
+    pkg.cover_image ||
+    pkg.coverUrl ||
+    pkg.cover_url ||
+    pkg.mainImageUrl ||
+    pkg.main_image_url ||
+    pkg.thumbnailUrl ||
+    pkg.thumbnail_url ||
+    pkg.bannerImageUrl ||
+    pkg.banner_image_url ||
+    pkg.imageUrl ||
+    pkg.image_url ||
+    pkg.image ||
+    imageUrls[0] ||
+    null
+  );
 };
 
 export const getPackageGradient = (pkg) => {

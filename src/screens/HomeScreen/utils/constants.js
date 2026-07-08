@@ -16,6 +16,8 @@ export const FALLBACK_CENTER = { latitude: 2.9386, longitude: -75.2811 };
 export const HERO_IMAGE =
   "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1600&q=80";
 
+export const HERO_VIDEO = null;
+
 export const MAX_AR_MODEL_BYTES = 25 * 1024 * 1024;
 
 export const CATEGORIES_LIST = [

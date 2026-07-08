@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { getPackages, deletePackage, getAgencyPackages } from '../services/api';
 import { useRoute } from '@react-navigation/native';
 import { PremiumModal } from '../components/ui/PremiumModal';
+import { getPackageImage } from './HomeScreen/utils/helpers';
 
 const COLORS = {
     primary: '#0E7490',
@@ -208,12 +209,23 @@ const ManagePackagesScreen = ({ navigation }) => {
         }).format(value);
     };
 
-    const renderPackageCard = (pkg) => (
+    const renderPackageCard = (pkg) => {
+        const coverImage = getPackageImage(pkg);
+
+        return (
         <TouchableOpacity 
             key={pkg.id} 
             style={styles.pkgCard}
             onPress={() => navigation.navigate("CreatePackage", { packageId: pkg.id })}
         >
+            {coverImage ? (
+                <Image
+                    source={{ uri: coverImage }}
+                    style={styles.pkgCoverImage}
+                    resizeMode="cover"
+                />
+            ) : null}
+
             <View style={styles.pkgHeader}>
                 <View style={styles.pkgBadge}>
                     <Text style={styles.pkgBadgeText}>{pkg.tag || "Activo"}</Text>
@@ -277,7 +289,8 @@ const ManagePackagesScreen = ({ navigation }) => {
                 </View>
             </View>
         </TouchableOpacity>
-    );
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -478,6 +491,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
     },
+    pkgCoverImage: {
+        width: '100%',
+        height: 150,
+        borderRadius: 18,
+        marginBottom: 14,
+        backgroundColor: COLORS.card,
+    },
     pkgBadge: {
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         paddingHorizontal: 10,
@@ -666,4 +686,3 @@ const styles = StyleSheet.create({
 });
 
 export default ManagePackagesScreen;
-

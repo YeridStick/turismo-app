@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -15,6 +16,7 @@ import { useAuth } from "../../context/AuthContext";
 // Modular Components
 import HomeFooter from "./components/HomeFooter";
 import HomeHeader from "./components/HomeHeader";
+import HeroMediaBackground from "./components/HeroMediaBackground";
 import NearbyMapBlock from "./components/NearbyMapBlock";
 import NotificationPanel from "./components/NotificationPanel";
 import PackageCard from "./components/PackageCard";
@@ -42,12 +44,14 @@ import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import AnimatedBackground from "../../components/ui/AnimatedBackground";
 import { PremiumModal } from "../../components/ui/PremiumModal";
 import styles from "./styles";
-import { COLORS, screenWidth } from "./utils/constants";
+import { COLORS, HERO_IMAGE, HERO_VIDEO, screenWidth } from "./utils/constants";
 import {
   formatPrice,
   getCategoryLabel,
+  getPlaceImages,
   getPackageGradient,
   getPackageImage,
+  getPlaceVideo,
 } from "./utils/helpers";
 
 const AGENCY_COLUMN_WIDTH = 310;
@@ -186,12 +190,75 @@ const HomeScreen = ({ navigation }) => {
   const [isInteractingWithMap, setIsInteractingWithMap] = useState(false);
   const [mapGestureLocked, setMapGestureLocked] = useState(false);
   const [agencyPageIndex, setAgencyPageIndex] = useState(0);
+  const visualSeedRef = useRef(Math.floor(Math.random() * 100000));
 
   const displayPlaces = useMemo(() => {
     return query.trim() || selectedCategory !== "todos"
       ? searchResults
       : places;
   }, [query, selectedCategory, searchResults, places]);
+
+  const visualPlacePool = useMemo(
+    () => [
+      ...topPlaces,
+      ...bestRatedPlaces,
+      ...popular,
+      ...nearby,
+      ...displayPlaces,
+      ...places,
+    ],
+    [bestRatedPlaces, displayPlaces, nearby, places, popular, topPlaces],
+  );
+
+  const siteImageUris = useMemo(() => {
+    const uniqueUris = new Set();
+
+    visualPlacePool
+      .flatMap((item) => getPlaceImages(item))
+      .filter(Boolean)
+      .forEach((uri) => uniqueUris.add(uri));
+
+    return Array.from(uniqueUris);
+  }, [visualPlacePool]);
+
+  const pickSiteImage = useCallback(
+    (offset = 0, fallback = HERO_IMAGE) => {
+      if (!siteImageUris.length) return fallback;
+      const index =
+        (visualSeedRef.current + offset) % siteImageUris.length;
+      return siteImageUris[index] || fallback;
+    },
+    [siteImageUris],
+  );
+
+  const heroImageUri = useMemo(() => {
+    return pickSiteImage(0, HERO_IMAGE);
+  }, [pickSiteImage]);
+
+  const heroVideoUri = useMemo(() => {
+    const featuredVideoPlace = visualPlacePool.find((item) =>
+      getPlaceVideo(item),
+    );
+
+    return getPlaceVideo(featuredVideoPlace) || HERO_VIDEO;
+  }, [visualPlacePool]);
+
+  const catalogBannerImageUri = useMemo(() => {
+    return pickSiteImage(3, heroImageUri);
+  }, [heroImageUri, pickSiteImage]);
+
+  const packageBannerImageUri = useMemo(() => {
+    return pickSiteImage(8, heroImageUri);
+  }, [heroImageUri, pickSiteImage]);
+
+  const footerImageUris = useMemo(
+    () => [
+      pickSiteImage(11, heroImageUri),
+      pickSiteImage(14, heroImageUri),
+      pickSiteImage(17, heroImageUri),
+    ],
+    [heroImageUri, pickSiteImage],
+  );
 
   const handleIncreaseRadius = useCallback(() => {
     let nextDist = 15;
@@ -405,32 +472,39 @@ const HomeScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isInteractingWithMap && !mapGestureLocked}
       >
-        <HomeHeader
-          user={user}
-          query={query}
-          setQuery={setQuery}
-          onPerformSearch={performSearch}
-          onOpenFilters={() => setFiltersVisible(true)}
-          onOpenProfile={() => setProfileVisible(true)}
-          onOpenNotifications={openNotificationPanel}
-          unreadNotifications={unreadCount}
-          onLogin={() => navigation.navigate("Auth")}
-          searchSuggestions={
-            query.trim()
-              ? places
-                  .filter((p) =>
-                    (p.name || "").toLowerCase().includes(query.toLowerCase()),
-                  )
-                  .slice(0, 5)
-              : []
-          }
-          onSelectSuggestion={(item) =>
-            navigation.navigate("PlaceDetail", {
-              places: [item],
-              initialIndex: 0,
-            })
-          }
-        />
+        <View style={styles.pageHeader}>
+          <HeroMediaBackground imageUri={heroImageUri} videoUri={heroVideoUri}>
+            <View style={styles.heroPhotoWash} pointerEvents="none" />
+            <HomeHeader
+              user={user}
+              query={query}
+              setQuery={setQuery}
+              onPerformSearch={performSearch}
+              onOpenFilters={() => setFiltersVisible(true)}
+              onOpenProfile={() => setProfileVisible(true)}
+              onOpenNotifications={openNotificationPanel}
+              unreadNotifications={unreadCount}
+              onLogin={() => navigation.navigate("Auth")}
+              searchSuggestions={
+                query.trim()
+                  ? places
+                      .filter((p) =>
+                        (p.name || "")
+                          .toLowerCase()
+                          .includes(query.toLowerCase()),
+                      )
+                      .slice(0, 5)
+                  : []
+              }
+              onSelectSuggestion={(item) =>
+                navigation.navigate("PlaceDetail", {
+                  places: [item],
+                  initialIndex: 0,
+                })
+              }
+            />
+          </HeroMediaBackground>
+        </View>
 
         {/* Nearby Section - Always Visible */}
         <View style={styles.section}>
@@ -478,6 +552,21 @@ const HomeScreen = ({ navigation }) => {
         {/* Catalog Section */}
         {displayPlaces.length > 0 && (
           <View style={styles.section}>
+            <ImageBackground
+              source={{ uri: catalogBannerImageUri }}
+              style={styles.sectionPhotoBanner}
+              imageStyle={styles.sectionPhotoImage}
+              resizeMode="cover"
+            >
+              <View style={styles.sectionPhotoOverlay} />
+              <View style={styles.sectionPhotoContent}>
+                <Text style={styles.sectionPhotoKicker}>Inspiracion local</Text>
+                <Text style={styles.sectionPhotoTitle} numberOfLines={2}>
+                  Lugares con historia, paisaje y aventura
+                </Text>
+              </View>
+            </ImageBackground>
+
             <View style={styles.sectionIntro}>
               <View style={styles.sectionTitleAccent} />
               <View style={styles.sectionIconBubble}>
@@ -551,6 +640,21 @@ const HomeScreen = ({ navigation }) => {
 
         {/* Agencies + Packages (Unified Section) */}
         <View style={styles.section}>
+          <ImageBackground
+            source={{ uri: packageBannerImageUri }}
+            style={styles.sectionPhotoBanner}
+            imageStyle={styles.sectionPhotoImage}
+            resizeMode="cover"
+          >
+            <View style={styles.sectionPhotoOverlay} />
+            <View style={styles.sectionPhotoContent}>
+              <Text style={styles.sectionPhotoKicker}>Planes y rutas</Text>
+              <Text style={styles.sectionPhotoTitle} numberOfLines={2}>
+                Experiencias listas para recorrer el Huila
+              </Text>
+            </View>
+          </ImageBackground>
+
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
@@ -866,7 +970,7 @@ const HomeScreen = ({ navigation }) => {
           )}
         </View>
 
-        <HomeFooter />
+        <HomeFooter imageUris={footerImageUris} />
         <View style={{ height: 40 }} />
       </ScrollView>
 

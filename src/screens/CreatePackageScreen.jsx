@@ -28,6 +28,24 @@ const parseList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const getPackageCoverImage = (pkg) =>
+  pkg?.coverImageUrl ||
+  pkg?.cover_image_url ||
+  pkg?.coverImage ||
+  pkg?.cover_image ||
+  pkg?.coverUrl ||
+  pkg?.cover_url ||
+  pkg?.mainImageUrl ||
+  pkg?.main_image_url ||
+  pkg?.thumbnailUrl ||
+  pkg?.thumbnail_url ||
+  pkg?.bannerImageUrl ||
+  pkg?.banner_image_url ||
+  pkg?.imageUrl ||
+  pkg?.image_url ||
+  pkg?.image ||
+  "";
+
 const extractApiErrorMessage = (error, fallback) => {
   const data = error?.response?.data;
   if (typeof data?.message === "string" && data.message.trim()) return data.message.trim();
@@ -108,7 +126,7 @@ const CreatePackageScreen = ({ navigation }) => {
           discount: pkg.discount || "",
           tag: pkg.tag || "",
           includes: pkg.includes ? pkg.includes.join(", ") : "",
-          image: pkg.image || "",
+          image: getPackageCoverImage(pkg),
         });
         if (pkg.places) {
           setSelectedPlaceIds(pkg.places.map((p) => p.place_id || p.id));
@@ -243,6 +261,7 @@ const CreatePackageScreen = ({ navigation }) => {
     setLoading(true);
     try {
       let createdPackage = null;
+      const coverImage = form.image.trim();
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -258,7 +277,9 @@ const CreatePackageScreen = ({ navigation }) => {
         discount: form.discount.trim() || undefined,
         tag: form.tag.trim() || undefined,
         includes: form.includes ? parseList(form.includes) : undefined,
-        image: form.image.trim() || undefined,
+        image: coverImage || undefined,
+        imageUrl: coverImage || undefined,
+        coverImageUrl: coverImage || undefined,
       };
 
       if (packageId) {

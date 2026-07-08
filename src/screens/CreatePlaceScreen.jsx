@@ -23,10 +23,12 @@ const COOLDOWN_MS = 3000;
 const FALLBACK_CENTER = { latitude: 2.9386, longitude: -75.2811 };
 
 const parseList = (value) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
+  (Array.isArray(value) ? value : String(value || "").split(","))
+    .map((item) => String(item).trim())
     .filter(Boolean);
+
+const formatListValue = (value) =>
+  parseList(value).join(", ");
 
 const CreatePlaceScreen = ({ navigation, route }) => {
   const editPlace = route.params?.place || null;
@@ -40,8 +42,9 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     address: editPlace?.address || "",
     phone: editPlace?.phone || "",
     website: editPlace?.website || "",
-    imageUrls: Array.isArray(editPlace?.imageUrls) ? editPlace.imageUrls.join(", ") : "",
-    model3dUrls: Array.isArray(editPlace?.model3dUrls) ? editPlace.model3dUrls.join(", ") : "",
+    imageUrls: formatListValue(editPlace?.imageUrls || editPlace?.image_urls),
+    videoUrls: formatListValue(editPlace?.videoUrls || editPlace?.video_urls),
+    model3dUrls: formatListValue(editPlace?.model3dUrls || editPlace?.model_3d_urls),
     services: editPlace?.services || [],
   });
   const [customService, setCustomService] = useState("");
@@ -317,6 +320,9 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     }
     setLoading(true);
     try {
+      const imageUrls = parseList(form.imageUrls);
+      const videoUrls = parseList(form.videoUrls);
+      const model3dUrls = parseList(form.model3dUrls);
       const payload = {
         name: form.name.trim(),
         description: form.description.trim(),
@@ -326,9 +332,10 @@ const CreatePlaceScreen = ({ navigation, route }) => {
         address: form.address.trim() || undefined,
         phone: form.phone.trim() || undefined,
         website: form.website.trim() || undefined,
-        imageUrls: form.imageUrls ? parseList(form.imageUrls) : undefined,
-        model3dUrls: form.model3dUrls ? parseList(form.model3dUrls) : undefined,
-        services: form.services.length > 0 ? form.services : undefined,
+        imageUrls: editPlace || imageUrls.length > 0 ? imageUrls : undefined,
+        videoUrls: editPlace || videoUrls.length > 0 ? videoUrls : undefined,
+        model3dUrls: editPlace || model3dUrls.length > 0 ? model3dUrls : undefined,
+        services: editPlace || form.services.length > 0 ? form.services : undefined,
       };
 
       if (editPlace) {
@@ -358,6 +365,7 @@ const CreatePlaceScreen = ({ navigation, route }) => {
                phone: "",
                website: "",
                imageUrls: "",
+               videoUrls: "",
                model3dUrls: "",
                services: [],
              });
@@ -760,6 +768,17 @@ const CreatePlaceScreen = ({ navigation, route }) => {
             value={form.imageUrls}
             onChangeText={(value) => updateField("imageUrls", value)}
             placeholder="https://img1.jpg, https://img2.jpg"
+            placeholderTextColor={COLORS.textLight}
+            autoCapitalize="none"
+            multiline
+          />
+
+          <Text style={styles.sectionLabel}>Videos (URLs separadas por coma)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea, { minHeight: 70 }]}
+            value={form.videoUrls}
+            onChangeText={(value) => updateField("videoUrls", value)}
+            placeholder="https://video.mp4"
             placeholderTextColor={COLORS.textLight}
             autoCapitalize="none"
             multiline

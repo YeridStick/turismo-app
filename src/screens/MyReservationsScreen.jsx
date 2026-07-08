@@ -19,6 +19,7 @@ import {
   getMyReservations,
   getReservationById,
   getReservationMessages,
+  getReservationPaymentStatus,
   initiateReservationPayment,
   sendReservationMessage,
   updateReservation,
@@ -52,19 +53,30 @@ const CONTACT_LABELS = {
 
 const PAYMENT_STATUS_LABELS = {
   pending: "Pendiente",
+  checkout_created: "Pago iniciado",
+  processing: "Validando pago",
   paid: "Pagado",
   failed: "Fallido",
+  expired: "Pago expirado",
   cancelled: "Cancelado",
   refunded: "Reembolsado",
+  verified_by_agency: "Pago verificado por agencia",
 };
 
 const PAYMENT_PROVIDER_LABELS = {
   agency_managed: "Gestionado por la agencia",
+  wompi: "Wompi",
 };
 
 const FINAL_STATUSES = ["confirmed", "rejected", "cancelled"];
 const EDIT_WINDOW_MS = 2 * 60 * 1000;
-const PAYABLE_STATUSES = ["requested", "contacted", "awaiting_payment"];
+const PAYABLE_STATUSES = ["awaiting_payment"];
+const PAYABLE_PAYMENT_STATUSES = [
+  "pending",
+  "checkout_created",
+  "failed",
+  "expired",
+];
 
 const extractItems = (payload) => {
   const data = payload?.data?.data ?? payload?.data ?? payload;
@@ -135,6 +147,31 @@ const formatDate = (value) => {
   }
 
   return `${day}/${month}/${year}`;
+};
+
+const getPaymentErrorMessage = (error) => {
+  const backendMessage = error?.response?.data?.message;
+
+  if (error?.response?.status === 401) {
+    return "Tu sesión venció o no es válida. Inicia sesión nuevamente.";
+  }
+
+  if (error?.response?.status === 404) {
+    return "No encontramos esta reserva con tu usuario.";
+  }
+
+  if (error?.response?.status === 409) {
+    if (backendMessage) {
+      return backendMessage;
+    }
+
+    return "La reserva aún no está habilitada para pago o Wompi no está activo en el backend.";
+  }
+
+  return (
+    backendMessage ||
+    "No pudimos iniciar el pago. Intenta nuevamente cuando la agencia habilite el proceso."
+  );
 };
 
 const DetailRow = ({ label, value }) => (
@@ -482,13 +519,13 @@ const MyReservationsScreen = ({ navigation }) => {
   };
 
   const startReservationPayment = async () => {
-    if (!selectedReservation?.id) return;
+    if (!canPayReservation) return;
 
     setPaymentLoading(true);
 
     try {
       const response = await initiateReservationPayment(selectedReservation.id, {
-        provider: "default",
+        provider: "wompi",
       });
       const data = response.data?.data || response.data || {};
       const checkoutUrl =
@@ -499,6 +536,28 @@ const MyReservationsScreen = ({ navigation }) => {
 
       if (checkoutUrl) {
         await WebBrowser.openBrowserAsync(checkoutUrl);
+        const [statusResult, detailResult] = await Promise.allSettled([
+          getReservationPaymentStatus(selectedReservation.id),
+          getReservationById(selectedReservation.id),
+          loadReservations(),
+        ]);
+        if (detailResult.status === "fulfilled") {
+          setSelectedReservation(extractReservation(detailResult.value));
+        } else if (statusResult.status === "fulfilled") {
+          const statusData = statusResult.value?.data?.data || statusResult.value?.data;
+          setSelectedReservation((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: statusData?.reservationStatus || prev.status,
+                  paymentProvider: statusData?.paymentProvider || prev.paymentProvider,
+                  paymentStatus: statusData?.paymentStatus || prev.paymentStatus,
+                  paymentId: statusData?.providerTransactionId || prev.paymentId,
+                  paidAt: statusData?.paidAt || prev.paidAt,
+                }
+              : prev,
+          );
+        }
         return;
       }
 
@@ -508,11 +567,8 @@ const MyReservationsScreen = ({ navigation }) => {
       );
     } catch (err) {
       Alert.alert(
-        "Pago directo no disponible",
-        err?.response?.status === 404
-          ? "La pasarela de pagos todavía no está activa para reservas."
-          : err?.response?.data?.message ||
-              "No pudimos iniciar el pago. Intenta nuevamente cuando la agencia habilite el proceso.",
+        "Pago no disponible",
+        getPaymentErrorMessage(err),
       );
     } finally {
       setPaymentLoading(false);
@@ -539,11 +595,12 @@ const MyReservationsScreen = ({ navigation }) => {
 
   const editable = canEditReservation(selectedReservation);
   const chatClosed = FINAL_STATUSES.includes(selectedReservation?.status);
+  const normalizedPaymentStatus =
+    selectedReservation?.paymentStatus || "pending";
   const canPayReservation =
     selectedReservation?.id &&
     PAYABLE_STATUSES.includes(selectedReservation?.status) &&
-    selectedReservation?.paymentStatus !== "verified_by_agency" &&
-    selectedReservation?.paymentStatus !== "paid";
+    PAYABLE_PAYMENT_STATUSES.includes(normalizedPaymentStatus);
 
   return (
     <View style={styles.container}>
@@ -973,35 +1030,38 @@ const MyReservationsScreen = ({ navigation }) => {
                       "-"}
                   </Text>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.directPaymentButton,
-                      (!canPayReservation || paymentLoading) &&
-                        styles.disabledAction,
-                    ]}
-                    onPress={startReservationPayment}
-                    disabled={!canPayReservation || paymentLoading}
-                    activeOpacity={0.88}
-                  >
-                    {paymentLoading ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <Ionicons
-                          name="card-outline"
-                          size={17}
-                          color="#FFFFFF"
-                        />
-                        <Text style={styles.directPaymentButtonText}>
-                          Pagar reserva
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  {canPayReservation ? (
+                    <>
+                      <TouchableOpacity
+                        style={[
+                          styles.directPaymentButton,
+                          paymentLoading && styles.disabledAction,
+                        ]}
+                        onPress={startReservationPayment}
+                        disabled={paymentLoading}
+                        activeOpacity={0.88}
+                      >
+                        {paymentLoading ? (
+                          <ActivityIndicator color="#FFFFFF" />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="card-outline"
+                              size={17}
+                              color="#FFFFFF"
+                            />
+                            <Text style={styles.directPaymentButtonText}>
+                              Pagar con Wompi
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
 
-                  <Text style={styles.paymentHintText}>
-                    Si la agencia ya habilitó la pasarela, se abrirá el checkout seguro.
-                  </Text>
+                      <Text style={styles.paymentHintText}>
+                        Se abrirá el checkout seguro enviado por la pasarela.
+                      </Text>
+                    </>
+                  ) : null}
                 </View>
 
                 {selectedReservation?.message ? (

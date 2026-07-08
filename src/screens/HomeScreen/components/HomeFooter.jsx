@@ -1,16 +1,17 @@
 import React from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { ImageBackground, View, Text, TouchableOpacity } from "react-native";
 import { BlurView } from "expo-blur";
 import { FontAwesome } from "@expo/vector-icons";
 import { COLORS } from "../../../utils/constants";
 import styles from "../styles";
 
-const HomeFooter = () => {
+const HomeFooter = ({ imageUris = [] }) => {
   const socialIcons = [
     { name: "facebook", url: "#" },
     { name: "instagram", url: "#" },
     { name: "twitter", url: "#" },
   ];
+  const footerImages = imageUris.filter(Boolean);
 
   return (
     <View style={styles.footer}>
@@ -42,6 +43,33 @@ const HomeFooter = () => {
             ))}
           </View>
         </View>
+
+        {footerImages.length ? (
+          <View style={styles.footerImageGrid}>
+            <ImageBackground
+              source={{ uri: footerImages[0] }}
+              style={[styles.footerImageTile, styles.footerImageTileLarge]}
+              imageStyle={styles.footerImageRadius}
+              resizeMode="cover"
+            >
+              <View style={styles.footerImageOverlay} />
+              <Text style={styles.footerImageText}>Explora rutas vivas</Text>
+            </ImageBackground>
+            <View style={styles.footerImageSideStack}>
+              {footerImages.slice(1, 3).map((uri, index) => (
+                <ImageBackground
+                  key={`${uri}-${index}`}
+                  source={{ uri }}
+                  style={styles.footerImageTileSmall}
+                  imageStyle={styles.footerImageSmallRadius}
+                  resizeMode="cover"
+                >
+                  <View style={styles.footerImageOverlaySoft} />
+                </ImageBackground>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.footerDivider} />
 
