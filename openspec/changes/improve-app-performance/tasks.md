@@ -55,9 +55,9 @@
 
 ## 8. Servicio API y token
 
-- [ ] 8.1 Disenar cache en memoria del token con fallback a `AsyncStorage`.
-- [ ] 8.2 Sincronizar cache con login, logout, cambio de cuenta y limpieza 401.
-- [ ] 8.3 Validar login, logout, cambio de cuenta y requests autenticadas antes de dejar esta mejora activa.
+- [x] 8.1 Disenar cache en memoria del token con fallback a `AsyncStorage`.
+- [x] 8.2 Sincronizar cache con login, logout, cambio de cuenta y limpieza 401.
+- [x] 8.3 Validar login, logout, cambio de cuenta y requests autenticadas antes de dejar esta mejora activa.
 
 ## 9. Loading, error y empty state
 

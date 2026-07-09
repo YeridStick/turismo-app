@@ -1,6 +1,10 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../services/api';
+import api, {
+  clearAuthTokenCache,
+  getAuthToken,
+  setAuthTokenCache,
+} from '../services/api';
 import { ENDPOINTS } from '../config/api.config';
 import {
   confirmTotp as confirmTotpService,
@@ -111,11 +115,13 @@ export const AuthProvider = ({ children }) => {
           if (!refreshed.success) {
             await AsyncStorage.removeItem(ACTIVE_TOKEN_KEY);
             await AsyncStorage.removeItem(ACTIVE_USER_KEY);
+            clearAuthTokenCache();
             return;
           }
           token = refreshed.token;
           await AsyncStorage.setItem(ACTIVE_TOKEN_KEY, token);
         }
+        setAuthTokenCache(token);
         const parsedUser = JSON.parse(userString);
         setUser(parsedUser);
         const payload = decodeJwtPayload(token);
@@ -202,6 +208,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     await AsyncStorage.setItem(ACTIVE_TOKEN_KEY, token);
+    setAuthTokenCache(token);
     const jwtPayload = decodeJwtPayload(token);
     const nextRoles = Array.isArray(jwtPayload?.roles) ? jwtPayload.roles : [];
     setRoles(nextRoles);
@@ -271,6 +278,9 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
+      if (!isTokenExpired(token)) {
+        setAuthTokenCache(token);
+      }
       const userData = await fetchUserInfo(email);
       return activateSession({ token, userData, email });
     } catch (error) {
@@ -303,6 +313,9 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
+      if (!isTokenExpired(token)) {
+        setAuthTokenCache(token);
+      }
       const userData = await fetchUserInfo(email);
       return activateSession({ token, userData, email });
     } catch (error) {
@@ -364,6 +377,7 @@ export const AuthProvider = ({ children }) => {
     // 1. Limpiar estado local inmediatamente para respuesta instantanea
     setUser(null);
     setRoles([]);
+    clearAuthTokenCache();
     
     try {
       // 2. Limpiar almacenamiento persistente
@@ -432,7 +446,7 @@ export const AuthProvider = ({ children }) => {
       const updatedUser = { ...user, ...newUserData };
       await AsyncStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(updatedUser)); 
       setUser(updatedUser); 
-      const token = await AsyncStorage.getItem(ACTIVE_TOKEN_KEY);
+      const token = await getAuthToken();
       if (token) {
         await rememberAccount({ token, userData: updatedUser, email: updatedUser.email });
       }

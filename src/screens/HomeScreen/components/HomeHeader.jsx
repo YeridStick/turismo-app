@@ -96,7 +96,7 @@ const HomeHeader = ({
     <View>
       <BlurView intensity={54} tint="light" style={styles.heroOverlay}>
         <View style={styles.topBar}>
-          <Text style={styles.locationValue}>Cerca de ti</Text>
+          <Text style={styles.locationValue}>Turismo App</Text>
           {user ? (
             <View style={styles.headerActions}>
               <TouchableOpacity

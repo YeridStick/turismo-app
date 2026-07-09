@@ -1,16 +1,16 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    ImageBackground,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 // Modular Components
@@ -47,12 +47,12 @@ import { PremiumModal } from "../../components/ui/PremiumModal";
 import styles from "./styles";
 import { COLORS, HERO_IMAGE, HERO_VIDEO, screenWidth } from "./utils/constants";
 import {
-    formatPrice,
-    getCategoryLabel,
-    getPackageGradient,
-    getPackageImage,
-    getPlaceImages,
-    getPlaceVideo,
+  formatPrice,
+  getCategoryLabel,
+  getPackageGradient,
+  getPackageImage,
+  getPlaceImages,
+  getPlaceVideo,
 } from "./utils/helpers";
 import { buildPlacesById } from "./utils/packagePresentation";
 

@@ -445,6 +445,39 @@ Limitaciones:
 - Queda pendiente revisar manualmente: notificaciones, marcar leidas, dashboard de agencia, cambio rapido de agencias, conteos, reservas de usuario, doble apertura de detalle, mensajes, envio de mensaje y cambio de estado desde agencia.
 - No se cambiaron endpoints, navegacion, parametros de pantalla, proveedor de datos ni `api.js`.
 
+## Nota de ejecucion tarea 8
+
+Fecha: posterior a tarea 9.
+
+Cache de token:
+
+- `src/services/api.js` mantiene una cache en memoria para el token activo.
+- Si la cache esta vacia, `getAuthToken()` lee `AsyncStorage.getItem('token')` una vez y guarda el resultado en memoria.
+- Si la cache ya tiene token o ausencia conocida de token, el interceptor evita nuevas lecturas repetidas a `AsyncStorage`.
+- El interceptor conserva el header publico `Authorization: Bearer <token>` y no sobreescribe headers `Authorization`/`authorization` explicitos.
+- El fallback a `AsyncStorage` se mantiene para arranque de app y compatibilidad con sesiones persistidas.
+
+Sincronizacion:
+
+- `AuthContext.activateSession()` actualiza la cache despues de persistir el token.
+- Login TOTP/password precarga la cache con el token recien recibido cuando no esta expirado.
+- `loadUser()` sincroniza la cache al restaurar o refrescar una sesion guardada.
+- `logout()` limpia la cache junto con el estado local.
+- El interceptor de respuesta limpia cache y storage ante `401`, respetando `skipAuthCleanup` en refresh.
+
+Validacion ejecutada:
+
+- Pruebas unitarias nuevas para cache vacia, cache cargada, headers explicitos, limpieza tipo logout y limpieza por `401`.
+- Parseo de `api.js`, `AuthContext.js` y `api.test.js`.
+- `npm test -- --runInBand`
+  - Resultado: 5 suites passing, 81 tests passing.
+
+Limitaciones:
+
+- No se hizo validacion runtime en dispositivo/emulador durante esta fase.
+- Queda pendiente revisar manualmente: login, requests autenticadas despues de login, logout, login con otra cuenta, request sin sesion, manejo de 401, Home despues de login/logout, reservas, notificaciones y dashboard despues de login.
+- No se cambiaron endpoints, nombres de headers, navegacion, parametros de pantalla ni comportamiento visual.
+
 ## Nota de ejecucion tarea 9
 
 Fecha: posterior a tarea 7.

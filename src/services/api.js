@@ -10,14 +10,50 @@ const api = axios.create({
   },
 });
 
+let cachedAuthToken;
+let tokenReadPromise = null;
+
+export const getAuthToken = async () => {
+  if (cachedAuthToken !== undefined) {
+    return cachedAuthToken;
+  }
+
+  if (!tokenReadPromise) {
+    tokenReadPromise = AsyncStorage.getItem('token')
+      .then((token) => {
+        cachedAuthToken = token || null;
+        return cachedAuthToken;
+      })
+      .finally(() => {
+        tokenReadPromise = null;
+      });
+  }
+
+  return tokenReadPromise;
+};
+
+export const setAuthTokenCache = (token) => {
+  cachedAuthToken = token || null;
+};
+
+export const clearAuthTokenCache = () => {
+  cachedAuthToken = null;
+};
+
+export const resetAuthTokenCache = () => {
+  cachedAuthToken = undefined;
+  tokenReadPromise = null;
+};
+
 // Interceptor para agregar el token a cada request
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await getAuthToken();
       const hasExplicitAuth =
         config.headers?.Authorization || config.headers?.authorization;
       if (token && !hasExplicitAuth) {
+        config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
@@ -35,6 +71,7 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401 && !error.config?.skipAuthCleanup) {
+      clearAuthTokenCache();
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
     }
