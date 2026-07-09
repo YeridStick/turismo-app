@@ -39,11 +39,11 @@
 
 ## 6. Mapa
 
-- [ ] 6.1 Memoizar markers, user location e initial region en `NearbyMapBlock`.
-- [ ] 6.2 Memoizar `mapHTML` en `WebViewMap` y mover `calculateZoomLevel` fuera del render.
-- [ ] 6.3 Evitar `postMessage` repetidos con firmas estables de markers, userLocation y circle.
-- [ ] 6.4 Memoizar `filteredPlaces`, `mapRegion` y `markers` en `MapScreen`.
-- [ ] 6.5 Verificar que el mapa no se reinicializa al abrir/cerrar paneles, modales o cambiar estados no relacionados.
+- [x] 6.1 Memoizar markers, user location e initial region en `NearbyMapBlock`.
+- [x] 6.2 Memoizar `mapHTML` en `WebViewMap` y mover `calculateZoomLevel` fuera del render.
+- [x] 6.3 Evitar `postMessage` repetidos con firmas estables de markers, userLocation y circle.
+- [x] 6.4 Memoizar `filteredPlaces`, `mapRegion` y `markers` en `MapScreen`.
+- [x] 6.5 Verificar que el mapa no se reinicializa al abrir/cerrar paneles, modales o cambiar estados no relacionados.
 
 ## 7. Dashboard, reservas y notificaciones
 

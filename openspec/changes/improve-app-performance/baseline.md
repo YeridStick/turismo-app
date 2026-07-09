@@ -387,3 +387,29 @@ Limitaciones:
 
 - No se hizo medicion runtime con la app abierta en dispositivo/emulador durante esta fase.
 - No se tocaron endpoints, navegacion, `api.js`, dashboard, reservas, notificaciones ni `WebViewMap`.
+
+## Nota de ejecucion tarea 6
+
+Fecha: posterior a tareas 4 y 5.
+
+Mapa optimizado:
+
+- `NearbyMapBlock` memoiza `userLocation`, `initialRegion`, `markers` y `circleRadius` antes de pasarlos a `WebViewMap`.
+- `WebViewMap` mueve `calculateZoomLevel` fuera del componente y memoiza el HTML/source del WebView por region inicial efectiva.
+- `WebViewMap` usa firmas estables para `markers`, `userLocation` y `circle`; si la firma ya fue enviada o esta en cola, no repite `postMessage`.
+- `WebViewMap` conserva `pauseUpdates`; si el panel o un modal pausan el mapa, no marca la firma como enviada y reintenta con los datos vigentes al reanudarse.
+- `MapScreen` memoiza `filteredPlaces`, `mapRegion` y `markers`, y protege `fetchPlaces()` con request key y deduper en vuelo usando los helpers existentes.
+- No se cambio Leaflet, OpenStreetMap, URLs de tiles, endpoints, navegacion ni parametros de pantalla.
+
+Validacion ejecutada:
+
+- Sintaxis JSX validada con Babel parser para `WebViewMap`, `NearbyMapBlock` y `MapScreen`.
+- `npm test -- --runInBand`
+  - Resultado: 4 suites passing, 76 tests passing.
+- `git diff --check`
+  - Resultado: sin errores.
+
+Limitaciones:
+
+- No se hizo medicion runtime con la app abierta en dispositivo/emulador durante esta fase.
+- La verificacion de no reinicializacion del mapa se hizo por estabilidad de props/source: abrir/cerrar paneles o modales cambia `pauseUpdates`, pero no cambia `mapHTML` si la region efectiva permanece igual.

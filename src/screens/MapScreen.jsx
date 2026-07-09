@@ -1,11 +1,40 @@
 import * as Location from 'expo-location';
 import { getDistance } from 'geolib';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import WebViewMap from '../components/WebViewMap';
 import { ENDPOINTS } from '../config/api.config';
 import api from '../services/api';
 import { PremiumModal } from '../components/ui/PremiumModal';
+import {
+    buildRequestKey,
+    createInFlightDeduper,
+    extractArrayPayload,
+} from '../utils/requestHelpers';
+
+const ALL_PLACES_PARAMS = { mode: 'ALL', size: 1000 };
+
+const DEFAULT_MAP_REGION = {
+    latitude: 4.5709,
+    longitude: -74.2973,
+    latitudeDelta: 10,
+    longitudeDelta: 10,
+};
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const distanceInMeters = getDistance(
+        { latitude: lat1, longitude: lon1 },
+        { latitude: lat2, longitude: lon2 }
+    );
+    return distanceInMeters / 1000;
+};
+
+const normalizeMapPlace = (place) => ({
+    id: place.id,
+    name: place.nombre || place.name || place.title || 'Sin nombre',
+    latitude: parseFloat(place.latitud ?? place.latitude ?? place.lat) || 0,
+    longitude: parseFloat(place.longitud ?? place.longitude ?? place.lng) || 0,
+});
 
 const MapScreen = ({ route }) => {
     const [userLocation, setUserLocation] = useState(null);
@@ -14,9 +43,37 @@ const MapScreen = ({ route }) => {
     const [filterMode, setFilterMode] = useState('all'); // 'all', 'nearby', 'selected'
     const [locationPermission, setLocationPermission] = useState(false);
     const [modal, setModal] = useState({ visible: false, type: 'info', title: '', message: '' });
+    const requestDeduper = useMemo(() => createInFlightDeduper(), []);
 
     // Parámetro opcional: sitio seleccionado desde otra pantalla
     const selectedPlaceId = route?.params?.placeId;
+
+    const fetchPlaces = useCallback(async () => {
+        const requestKey = buildRequestKey({
+            method: 'GET',
+            endpoint: ENDPOINTS.PLACES_SEARCH,
+            params: ALL_PLACES_PARAMS,
+            scope: 'MapScreen',
+        });
+
+        try {
+            const response = await requestDeduper.run(requestKey, () =>
+                api.get(ENDPOINTS.PLACES_SEARCH, { params: ALL_PLACES_PARAMS }),
+            );
+            const placesData = extractArrayPayload(response).map(normalizeMapPlace);
+            setPlaces(placesData);
+        } catch (error) {
+            console.error('Error cargando sitios:', error);
+            setModal({
+                visible: true,
+                type: 'error',
+                title: 'Error de Carga',
+                message: 'No pudimos descargar los sitios turísticos en este momento.'
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [requestDeduper]);
 
     // Solicitar permisos de ubicación y obtener ubicación del usuario
     useEffect(() => {
@@ -60,51 +117,16 @@ const MapScreen = ({ route }) => {
                 setLoading(false);
             }
         })();
-    }, []);
+    }, [fetchPlaces]);
 
     // Si hay un sitio seleccionado, cambiar modo al abrir
     useEffect(() => {
         if (selectedPlaceId && places.length > 0) {
             setFilterMode('selected');
         }
-    }, [selectedPlaceId, places]);
+    }, [selectedPlaceId, places.length]);
 
-    const fetchPlaces = async () => {
-        try {
-            const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: 1000 } });
-            if (response.data?.data) {
-                const placesData = response.data.data.map(place => ({
-                    id: place.id,
-                    name: place.nombre || 'Sin nombre',
-                    latitude: parseFloat(place.latitud) || 0,
-                    longitude: parseFloat(place.longitud) || 0,
-                }));
-                setPlaces(placesData);
-            }
-        } catch (error) {
-            console.error('Error cargando sitios:', error);
-            setModal({
-                visible: true,
-                type: 'error',
-                title: 'Error de Carga',
-                message: 'No pudimos descargar los sitios turísticos en este momento.'
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Calcular distancia entre dos puntos usando geolib
-    const calculateDistance = (lat1, lon1, lat2, lon2) => {
-        const distanceInMeters = getDistance(
-            { latitude: lat1, longitude: lon1 },
-            { latitude: lat2, longitude: lon2 }
-        );
-        return distanceInMeters / 1000; // Convertir a km
-    };
-
-    // Filtrar sitios según el modo seleccionado
-    const getFilteredPlaces = () => {
+    const filteredPlaces = useMemo(() => {
         if (!userLocation) return [];
 
         switch (filterMode) {
@@ -127,20 +149,16 @@ const MapScreen = ({ route }) => {
             default:
                 return places;
         }
-    };
+    }, [
+        filterMode,
+        places,
+        selectedPlaceId,
+        userLocation?.latitude,
+        userLocation?.longitude,
+    ]);
 
-    // Calcular región del mapa basada en los sitios filtrados
-    const getMapRegion = () => {
-        const filteredPlaces = getFilteredPlaces();
-
-        if (!userLocation) {
-            return {
-                latitude: 4.5709, // Centro de Colombia por defecto
-                longitude: -74.2973,
-                latitudeDelta: 10,
-                longitudeDelta: 10,
-            };
-        }
+    const mapRegion = useMemo(() => {
+        if (!userLocation) return DEFAULT_MAP_REGION;
 
         if (filteredPlaces.length === 0) {
             return {
@@ -183,10 +201,68 @@ const MapScreen = ({ route }) => {
             latitudeDelta: Math.max(latDelta, 0.1),
             longitudeDelta: Math.max(lonDelta, 0.1),
         };
-    };
+    }, [
+        filterMode,
+        filteredPlaces,
+        userLocation?.latitude,
+        userLocation?.longitude,
+    ]);
 
-    const filteredPlaces = getFilteredPlaces();
-    const mapRegion = getMapRegion();
+    const markers = useMemo(
+        () =>
+            filteredPlaces.map(place => {
+                const distance = userLocation
+                    ? calculateDistance(
+                        userLocation.latitude,
+                        userLocation.longitude,
+                        place.latitude,
+                        place.longitude
+                    )
+                    : 0;
+
+                return {
+                    id: place.id,
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                    title: place.name,
+                    description: `${distance.toFixed(2)} km de distancia`,
+                    pinColor: filterMode === 'selected' && place.id === selectedPlaceId ? 'green' : 'red'
+                };
+            }),
+        [
+            filterMode,
+            filteredPlaces,
+            selectedPlaceId,
+            userLocation?.latitude,
+            userLocation?.longitude,
+        ],
+    );
+
+    const handleRetryLocation = useCallback(() => {
+        setLoading(true);
+        Location.requestForegroundPermissionsAsync().then(({ status }) => {
+            if (status === 'granted') {
+                setLocationPermission(true);
+                Location.getCurrentPositionAsync().then(location => {
+                    setUserLocation({
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                    });
+                    fetchPlaces();
+                });
+            } else {
+                setLoading(false);
+            }
+        });
+    }, [fetchPlaces]);
+
+    const showNearbyPlaces = useCallback(() => setFilterMode('nearby'), []);
+    const showSelectedPlace = useCallback(() => setFilterMode('selected'), []);
+    const showAllPlaces = useCallback(() => setFilterMode('all'), []);
+    const closeModal = useCallback(
+        () => setModal(prev => ({ ...prev, visible: false })),
+        [],
+    );
 
     if (loading) {
         return (
@@ -206,23 +282,7 @@ const MapScreen = ({ route }) => {
                 </Text>
                 <TouchableOpacity
                     style={styles.retryButton}
-                    onPress={() => {
-                        setLoading(true);
-                        Location.requestForegroundPermissionsAsync().then(({ status }) => {
-                            if (status === 'granted') {
-                                setLocationPermission(true);
-                                Location.getCurrentPositionAsync().then(location => {
-                                    setUserLocation({
-                                        latitude: location.coords.latitude,
-                                        longitude: location.coords.longitude,
-                                    });
-                                    fetchPlaces();
-                                });
-                            } else {
-                                setLoading(false);
-                            }
-                        });
-                    }}
+                    onPress={handleRetryLocation}
                 >
                     <Text style={styles.retryButtonText}>Reintentar</Text>
                 </TouchableOpacity>
@@ -236,7 +296,7 @@ const MapScreen = ({ route }) => {
             <View style={styles.filterContainer}>
                 <TouchableOpacity
                     style={[styles.filterButton, filterMode === 'nearby' && styles.filterButtonActive]}
-                    onPress={() => setFilterMode('nearby')}
+                    onPress={showNearbyPlaces}
                 >
                     <Text style={[styles.filterButtonText, filterMode === 'nearby' && styles.filterButtonTextActive]}>
                         📍 Cercanos
@@ -246,7 +306,7 @@ const MapScreen = ({ route }) => {
                 {selectedPlaceId && (
                     <TouchableOpacity
                         style={[styles.filterButton, filterMode === 'selected' && styles.filterButtonActive]}
-                        onPress={() => setFilterMode('selected')}
+                        onPress={showSelectedPlace}
                     >
                         <Text style={[styles.filterButtonText, filterMode === 'selected' && styles.filterButtonTextActive]}>
                             🎯 Seleccionado
@@ -256,7 +316,7 @@ const MapScreen = ({ route }) => {
 
                 <TouchableOpacity
                     style={[styles.filterButton, filterMode === 'all' && styles.filterButtonActive]}
-                    onPress={() => setFilterMode('all')}
+                    onPress={showAllPlaces}
                 >
                     <Text style={[styles.filterButtonText, filterMode === 'all' && styles.filterButtonTextActive]}>
                         🗺️ Todos
@@ -267,25 +327,7 @@ const MapScreen = ({ route }) => {
             {/* Mapa nativo con react-native-maps */}
             <WebViewMap
                 initialRegion={mapRegion}
-                markers={filteredPlaces.map(place => {
-                    const distance = userLocation
-                        ? calculateDistance(
-                            userLocation.latitude,
-                            userLocation.longitude,
-                            place.latitude,
-                            place.longitude
-                        )
-                        : 0;
-
-                    return {
-                        id: place.id,
-                        latitude: place.latitude,
-                        longitude: place.longitude,
-                        title: place.name,
-                        description: `${distance.toFixed(2)} km de distancia`,
-                        pinColor: filterMode === 'selected' && place.id === selectedPlaceId ? 'green' : 'red'
-                    };
-                })}
+                markers={markers}
                 userLocation={userLocation}
                 showCircle={filterMode === 'nearby'}
                 circleRadius={50000}
@@ -307,7 +349,7 @@ const MapScreen = ({ route }) => {
                 type={modal.type}
                 title={modal.title}
                 message={modal.message}
-                onClose={() => setModal(prev => ({ ...prev, visible: false }))}
+                onClose={closeModal}
             />
         </View>
     );

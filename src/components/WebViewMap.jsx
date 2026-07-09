@@ -1,6 +1,80 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
+
+const noop = () => {};
+
+const DEFAULT_REGION = {
+    latitude: 4.5709,
+    longitude: -74.2973,
+    latitudeDelta: 10,
+    longitudeDelta: 10,
+};
+
+const toFiniteNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toSignatureNumber = (value, fractionDigits = 6) =>
+    toFiniteNumber(value).toFixed(fractionDigits);
+
+// Calculate zoom level from latitudeDelta
+const calculateZoomLevel = (latitudeDelta) => {
+    if (latitudeDelta >= 10) return 6;
+    if (latitudeDelta >= 5) return 7;
+    if (latitudeDelta >= 2) return 8;
+    if (latitudeDelta >= 1) return 9;
+    if (latitudeDelta >= 0.5) return 10;
+    if (latitudeDelta >= 0.2) return 11;
+    if (latitudeDelta >= 0.1) return 12;
+    if (latitudeDelta >= 0.05) return 13;
+    return 14;
+};
+
+const normalizeRegion = (region) => ({
+    latitude: toFiniteNumber(region?.latitude, DEFAULT_REGION.latitude),
+    longitude: toFiniteNumber(region?.longitude, DEFAULT_REGION.longitude),
+    latitudeDelta: toFiniteNumber(region?.latitudeDelta, DEFAULT_REGION.latitudeDelta),
+    longitudeDelta: toFiniteNumber(region?.longitudeDelta, DEFAULT_REGION.longitudeDelta),
+});
+
+const getRegionSignature = (region) =>
+    [
+        toSignatureNumber(region.latitude),
+        toSignatureNumber(region.longitude),
+        toSignatureNumber(region.latitudeDelta),
+        toSignatureNumber(region.longitudeDelta),
+    ].join('|');
+
+const getMarkersSignature = (markers = []) =>
+    markers
+        .map((marker, index) =>
+            [
+                marker?.id ?? index,
+                toSignatureNumber(marker?.latitude),
+                toSignatureNumber(marker?.longitude),
+                marker?.title || '',
+                marker?.description || '',
+                marker?.pinColor || '',
+            ].join(':'),
+        )
+        .join('|');
+
+const getUserLocationSignature = (userLocation) =>
+    userLocation
+        ? [
+            toSignatureNumber(userLocation.latitude),
+            toSignatureNumber(userLocation.longitude),
+        ].join('|')
+        : 'none';
+
+const getCircleSignature = ({ showCircle, circleRadius, userLocation }) =>
+    [
+        showCircle ? 'show' : 'hide',
+        toSignatureNumber(circleRadius, 2),
+        getUserLocationSignature(userLocation),
+    ].join('|');
 
 const WebViewMap = ({
     initialRegion,
@@ -9,11 +83,13 @@ const WebViewMap = ({
     showCircle = false,
     circleRadius = 50000,
     pauseUpdates = false,
-    onMapReady = () => { },
+    onMapReady = noop,
     onMapPress = null,
 }) => {
     const webViewRef = useRef(null);
     const pauseUpdatesRef = useRef(pauseUpdates);
+    const sentSignaturesRef = useRef({});
+    const queuedSignaturesRef = useRef({});
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -21,21 +97,65 @@ const WebViewMap = ({
         pauseUpdatesRef.current = pauseUpdates;
     }, [pauseUpdates]);
 
-    // Calculate zoom level from latitudeDelta
-    const calculateZoomLevel = (latitudeDelta) => {
-        if (latitudeDelta >= 10) return 6;
-        if (latitudeDelta >= 5) return 7;
-        if (latitudeDelta >= 2) return 8;
-        if (latitudeDelta >= 1) return 9;
-        if (latitudeDelta >= 0.5) return 10;
-        if (latitudeDelta >= 0.2) return 11;
-        if (latitudeDelta >= 0.1) return 12;
-        if (latitudeDelta >= 0.05) return 13;
-        return 14;
-    };
+    const effectiveInitialRegion = useMemo(
+        () => normalizeRegion(initialRegion),
+        [
+            initialRegion?.latitude,
+            initialRegion?.longitude,
+            initialRegion?.latitudeDelta,
+            initialRegion?.longitudeDelta,
+        ],
+    );
+
+    const initialRegionSignature = useMemo(
+        () => getRegionSignature(effectiveInitialRegion),
+        [effectiveInitialRegion],
+    );
+
+    const markersSignature = useMemo(
+        () => getMarkersSignature(markers),
+        [markers],
+    );
+
+    const userLocationSignature = useMemo(
+        () => getUserLocationSignature(userLocation),
+        [userLocation?.latitude, userLocation?.longitude],
+    );
+
+    const circleSignature = useMemo(
+        () => getCircleSignature({ showCircle, circleRadius, userLocation }),
+        [circleRadius, showCircle, userLocation?.latitude, userLocation?.longitude],
+    );
+
+    useEffect(() => {
+        sentSignaturesRef.current = {};
+        queuedSignaturesRef.current = {};
+    }, [initialRegionSignature]);
+
+    const postMapMessage = useCallback((signatureKey, signature, payload, delay = 500) => {
+        if (!signatureKey || signature == null) return;
+        if (
+            sentSignaturesRef.current[signatureKey] === signature ||
+            queuedSignaturesRef.current[signatureKey] === signature
+        ) {
+            return;
+        }
+
+        queuedSignaturesRef.current[signatureKey] = signature;
+
+        setTimeout(() => {
+            if (queuedSignaturesRef.current[signatureKey] !== signature) return;
+            queuedSignaturesRef.current[signatureKey] = null;
+
+            if (webViewRef.current && !pauseUpdatesRef.current) {
+                webViewRef.current.postMessage(JSON.stringify(payload));
+                sentSignaturesRef.current[signatureKey] = signature;
+            }
+        }, delay);
+    }, []);
 
     // Generate HTML for the map with OpenStreetMap
-    const mapHTML = `
+    const mapHTML = useMemo(() => `
     <!DOCTYPE html>
     <html>
     <head>
@@ -143,11 +263,11 @@ const WebViewMap = ({
                         attributionControl: true,
                         preferCanvas: true
                     }).setView(
-                        [${initialRegion.latitude}, ${initialRegion.longitude}],
-                        ${calculateZoomLevel(initialRegion.latitudeDelta)}
+                        [${effectiveInitialRegion.latitude}, ${effectiveInitialRegion.longitude}],
+                        ${calculateZoomLevel(effectiveInitialRegion.latitudeDelta)}
                     );
 
-                    log('Mapa inicializado en [${initialRegion.latitude}, ${initialRegion.longitude}]');
+                    log('Mapa inicializado en [${effectiveInitialRegion.latitude}, ${effectiveInitialRegion.longitude}]');
 
                     // Add map tiles with fallback. WebView can occasionally fail one CDN
                     // and leave only Leaflet's beige base visible.
@@ -345,57 +465,78 @@ const WebViewMap = ({
         </script>
     </body>
     </html>
-    `;
+    `, [
+        effectiveInitialRegion.latitude,
+        effectiveInitialRegion.longitude,
+        effectiveInitialRegion.latitudeDelta,
+        effectiveInitialRegion.longitudeDelta,
+    ]);
+
+    const webViewSource = useMemo(() => ({ html: mapHTML }), [mapHTML]);
 
     // Send updates to WebView when props change
     // Usar setTimeout para asegurar que el WebView está listo en APK
     useEffect(() => {
-        if (webViewRef.current && markers.length > 0 && !isLoading && !pauseUpdates) {
-            setTimeout(() => {
-                if (webViewRef.current && !pauseUpdatesRef.current) {
-                    const message = JSON.stringify({
-                        type: 'UPDATE_MARKERS',
-                        markers: markers
-                    });
-                    webViewRef.current.postMessage(message);
-                }
-            }, 500); // Delay para asegurar que el WebView esté listo
+        if (!isLoading && !pauseUpdates) {
+            postMapMessage(
+                'markers',
+                markersSignature,
+                {
+                    type: 'UPDATE_MARKERS',
+                    markers,
+                },
+                500,
+            );
         }
-    }, [markers, isLoading, pauseUpdates]);
+    }, [isLoading, markers, markersSignature, pauseUpdates, postMapMessage]);
 
     useEffect(() => {
-        if (webViewRef.current && userLocation && !isLoading && !pauseUpdates) {
-            setTimeout(() => {
-                if (webViewRef.current && !pauseUpdatesRef.current) {
-                    const message = JSON.stringify({
-                        type: 'UPDATE_USER_LOCATION',
-                        latitude: userLocation.latitude,
-                        longitude: userLocation.longitude
-                    });
-                    webViewRef.current.postMessage(message);
-                }
-            }, 500);
+        if (userLocation && !isLoading && !pauseUpdates) {
+            postMapMessage(
+                'userLocation',
+                userLocationSignature,
+                {
+                    type: 'UPDATE_USER_LOCATION',
+                    latitude: userLocation.latitude,
+                    longitude: userLocation.longitude,
+                },
+                500,
+            );
         }
-    }, [userLocation, isLoading, pauseUpdates]);
+    }, [
+        isLoading,
+        pauseUpdates,
+        postMapMessage,
+        userLocation,
+        userLocationSignature,
+    ]);
 
     useEffect(() => {
-        if (webViewRef.current && userLocation && !isLoading && !pauseUpdates) {
-            setTimeout(() => {
-                if (webViewRef.current && !pauseUpdatesRef.current) {
-                    const message = JSON.stringify({
-                        type: 'UPDATE_CIRCLE',
-                        latitude: userLocation.latitude,
-                        longitude: userLocation.longitude,
-                        radius: circleRadius,
-                        show: showCircle
-                    });
-                    webViewRef.current.postMessage(message);
-                }
-            }, 500);
+        if (userLocation && !isLoading && !pauseUpdates) {
+            postMapMessage(
+                'circle',
+                circleSignature,
+                {
+                    type: 'UPDATE_CIRCLE',
+                    latitude: userLocation.latitude,
+                    longitude: userLocation.longitude,
+                    radius: circleRadius,
+                    show: showCircle,
+                },
+                500,
+            );
         }
-    }, [showCircle, circleRadius, userLocation, isLoading, pauseUpdates]);
+    }, [
+        circleRadius,
+        circleSignature,
+        isLoading,
+        pauseUpdates,
+        postMapMessage,
+        showCircle,
+        userLocation,
+    ]);
 
-    const handleMessage = (event) => {
+    const handleMessage = useCallback((event) => {
         try {
             const data = JSON.parse(event.nativeEvent.data);
 
@@ -406,32 +547,41 @@ const WebViewMap = ({
                 setError(null);
 
                 // Enviar datos inmediatamente después de que el mapa esté listo
-                setTimeout(() => {
-                    if (webViewRef.current && !pauseUpdatesRef.current) {
-                        if (markers.length > 0) {
-                            webViewRef.current.postMessage(JSON.stringify({
-                                type: 'UPDATE_MARKERS',
-                                markers: markers
-                            }));
-                        }
-                        if (userLocation) {
-                            webViewRef.current.postMessage(JSON.stringify({
-                                type: 'UPDATE_USER_LOCATION',
+                postMapMessage(
+                    'markers',
+                    markersSignature,
+                    {
+                        type: 'UPDATE_MARKERS',
+                        markers,
+                    },
+                    1000,
+                );
+                if (userLocation) {
+                    postMapMessage(
+                        'userLocation',
+                        userLocationSignature,
+                        {
+                            type: 'UPDATE_USER_LOCATION',
+                            latitude: userLocation.latitude,
+                            longitude: userLocation.longitude,
+                        },
+                        1000,
+                    );
+                    if (showCircle) {
+                        postMapMessage(
+                            'circle',
+                            circleSignature,
+                            {
+                                type: 'UPDATE_CIRCLE',
                                 latitude: userLocation.latitude,
-                                longitude: userLocation.longitude
-                            }));
-                            if (showCircle) {
-                                webViewRef.current.postMessage(JSON.stringify({
-                                    type: 'UPDATE_CIRCLE',
-                                    latitude: userLocation.latitude,
-                                    longitude: userLocation.longitude,
-                                    radius: circleRadius,
-                                    show: showCircle
-                                }));
-                            }
-                        }
+                                longitude: userLocation.longitude,
+                                radius: circleRadius,
+                                show: showCircle,
+                            },
+                            1000,
+                        );
                     }
-                }, 1000); // Dar 1 segundo para que el mapa se inicialice completamente
+                }
                 onMapReady();
             } else if (data.type === 'MAP_CLICK') {
                 if (onMapPress) {
@@ -450,29 +600,40 @@ const WebViewMap = ({
         } catch (error) {
             console.error('Error parsing WebView message:', error);
         }
-    };
+    }, [
+        circleRadius,
+        circleSignature,
+        markers,
+        markersSignature,
+        onMapPress,
+        onMapReady,
+        postMapMessage,
+        showCircle,
+        userLocation,
+        userLocationSignature,
+    ]);
 
-    const handleError = (syntheticEvent) => {
+    const handleError = useCallback((syntheticEvent) => {
         const { nativeEvent } = syntheticEvent;
         console.error('WebView error:', nativeEvent);
         setError('Error cargando el mapa');
         setIsLoading(false);
-    };
+    }, []);
 
-    const handleLoadStart = () => {
+    const handleLoadStart = useCallback(() => {
         console.log('🔄 Iniciando carga del WebView...');
         setIsLoading(true);
-    };
+    }, []);
 
-    const handleLoadEnd = () => {
+    const handleLoadEnd = useCallback(() => {
         console.log('✅ WebView cargado');
-    };
+    }, []);
 
     return (
         <View style={styles.container}>
             <WebView
                 ref={webViewRef}
-                source={{ html: mapHTML }}
+                source={webViewSource}
                 style={styles.webView}
                 onMessage={handleMessage}
                 onError={handleError}

@@ -1,5 +1,5 @@
 import { FontAwesome } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -16,6 +16,9 @@ import { formatDistance, getPlaceImage } from "../utils/helpers";
 import PlaceCard from "./PlaceCard";
 
 const nearbyKeyExtractor = (item, idx) => `nearby-${item.id || idx}`;
+
+const isValidCoordinate = (value) =>
+  Number.isFinite(value?.latitude) && Number.isFinite(value?.longitude);
 
 const NearbyPlaceItem = React.memo(({
   item,
@@ -139,24 +142,50 @@ const NearbyMapBlock = ({
     [getTopPlaceMeta, onArPress, onPlacePress],
   );
 
-  const center =
-    coords &&
-    Number.isFinite(coords.latitude) &&
-    Number.isFinite(coords.longitude)
-      ? coords
-      : FALLBACK_CENTER;
+  const userLocation = useMemo(
+    () =>
+      isValidCoordinate(coords)
+        ? {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          }
+        : null,
+    [coords?.latitude, coords?.longitude],
+  );
 
-  const delta = Math.max(distanceKm / 110, 0.015);
-  const nearbyMarkers = filteredNearby
-    .filter((place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng))
-    .map((place) => ({
-      latitude: place.lat,
-      longitude: place.lng,
-      title: place.name,
-      description:
-        place.description ||
-        (place.distanceMeters ? formatDistance(place.distanceMeters) : ""),
-    }));
+  const center = useMemo(
+    () => userLocation || FALLBACK_CENTER,
+    [userLocation],
+  );
+
+  const delta = useMemo(() => Math.max(distanceKm / 110, 0.015), [distanceKm]);
+
+  const initialRegion = useMemo(
+    () => ({
+      latitude: center.latitude,
+      longitude: center.longitude,
+      latitudeDelta: delta,
+      longitudeDelta: delta,
+    }),
+    [center.latitude, center.longitude, delta],
+  );
+
+  const nearbyMarkers = useMemo(
+    () =>
+      filteredNearby
+        .filter((place) => Number.isFinite(place?.lat) && Number.isFinite(place?.lng))
+        .map((place) => ({
+          latitude: place.lat,
+          longitude: place.lng,
+          title: place.name,
+          description:
+            place.description ||
+            (place.distanceMeters ? formatDistance(place.distanceMeters) : ""),
+        })),
+    [filteredNearby],
+  );
+
+  const circleRadius = useMemo(() => distanceKm * 1000, [distanceKm]);
 
   return (
     <View style={styles.mapCard}>
@@ -174,22 +203,11 @@ const NearbyMapBlock = ({
           </View>
         ) : (
           <WebViewMap
-            initialRegion={{
-              latitude: center.latitude,
-              longitude: center.longitude,
-              latitudeDelta: delta,
-              longitudeDelta: delta,
-            }}
+            initialRegion={initialRegion}
             markers={nearbyMarkers}
-            userLocation={
-              coords &&
-              Number.isFinite(coords.latitude) &&
-              Number.isFinite(coords.longitude)
-                ? coords
-                : null
-            }
+            userLocation={userLocation}
             showCircle={true}
-            circleRadius={distanceKm * 1000}
+            circleRadius={circleRadius}
             pauseUpdates={pauseMapUpdates}
             scrollEnabled={isInteractingWithMap || mapGestureLocked}
             zoomEnabled={isInteractingWithMap || mapGestureLocked}
