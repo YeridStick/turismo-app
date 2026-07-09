@@ -172,8 +172,10 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState("");
   const [messageText, setMessageText] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [statusModal, setStatusModal] = useState({
@@ -277,10 +279,11 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
   }, [agencyId, getReservationsListKey, params, requestDeduper]);
 
   const refresh = useCallback(async () => {
+    if (refreshing || loading) return;
     setRefreshing(true);
     await loadReservations();
     setRefreshing(false);
-  }, [loadReservations]);
+  }, [loadReservations, loading, refreshing]);
 
   const loadMessages = useCallback(async (reservationId) => {
     if (!reservationId) return;
@@ -288,6 +291,7 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
     const requestSeq = messagesRequestSeqRef.current + 1;
     messagesRequestSeqRef.current = requestSeq;
     setMessagesLoading(true);
+    setMessagesError("");
 
     try {
       const params = {
@@ -307,6 +311,12 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
       }
     } catch (_err) {
       // Conserva los mensajes visibles; el siguiente refresh reconcilia.
+      if (
+        requestSeq === messagesRequestSeqRef.current &&
+        String(selectedReservationRef.current?.id) === String(reservationId)
+      ) {
+        setMessagesError("No pudimos cargar los mensajes de esta solicitud.");
+      }
     } finally {
       if (requestSeq === messagesRequestSeqRef.current) {
         setMessagesLoading(false);
@@ -337,6 +347,8 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
       }
       setMessageText("");
       setDetailLoading(true);
+      setDetailError("");
+      setMessagesError("");
 
       try {
         const response = await fetchReservationDetail(reservation.id);
@@ -350,6 +362,10 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
         }
       } catch (err) {
         if (requestSeq === detailRequestSeqRef.current) {
+          setDetailError(
+            err?.response?.data?.message ||
+              "No pudimos cargar el detalle de esta solicitud.",
+          );
           Alert.alert(
             "No se pudo cargar",
             err?.response?.data?.message || "Intenta nuevamente.",
@@ -371,8 +387,10 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
     selectedReservationRef.current = null;
     setSelectedReservation(null);
     setDetailLoading(false);
+    setDetailError("");
     setMessages([]);
     setMessagesLoading(false);
+    setMessagesError("");
     setMessageText("");
   };
 
@@ -541,10 +559,35 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
           )}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} colors={[COLORS.primary]} />}
+          ListHeaderComponent={
+            error && reservations.length > 0 ? (
+              <TouchableOpacity
+                style={styles.inlineErrorBanner}
+                onPress={refresh}
+                disabled={refreshing}
+              >
+                <Ionicons name="alert-circle-outline" size={16} color="#F97316" />
+                <Text style={styles.inlineErrorText}>{error}</Text>
+              </TouchableOpacity>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
               <FontAwesome name="inbox" size={40} color="#CBD5E1" />
               <Text style={styles.emptyTitle}>{error || "No hay solicitudes en este estado."}</Text>
+              {error ? (
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={refresh}
+                  disabled={refreshing}
+                >
+                  {refreshing ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.retryButtonText}>Volver a cargar</Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
             </View>
           }
         />
@@ -616,6 +659,21 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
                 <ActivityIndicator size="large" color={COLORS.primary} />
                 <Text style={styles.loadingText}>Cargando detalle...</Text>
               </View>
+            ) : detailError ? (
+              <View style={styles.detailLoading}>
+                <Ionicons name="alert-circle-outline" size={38} color="#DC2626" />
+                <Text style={styles.emptyTitle}>No se pudo cargar</Text>
+                <Text style={styles.detailBoxText}>{detailError}</Text>
+                {selectedReservation?.id ? (
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => openDetail(selectedReservation)}
+                    disabled={detailLoading}
+                  >
+                    <Text style={styles.retryButtonText}>Reintentar</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             ) : (
               <ScrollView contentContainerStyle={styles.detailContent}>
                 <View style={styles.detailBox}>
@@ -639,47 +697,75 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
 
                 <View style={styles.detailBox}>
                   <Text style={styles.detailBoxTitle}>Mensajeria interna</Text>
-                  {messagesLoading ? (
+                  {messagesLoading && messages.length === 0 ? (
                     <ActivityIndicator color={COLORS.primary} />
                   ) : messages.length === 0 ? (
-                    <Text style={styles.chatEmptyText}>Aun no hay mensajes.</Text>
+                    <>
+                      <Text
+                        style={[
+                          styles.chatEmptyText,
+                          messagesError && styles.chatErrorText,
+                        ]}
+                      >
+                        {messagesError || "Aun no hay mensajes."}
+                      </Text>
+                      {messagesError ? (
+                        <TouchableOpacity
+                          style={styles.chatRetryButton}
+                          onPress={() => loadMessages(selectedReservation?.id)}
+                          disabled={messagesLoading}
+                        >
+                          <Text style={styles.chatRetryButtonText}>
+                            Reintentar mensajes
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </>
                   ) : (
-                    <View style={styles.chatList}>
-                      {messages.map((message) => {
-                        const system = message.senderType === "SYSTEM";
-                        const fromAgency = message.senderType === "AGENCY";
-                        return (
-                          <View
-                            key={String(message.id)}
-                            style={[
-                              styles.chatBubble,
-                              system
-                                ? styles.chatBubbleSystem
-                                : fromAgency
-                                  ? styles.chatBubbleMine
-                                  : styles.chatBubbleCustomer,
-                            ]}
-                          >
-                            <Text
+                    <>
+                      <View style={styles.chatList}>
+                        {messages.map((message) => {
+                          const system = message.senderType === "SYSTEM";
+                          const fromAgency = message.senderType === "AGENCY";
+                          return (
+                            <View
+                              key={String(message.id)}
                               style={[
-                                styles.chatSender,
-                                system && styles.chatSenderSystem,
+                                styles.chatBubble,
+                                system
+                                  ? styles.chatBubbleSystem
+                                  : fromAgency
+                                    ? styles.chatBubbleMine
+                                    : styles.chatBubbleCustomer,
                               ]}
                             >
-                              {system ? "Sistema" : fromAgency ? "Agencia" : "Cliente"}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.chatMessage,
-                                system && styles.chatMessageSystem,
-                              ]}
-                            >
-                              {message.message}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
+                              <Text
+                                style={[
+                                  styles.chatSender,
+                                  system && styles.chatSenderSystem,
+                                ]}
+                              >
+                                {system ? "Sistema" : fromAgency ? "Agencia" : "Cliente"}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.chatMessage,
+                                  system && styles.chatMessageSystem,
+                                ]}
+                              >
+                                {message.message}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                      {messagesLoading ? (
+                        <ActivityIndicator color={COLORS.primary} />
+                      ) : null}
+                      {messagesError ? (
+                        <Text style={styles.chatErrorText}>{messagesError}</Text>
+                      ) : null}
+                    </>
                   )}
 
                   {FINAL_STATUSES.includes(selectedReservation?.status) ? (
@@ -917,6 +1003,38 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     textAlign: "center",
   },
+  inlineErrorBanner: {
+    marginBottom: SPACING.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    backgroundColor: "#FFF7ED",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  inlineErrorText: {
+    flex: 1,
+    color: "#C2410C",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  retryButton: {
+    minHeight: 42,
+    marginTop: SPACING.md,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
   modalBackdrop: {
     flex: 1,
     justifyContent: "center",
@@ -1040,6 +1158,25 @@ const styles = StyleSheet.create({
   chatEmptyText: {
     color: COLORS.textLight,
     lineHeight: 20,
+  },
+  chatErrorText: {
+    color: "#DC2626",
+    fontWeight: "700",
+  },
+  chatRetryButton: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#A5F3FC",
+    backgroundColor: "#ECFEFF",
+  },
+  chatRetryButtonText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "800",
   },
   chatList: {
     gap: 8,

@@ -145,11 +145,15 @@ const HomeScreen = ({ navigation }) => {
     loadingMorePackages,
     loadingMoreAgencies,
     loadingNearbyContext,
+    loadingCategories,
     error,
+    nearbyError,
     topPlacesError,
     bestRatedError,
     packagesError,
     agenciesError,
+    categoriesError,
+    locationError,
     allPlacesPage,
     setAllPlacesPage,
     hasMorePlaces,
@@ -167,6 +171,7 @@ const HomeScreen = ({ navigation }) => {
     loadAll,
     loadPackages,
     loadAgencies,
+    loadCategories,
     loadNearby,
     performSearch,
     loadMoreAgencies,
@@ -261,6 +266,17 @@ const HomeScreen = ({ navigation }) => {
       ? searchResults
       : places;
   }, [hasActiveCatalogFilter, searchResults, places]);
+  const catalogInitialLoading = loadingAll && displayPlaces.length === 0;
+  const catalogEmptyTitle = error
+    ? "No pudimos cargar lugares"
+    : hasActiveCatalogFilter
+      ? "Sin resultados para este filtro"
+      : "Aún no hay lugares publicados";
+  const catalogEmptyDescription = error
+    ? "Conservamos cualquier información previa disponible. Puedes intentar cargar el catálogo nuevamente."
+    : hasActiveCatalogFilter
+      ? "Prueba cambiando la búsqueda, la categoría o el radio para ver más lugares."
+      : "Cuando haya lugares disponibles, aparecerán aquí para explorar y abrir su detalle.";
 
   const searchSuggestions = useMemo(() => {
     if (!trimmedQuery) return [];
@@ -348,6 +364,8 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const handleIncreaseRadius = useCallback(() => {
+    if (loadingNearby) return;
+
     let nextDist = 15;
     if (distanceKm >= 50) nextDist = 100;
     else if (distanceKm >= 15) nextDist = 50;
@@ -355,18 +373,63 @@ const HomeScreen = ({ navigation }) => {
 
     setDistanceKm(nextDist);
     loadNearby(nextDist);
-  }, [distanceKm, setDistanceKm, loadNearby]);
+  }, [distanceKm, setDistanceKm, loadNearby, loadingNearby]);
 
   const handleLoadMore = useCallback(() => {
+    if (
+      loadingAll ||
+      loadingMorePlaces ||
+      !hasMorePlaces ||
+      hasActiveCatalogFilter
+    ) {
+      return;
+    }
+
     const nextPage = allPlacesPage + 1;
     loadAll(nextPage, true);
     setAllPlacesPage(nextPage);
-  }, [allPlacesPage, loadAll, setAllPlacesPage]);
+  }, [
+    allPlacesPage,
+    hasActiveCatalogFilter,
+    hasMorePlaces,
+    loadAll,
+    loadingAll,
+    loadingMorePlaces,
+    setAllPlacesPage,
+  ]);
 
-  const reloadPackagesSection = useCallback(() => {
-    loadPackages(0, false, selectedAgencyFilter);
+  const reloadCatalogSection = useCallback(() => {
+    if (loadingAll) return;
+
+    if (hasActiveCatalogFilter) {
+      performSearch();
+      return;
+    }
+
+    loadAll(0, false);
+    setAllPlacesPage(0);
+  }, [
+    hasActiveCatalogFilter,
+    loadAll,
+    loadingAll,
+    performSearch,
+    setAllPlacesPage,
+  ]);
+
+  const reloadAgenciesSection = useCallback(() => {
+    if (loadingAgencies) return;
     loadAgencies(0, false, agencySearchQuery);
-  }, [agencySearchQuery, loadAgencies, loadPackages, selectedAgencyFilter]);
+  }, [agencySearchQuery, loadAgencies, loadingAgencies]);
+
+  const reloadPackagesOnly = useCallback(() => {
+    if (loadingPackages) return;
+    loadPackages(0, false, selectedAgencyFilter);
+  }, [loadPackages, loadingPackages, selectedAgencyFilter]);
+
+  const reloadCategoriesSection = useCallback(() => {
+    if (loadingCategories) return;
+    loadCategories();
+  }, [loadCategories, loadingCategories]);
 
   const shouldShowAgencyState =
     !loadingAgencies && agencies.length === 0 && !agencySearchQuery;
@@ -614,8 +677,9 @@ const HomeScreen = ({ navigation }) => {
   );
 
   const handleReloadNearby = useCallback(() => {
+    if (loadingNearby) return;
     loadNearby(distanceKm);
-  }, [distanceKm, loadNearby]);
+  }, [distanceKm, loadNearby, loadingNearby]);
 
   const handleCatalogPlacePress = useCallback(
     (_item, index, sourcePlaces) => {
@@ -813,6 +877,8 @@ const HomeScreen = ({ navigation }) => {
             onReloadNearby={handleReloadNearby}
             getTopPlaceMeta={getTopPlaceMeta}
             loadingNearby={loadingNearby}
+            nearbyError={nearbyError}
+            locationError={locationError}
             pauseMapUpdates={
               panelMotionCount > 0 || sidePanelOpen || notificationsVisible
             }
@@ -820,58 +886,97 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
         {/* Catalog Section */}
-        {displayPlaces.length > 0 && (
-          <View style={styles.section}>
-            <ImageBackground
-              source={{ uri: catalogBannerImageUri }}
-              style={styles.sectionPhotoBanner}
-              imageStyle={styles.sectionPhotoImage}
-              resizeMode="cover"
-            >
-              <View style={styles.sectionPhotoOverlay} />
-              <View style={styles.sectionPhotoContent}>
-                <Text style={styles.sectionPhotoKicker}>Inspiracion local</Text>
-                <Text style={styles.sectionPhotoTitle} numberOfLines={2}>
-                  Lugares con historia, paisaje y aventura
-                </Text>
-              </View>
-            </ImageBackground>
-
-            <View style={styles.sectionIntro}>
-              <View style={styles.sectionTitleAccent} />
-	              <View style={styles.sectionIconBubble}>
-	                <FontAwesome
-	                  name={
-	                    hasActiveCatalogFilter
-	                      ? "search"
-	                      : "compass"
-	                  }
-                  size={11}
-                  color="#0E7490"
-                />
-	              </View>
-	              <Text style={styles.sectionHeroTitle}>
-	                {hasActiveCatalogFilter
-	                  ? "Resultados de búsqueda"
-	                  : "Tu próxima aventura"}
-	              </Text>
+        <View style={styles.section}>
+          <ImageBackground
+            source={{ uri: catalogBannerImageUri }}
+            style={styles.sectionPhotoBanner}
+            imageStyle={styles.sectionPhotoImage}
+            resizeMode="cover"
+          >
+            <View style={styles.sectionPhotoOverlay} />
+            <View style={styles.sectionPhotoContent}>
+              <Text style={styles.sectionPhotoKicker}>Inspiracion local</Text>
+              <Text style={styles.sectionPhotoTitle} numberOfLines={2}>
+                Lugares con historia, paisaje y aventura
+              </Text>
             </View>
+          </ImageBackground>
 
-            <FlatList
-	              horizontal
-	              data={displayPlaces}
-	              keyExtractor={catalogKeyExtractor}
-	              renderItem={renderCatalogItem}
-	              showsHorizontalScrollIndicator={false}
-	              contentContainerStyle={styles.horizontalList}
-	              ListFooterComponent={renderCatalogFooter}
-	              initialNumToRender={4}
-	              maxToRenderPerBatch={5}
-	              windowSize={5}
-	              removeClippedSubviews={Platform.OS === "android"}
-	            />
+          <View style={styles.sectionIntro}>
+            <View style={styles.sectionTitleAccent} />
+            <View style={styles.sectionIconBubble}>
+              <FontAwesome
+                name={hasActiveCatalogFilter ? "search" : "compass"}
+                size={11}
+                color="#0E7490"
+              />
+            </View>
+            <Text style={styles.sectionHeroTitle}>
+              {hasActiveCatalogFilter
+                ? "Resultados de búsqueda"
+                : "Tu próxima aventura"}
+            </Text>
           </View>
-        )}
+
+          {catalogInitialLoading ? (
+            <ActivityIndicator
+              color={COLORS.primary}
+              style={{ marginVertical: 36 }}
+            />
+          ) : displayPlaces.length > 0 ? (
+            <>
+              {error ? (
+                <Text style={styles.agencyEmptyText}>{error}</Text>
+              ) : null}
+              <FlatList
+                horizontal
+                data={displayPlaces}
+                keyExtractor={catalogKeyExtractor}
+                renderItem={renderCatalogItem}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+                ListFooterComponent={renderCatalogFooter}
+                initialNumToRender={4}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                removeClippedSubviews={Platform.OS === "android"}
+              />
+            </>
+          ) : (
+            <View style={styles.emptyAgencyState}>
+              <View style={styles.emptyAgencyIcon}>
+                <Ionicons
+                  name={error ? "alert-circle-outline" : "search-outline"}
+                  size={32}
+                  color={error ? "#F97316" : COLORS.textLight}
+                />
+              </View>
+              <Text style={styles.emptyAgencyTitle}>{catalogEmptyTitle}</Text>
+              <Text style={styles.emptyAgencySub}>
+                {catalogEmptyDescription}
+              </Text>
+              <View style={styles.emptyAgencyActions}>
+                <TouchableOpacity
+                  style={styles.restoreButton}
+                  onPress={reloadCatalogSection}
+                  disabled={loadingAll}
+                  activeOpacity={0.86}
+                >
+                  {loadingAll ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="reload" size={16} color="#FFFFFF" />
+                      <Text style={styles.restoreButtonText}>
+                        Volver a cargar
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* Agencies + Packages (Unified Section) */}
         <View style={styles.section}>
@@ -1054,11 +1159,11 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.emptyAgencyActions}>
                 <TouchableOpacity
                   style={styles.restoreButton}
-                  onPress={reloadPackagesSection}
-                  disabled={loadingPackages || loadingAgencies}
+                  onPress={reloadAgenciesSection}
+                  disabled={loadingAgencies}
                   activeOpacity={0.86}
                 >
-                  {loadingPackages || loadingAgencies ? (
+                  {loadingAgencies ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <>
@@ -1123,7 +1228,7 @@ const HomeScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={styles.packageMoreButton}
                   onPress={loadMorePackages}
-                  disabled={loadingMorePackages}
+                  disabled={loadingMorePackages || loadingPackages}
                   activeOpacity={0.86}
                 >
                   {loadingMorePackages ? (
@@ -1163,11 +1268,11 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.emptyAgencyActions}>
                 <TouchableOpacity
                   style={styles.restoreButton}
-                  onPress={reloadPackagesSection}
-                  disabled={loadingPackages || loadingAgencies}
+                  onPress={reloadPackagesOnly}
+                  disabled={loadingPackages}
                   activeOpacity={0.86}
                 >
-                  {loadingPackages || loadingAgencies ? (
+                  {loadingPackages ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <>
@@ -1314,6 +1419,9 @@ const HomeScreen = ({ navigation }) => {
 	        distanceKm={distanceKm}
 	        setDistanceKm={setDistanceKm}
 	        categories={categories}
+        loadingCategories={loadingCategories}
+        categoriesError={categoriesError}
+        onRetryCategories={reloadCategoriesSection}
 	        onApply={handleFilterApply}
 	      />
 

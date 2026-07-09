@@ -444,3 +444,36 @@ Limitaciones:
 - No se hizo validacion runtime en dispositivo/emulador durante esta fase.
 - Queda pendiente revisar manualmente: notificaciones, marcar leidas, dashboard de agencia, cambio rapido de agencias, conteos, reservas de usuario, doble apertura de detalle, mensajes, envio de mensaje y cambio de estado desde agencia.
 - No se cambiaron endpoints, navegacion, parametros de pantalla, proveedor de datos ni `api.js`.
+
+## Nota de ejecucion tarea 9
+
+Fecha: posterior a tarea 7.
+
+Estados separados:
+
+- Home separa estados de catalogo, nearby, paquetes, agencias y categorias.
+- Catalogo muestra loading inicial, empty real, filtro sin resultados y error con retry propio.
+- Nearby distingue sin ubicacion, error de backend y sin resultados por radio sin reiniciar el mapa.
+- Paquetes y agencias mantienen retry separado para no recargar secciones no afectadas.
+- El modal de filtros conserva categorias base si falla el backend y permite reintentar solo categorias.
+- MapScreen separa carga inicial, recarga de sitios, error de ubicacion, error de backend, datos vacios y filtro sin resultados.
+- AgencyDashboardScreen separa carga inicial, pull-to-refresh, actualizacion de metricas por agencia y error de dashboard.
+- MyReservationsScreen y AgencyReservationsScreen separan lista vacia, error de lista, loading de detalle, error de detalle, loading de mensajes y error de mensajes.
+
+Conservacion de datos previos:
+
+- Los errores parciales de catalogo, nearby, paquetes, agencias, mapa, dashboard y reservas no limpian datos visibles ya cargados.
+- Las recargas de mensajes muestran spinner/error inline si ya existe conversacion previa.
+- Los errores de lista en reservas aparecen como banner cuando ya hay reservas visibles.
+
+Validacion ejecutada:
+
+- Parseo JSX de Home, NearbyMapBlock, FilterModal, MapScreen, Dashboard y Reservas.
+- `npm test -- --runInBand`
+  - Resultado: 4 suites passing, 76 tests passing.
+
+Limitaciones:
+
+- No se hizo validacion runtime en dispositivo/emulador durante esta fase.
+- Queda pendiente revisar manualmente: Home carga inicial, pull-to-refresh, error parcial de paquetes/agencias, filtro sin resultados, nearby sin ubicacion/sin resultados/error, MapScreen con datos/sin datos/error, dashboard primera carga/refresh/cambio de agencia, reservas vacias/detalle/mensajes/error parcial y botones de retry/cargar mas sin doble ejecucion.
+- No se cambiaron endpoints, navegacion, parametros de pantalla, contratos de respuesta, `api.js` ni cache de token.

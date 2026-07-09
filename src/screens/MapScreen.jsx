@@ -40,6 +40,10 @@ const MapScreen = ({ route }) => {
     const [userLocation, setUserLocation] = useState(null);
     const [places, setPlaces] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [placesLoading, setPlacesLoading] = useState(false);
+    const [locationLoading, setLocationLoading] = useState(false);
+    const [placesError, setPlacesError] = useState('');
+    const [locationError, setLocationError] = useState('');
     const [filterMode, setFilterMode] = useState('all'); // 'all', 'nearby', 'selected'
     const [locationPermission, setLocationPermission] = useState(false);
     const [modal, setModal] = useState({ visible: false, type: 'info', title: '', message: '' });
@@ -48,13 +52,20 @@ const MapScreen = ({ route }) => {
     // Parámetro opcional: sitio seleccionado desde otra pantalla
     const selectedPlaceId = route?.params?.placeId;
 
-    const fetchPlaces = useCallback(async () => {
+    const fetchPlaces = useCallback(async ({ initial = false } = {}) => {
         const requestKey = buildRequestKey({
             method: 'GET',
             endpoint: ENDPOINTS.PLACES_SEARCH,
             params: ALL_PLACES_PARAMS,
             scope: 'MapScreen',
         });
+
+        if (initial) {
+            setLoading(true);
+        } else {
+            setPlacesLoading(true);
+        }
+        setPlacesError('');
 
         try {
             const response = await requestDeduper.run(requestKey, () =>
@@ -64,6 +75,7 @@ const MapScreen = ({ route }) => {
             setPlaces(placesData);
         } catch (error) {
             console.error('Error cargando sitios:', error);
+            setPlacesError('No pudimos descargar los sitios turísticos en este momento.');
             setModal({
                 visible: true,
                 type: 'error',
@@ -71,7 +83,11 @@ const MapScreen = ({ route }) => {
                 message: 'No pudimos descargar los sitios turísticos en este momento.'
             });
         } finally {
-            setLoading(false);
+            if (initial) {
+                setLoading(false);
+            } else {
+                setPlacesLoading(false);
+            }
         }
     }, [requestDeduper]);
 
@@ -81,6 +97,7 @@ const MapScreen = ({ route }) => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
+                    setLocationError('Necesitamos acceso a tu ubicación para mostrarte sitios cercanos.');
                     setModal({
                         visible: true,
                         type: 'warning',
@@ -93,6 +110,7 @@ const MapScreen = ({ route }) => {
                 }
 
                 setLocationPermission(true);
+                setLocationError('');
 
                 // Obtener ubicación actual
                 const location = await Location.getCurrentPositionAsync({
@@ -105,9 +123,10 @@ const MapScreen = ({ route }) => {
                 });
 
                 // Cargar sitios turísticos
-                await fetchPlaces();
+                await fetchPlaces({ initial: true });
             } catch (error) {
                 console.error('Error obteniendo ubicación:', error);
+                setLocationError('No logramos obtener tu posición actual. Verifica tu GPS e intenta nuevamente.');
                 setModal({
                     visible: true,
                     type: 'error',
@@ -238,23 +257,87 @@ const MapScreen = ({ route }) => {
         ],
     );
 
-    const handleRetryLocation = useCallback(() => {
-        setLoading(true);
-        Location.requestForegroundPermissionsAsync().then(({ status }) => {
-            if (status === 'granted') {
-                setLocationPermission(true);
-                Location.getCurrentPositionAsync().then(location => {
-                    setUserLocation({
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                    });
-                    fetchPlaces();
-                });
-            } else {
+    const handleRetryLocation = useCallback(async () => {
+        if (locationLoading || loading) return;
+
+        setLocationLoading(true);
+        setLocationError('');
+
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                setLocationPermission(false);
+                setLocationError('Necesitamos acceso a tu ubicación para mostrarte sitios cercanos.');
                 setLoading(false);
+                return;
             }
-        });
-    }, [fetchPlaces]);
+
+            setLocationPermission(true);
+            const location = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.High,
+            });
+            setUserLocation({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+            });
+            await fetchPlaces({ initial: places.length === 0 });
+        } catch (error) {
+            console.error('Error reintentando ubicación:', error);
+            setLocationError('No logramos obtener tu posición actual. Verifica tu GPS e intenta nuevamente.');
+            setLoading(false);
+        } finally {
+            setLocationLoading(false);
+        }
+    }, [fetchPlaces, loading, locationLoading, places.length]);
+
+    const handleRetryPlaces = useCallback(() => {
+        if (placesLoading) return;
+        fetchPlaces({ initial: places.length === 0 });
+    }, [fetchPlaces, places.length, placesLoading]);
+
+    const mapState = useMemo(() => {
+        if (placesError && places.length === 0) {
+            return {
+                title: 'No pudimos cargar sitios',
+                message: placesError,
+                retry: true,
+            };
+        }
+
+        if (placesError) {
+            return {
+                title: 'Mostrando datos previos',
+                message: placesError,
+                retry: true,
+            };
+        }
+
+        if (filteredPlaces.length === 0) {
+            if (filterMode === 'nearby') {
+                return {
+                    title: 'Sin sitios cercanos',
+                    message: 'No hay lugares dentro del radio cercano actual.',
+                    retry: false,
+                };
+            }
+
+            if (filterMode === 'selected') {
+                return {
+                    title: 'Sitio no disponible',
+                    message: 'No encontramos el sitio seleccionado en los datos cargados.',
+                    retry: false,
+                };
+            }
+
+            return {
+                title: 'Sin sitios para mostrar',
+                message: 'Cuando haya lugares disponibles, aparecerán en el mapa.',
+                retry: true,
+            };
+        }
+
+        return null;
+    }, [filterMode, filteredPlaces.length, places.length, placesError]);
 
     const showNearbyPlaces = useCallback(() => setFilterMode('nearby'), []);
     const showSelectedPlace = useCallback(() => setFilterMode('selected'), []);
@@ -278,13 +361,18 @@ const MapScreen = ({ route }) => {
             <View style={styles.errorContainer}>
                 <Text style={styles.errorTitle}>⚠️ Permisos necesarios</Text>
                 <Text style={styles.errorText}>
-                    Necesitamos acceso a tu ubicación para mostrarte los sitios cercanos en el mapa.
+                    {locationError || 'Necesitamos acceso a tu ubicación para mostrarte los sitios cercanos en el mapa.'}
                 </Text>
                 <TouchableOpacity
-                    style={styles.retryButton}
+                    style={[styles.retryButton, locationLoading && styles.retryButtonDisabled]}
                     onPress={handleRetryLocation}
+                    disabled={locationLoading}
                 >
-                    <Text style={styles.retryButtonText}>Reintentar</Text>
+                    {locationLoading ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                        <Text style={styles.retryButtonText}>Reintentar</Text>
+                    )}
                 </TouchableOpacity>
             </View>
         );
@@ -333,6 +421,32 @@ const MapScreen = ({ route }) => {
                 circleRadius={50000}
                 showUserLocation={true}
             />
+
+            {placesLoading && places.length > 0 ? (
+                <View style={styles.mapStatePanel}>
+                    <ActivityIndicator color="#0E7490" />
+                    <Text style={styles.mapStateText}>Actualizando sitios...</Text>
+                </View>
+            ) : null}
+
+            {!placesLoading && mapState ? (
+                <View style={styles.mapStatePanel}>
+                    <Text style={styles.mapStateTitle}>{mapState.title}</Text>
+                    <Text style={styles.mapStateText}>{mapState.message}</Text>
+                    {mapState.retry ? (
+                        <TouchableOpacity
+                            style={[
+                                styles.mapStateButton,
+                                placesLoading && styles.retryButtonDisabled,
+                            ]}
+                            onPress={handleRetryPlaces}
+                            disabled={placesLoading}
+                        >
+                            <Text style={styles.mapStateButtonText}>Volver a cargar</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                </View>
+            ) : null}
 
             {/* Panel informativo inferior */}
             {userLocation && (
@@ -396,6 +510,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 8,
+        minWidth: 132,
+        alignItems: 'center',
+    },
+    retryButtonDisabled: {
+        opacity: 0.68,
     },
     retryButtonText: {
         color: '#fff',
@@ -429,6 +548,49 @@ const styles = StyleSheet.create({
     },
     map: {
         flex: 1,
+    },
+    mapStatePanel: {
+        position: 'absolute',
+        top: 78,
+        left: 16,
+        right: 16,
+        padding: 14,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(14, 116, 144, 0.18)',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        alignItems: 'center',
+        gap: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.16,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    mapStateTitle: {
+        color: '#0F172A',
+        fontSize: 14,
+        fontWeight: '800',
+        textAlign: 'center',
+    },
+    mapStateText: {
+        color: '#64748B',
+        fontSize: 12,
+        fontWeight: '600',
+        textAlign: 'center',
+        lineHeight: 17,
+    },
+    mapStateButton: {
+        marginTop: 4,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: '#0E7490',
+    },
+    mapStateButtonText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '800',
     },
     infoPanel: {
         position: 'absolute',

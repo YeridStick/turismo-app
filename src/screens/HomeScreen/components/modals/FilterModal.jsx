@@ -20,8 +20,14 @@ const FilterModal = ({
   setDistanceKm,
   onApply,
   categories = [],
+  loadingCategories = false,
+  categoriesError = "",
+  onRetryCategories,
 }) => {
-  const displayCategories = [{ id: "todos", name: "Todos" }, ...categories];
+  const displayCategories =
+    categories.length > 0
+      ? [{ id: "todos", name: "Todos" }, ...categories]
+      : CATEGORIES_LIST;
 
   return (
     <Modal
@@ -46,6 +52,26 @@ const FilterModal = ({
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.section}>
               <Text style={styles.modalSubtitle}>Categoría</Text>
+              {loadingCategories ? (
+                <Text style={styles.agencyEmptyText}>Cargando categorías...</Text>
+              ) : categoriesError ? (
+                <View>
+                  <Text style={styles.agencyEmptyText}>
+                    {categoriesError}. Usamos categorías base mientras tanto.
+                  </Text>
+                  {onRetryCategories ? (
+                    <TouchableOpacity
+                      style={styles.restoreButtonSecondary}
+                      onPress={onRetryCategories}
+                      activeOpacity={0.86}
+                    >
+                      <Text style={styles.restoreButtonSecondaryText}>
+                        Reintentar categorías
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
               <View style={styles.quickRow}>
                 {displayCategories.map((cat) => (
                   <TouchableOpacity

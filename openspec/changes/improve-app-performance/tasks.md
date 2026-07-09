@@ -61,10 +61,10 @@
 
 ## 9. Loading, error y empty state
 
-- [ ] 9.1 Revisar estados por seccion en Home y separar retry por catalogo, nearby, paquetes y agencias.
-- [ ] 9.2 Mantener datos previos visibles cuando una recarga parcial falla.
-- [ ] 9.3 Ajustar estados de MapScreen, Dashboard y Reservas para diferenciar loading inicial, refresh, detalle y empty.
-- [ ] 9.4 Verificar textos y disabled states en botones de retry/carga mas para evitar doble toque.
+- [x] 9.1 Revisar estados por seccion en Home y separar retry por catalogo, nearby, paquetes y agencias.
+- [x] 9.2 Mantener datos previos visibles cuando una recarga parcial falla.
+- [x] 9.3 Ajustar estados de MapScreen, Dashboard y Reservas para diferenciar loading inicial, refresh, detalle y empty.
+- [x] 9.4 Verificar textos y disabled states en botones de retry/carga mas para evitar doble toque.
 
 ## 10. Validacion final
 

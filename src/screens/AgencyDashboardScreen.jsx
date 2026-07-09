@@ -153,6 +153,8 @@ const AgencyDashboardScreen = ({ navigation }) => {
     const [agencies, setAgencies] = useState([]); // Todas las agencias vinculadas
     const [activeAgency, setActiveAgency] = useState(null); // Agencia seleccionada actualmente
     const [dashboard, setDashboard] = useState(null);
+    const [dashboardAgencyId, setDashboardAgencyId] = useState(null);
+    const [dashboardError, setDashboardError] = useState("");
     const [reservationCounts, setReservationCounts] = useState({});
     const [error, setError] = useState("");
     const [refreshing, setRefreshing] = useState(false);
@@ -177,6 +179,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
         const requestSeq = dashboardRequestSeqRef.current + 1;
         dashboardRequestSeqRef.current = requestSeq;
         setFetchingDashboard(true);
+        setDashboardError("");
 
         try {
             const now = new Date();
@@ -224,10 +227,12 @@ const AgencyDashboardScreen = ({ navigation }) => {
 
             if (requestSeq === dashboardRequestSeqRef.current) {
                 setDashboard(dData);
+                setDashboardAgencyId(targetAgency.id);
             }
         } catch (err) {
             if (requestSeq === dashboardRequestSeqRef.current) {
                 console.error("Error loading agency dashboard:", err);
+                setDashboardError("No pudimos cargar las métricas de esta agencia.");
             }
         } finally {
             if (requestSeq === dashboardRequestSeqRef.current) {
@@ -297,11 +302,16 @@ const AgencyDashboardScreen = ({ navigation }) => {
         setReservationCounts(nextCounts);
     }, [requestDeduper]);
 
-    const loadData = useCallback(async () => {
-        if (!user?.email) return;
+    const loadData = useCallback(async ({ initial = false } = {}) => {
+        if (!user?.email) {
+            if (initial) setLoading(false);
+            return;
+        }
         const requestSeq = dataRequestSeqRef.current + 1;
         dataRequestSeqRef.current = requestSeq;
-        setLoading(true);
+        if (initial) {
+            setLoading(true);
+        }
         setError("");
         try {
             const agenciesKey = buildRequestKey({
@@ -330,6 +340,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
                 setActiveAgency(null);
                 activeAgencyRef.current = null;
                 setDashboard(null);
+                setDashboardAgencyId(null);
             }
         } catch (err) {
             if (requestSeq === dataRequestSeqRef.current) {
@@ -338,7 +349,9 @@ const AgencyDashboardScreen = ({ navigation }) => {
             }
         } finally {
             if (requestSeq === dataRequestSeqRef.current) {
-                setLoading(false);
+                if (initial) {
+                    setLoading(false);
+                }
             }
         }
     }, [
@@ -364,8 +377,18 @@ const AgencyDashboardScreen = ({ navigation }) => {
     }, [loadAgencyDashboard]);
 
     useEffect(() => {
-        loadData();
+        loadData({ initial: true });
     }, [isAdmin, loadData]);
+
+    const dashboardMatchesActiveAgency =
+        dashboard &&
+        String(dashboardAgencyId) === String(activeAgency?.id);
+    const retryInitialLoad = useCallback(() => {
+        loadData({ initial: true });
+    }, [loadData]);
+    const retryActiveDashboard = useCallback(() => {
+        loadAgencyDashboard(activeAgency);
+    }, [activeAgency, loadAgencyDashboard]);
 
     return (
         <View style={styles.container}>
@@ -383,6 +406,21 @@ const AgencyDashboardScreen = ({ navigation }) => {
                 <View style={styles.centered}>
                     <ActivityIndicator size="large" color={ACCENT} />
                     <Text style={styles.loadingText}>Sincronizando agencias...</Text>
+                </View>
+            ) : error && agencies.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <Ionicons name="alert-circle-outline" size={64} color="#F97316" />
+                    <Text style={styles.emptyText}>{error}</Text>
+                    <Text style={styles.emptySubtext}>
+                        Puedes intentar cargar el panel nuevamente.
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.retryButton}
+                        onPress={retryInitialLoad}
+                        disabled={loading}
+                    >
+                        <Text style={styles.retryButtonText}>Volver a cargar</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <View style={{ flex: 1 }}>
@@ -479,8 +517,37 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                     <Ionicons name="chevron-forward" size={20} color={ACCENT} />
                                 </TouchableOpacity>
 
-                                {fetchingDashboard ? (
+                                {fetchingDashboard && dashboardMatchesActiveAgency ? (
+                                    <View style={styles.inlineStatus}>
+                                        <ActivityIndicator size="small" color={ACCENT} />
+                                        <Text style={styles.inlineStatusText}>Actualizando métricas...</Text>
+                                    </View>
+                                ) : null}
+                                {dashboardError && dashboardMatchesActiveAgency ? (
+                                    <TouchableOpacity
+                                        style={styles.inlineStatus}
+                                        onPress={retryActiveDashboard}
+                                        disabled={fetchingDashboard}
+                                    >
+                                        <Ionicons name="alert-circle-outline" size={16} color="#F97316" />
+                                        <Text style={styles.inlineStatusText}>{dashboardError}</Text>
+                                    </TouchableOpacity>
+                                ) : null}
+
+                                {fetchingDashboard && !dashboardMatchesActiveAgency ? (
                                     <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
+                                ) : dashboardError && !dashboardMatchesActiveAgency ? (
+                                    <View style={styles.emptyContainer}>
+                                        <Ionicons name="alert-circle-outline" size={48} color="#F97316" />
+                                        <Text style={styles.emptyText}>{dashboardError}</Text>
+                                        <TouchableOpacity
+                                            style={styles.retryButton}
+                                            onPress={retryActiveDashboard}
+                                            disabled={fetchingDashboard}
+                                        >
+                                            <Text style={styles.retryButtonText}>Reintentar</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 ) : (
                                     <>
                                         <View style={styles.statsGrid}>
@@ -1069,11 +1136,52 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 50,
+        paddingHorizontal: 24,
     },
     emptyText: {
         marginTop: 10,
         fontSize: 14,
         color: "#94A3B8",
+        textAlign: "center",
+    },
+    emptySubtext: {
+        marginTop: 6,
+        fontSize: 12,
+        color: "#64748B",
+        textAlign: "center",
+        lineHeight: 18,
+    },
+    retryButton: {
+        marginTop: 18,
+        minHeight: 42,
+        paddingHorizontal: 18,
+        borderRadius: 999,
+        backgroundColor: ACCENT,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    retryButtonText: {
+        color: "#FFFFFF",
+        fontWeight: "800",
+    },
+    inlineStatus: {
+        marginBottom: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 14,
+        backgroundColor: "#F8FAFC",
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+    },
+    inlineStatusText: {
+        color: "#64748B",
+        fontSize: 12,
+        fontWeight: "700",
+        textAlign: "center",
     }
 });
 
