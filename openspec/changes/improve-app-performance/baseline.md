@@ -510,3 +510,111 @@ Limitaciones:
 - No se hizo validacion runtime en dispositivo/emulador durante esta fase.
 - Queda pendiente revisar manualmente: Home carga inicial, pull-to-refresh, error parcial de paquetes/agencias, filtro sin resultados, nearby sin ubicacion/sin resultados/error, MapScreen con datos/sin datos/error, dashboard primera carga/refresh/cambio de agencia, reservas vacias/detalle/mensajes/error parcial y botones de retry/cargar mas sin doble ejecucion.
 - No se cambiaron endpoints, navegacion, parametros de pantalla, contratos de respuesta, `api.js` ni cache de token.
+
+## Nota de validacion final tarea 10
+
+Fecha: cierre de tareas 1 a 9.
+
+Validacion automatizada ejecutada:
+
+- `npm test -- --runInBand`
+  - Resultado: 5 suites passing, 81 tests passing.
+- `git diff --check`
+  - Resultado: sin errores de whitespace.
+- `npm run lint`
+  - Resultado: comando passing con 0 errores y 50 warnings existentes/no bloqueantes.
+
+Correcciones menores realizadas durante validacion:
+
+- `eslint.config.js` declara globals de Jest solo para archivos de prueba, para que `expo lint` valide tests sin falsos `no-undef`.
+- `NearbyPlaceItem`, `CatalogPlaceItem` y `PackageListItem` tienen `displayName` explicito para mantener `React.memo` identificable por lint/devtools.
+
+Confirmaciones de alcance:
+
+- No hay cambios pendientes en `package.json` ni lockfiles; no se agregaron dependencias nuevas.
+- No hay cambios pendientes en `src/config/api.config.js`; no se cambiaron endpoints de `ENDPOINTS`.
+- No se cambiaron nombres de pantallas, navegacion ni parametros durante esta validacion final.
+- No se agregaron optimizaciones nuevas ni refactors funcionales en esta fase.
+
+Validacion runtime pendiente:
+
+- Home carga inicial.
+- Pull-to-refresh.
+- Busqueda y filtros.
+- Nearby y ubicacion.
+- Mapa en Home.
+- MapScreen.
+- Paquetes y `PackageDetailModal`.
+- Reservas y mensajes.
+- Dashboard de agencia.
+- Notificaciones.
+- Login/logout/cambio de cuenta.
+- Manejo de 401.
+
+Riesgos conocidos:
+
+- Las optimizaciones de render, mapa y deduplicacion ya estan cubiertas por pruebas unitarias y revision estatica, pero requieren validacion en dispositivo/emulador para confirmar conteos reales de requests, gestos del mapa y flujos visuales completos.
+- `npm run lint` queda en verde, aunque persisten warnings no bloqueantes fuera del alcance de esta tarea.
+
+## Nota de intento de validacion runtime tarea 10
+
+Fecha: posterior a la validacion final automatizada.
+
+Entorno runtime disponible:
+
+- Dispositivo Android conectado por ADB: `bascaeqo7lu4bmpr`.
+- Paquete validado: `com.yeridstick.turismoapp`.
+- Version instalada: `1.0.0`.
+- Build instalado con flag `DEBUGGABLE`.
+- Permisos de ubicacion concedidos para usuario 0: `ACCESS_FINE_LOCATION` y `ACCESS_COARSE_LOCATION`.
+- Permiso de notificaciones no concedido: `POST_NOTIFICATIONS`.
+
+Validacion runtime completada:
+
+- Cold start de `MainActivity` con `adb shell am start -W -n com.yeridstick.turismoapp/.MainActivity`.
+  - Resultado: `Status: ok`, `LaunchState: COLD`, `TotalTime: 4044ms`.
+- Home carga inicial:
+  - Resultado: pantalla inicial visible con header, usuario activo, buscador, filtros y seccion `Cerca de ti`.
+  - No se observaron crashes ni pantalla en blanco en la captura runtime.
+- Nearby y permisos de ubicacion:
+  - Resultado: la app arranca con permisos de ubicacion concedidos y muestra el mapa centrado con ubicacion del usuario.
+- Mapa en Home:
+  - Resultado: `WebViewMap` carga Leaflet/OpenStreetMap correctamente.
+  - Logcat por PID muestra:
+    - `Mapa OpenStreetMap cargado exitosamente`.
+    - `Provider: OpenStreetMap`.
+    - `UPDATE_USER_LOCATION`.
+    - `UPDATE_CIRCLE`.
+    - `UPDATE_MARKERS` con `1` marcador.
+  - No se observaron errores JS en los logs filtrados por PID durante el cold start.
+
+Hallazgos runtime:
+
+- Durante cold start el mapa se inicializa primero con la region fallback y luego vuelve a inicializarse cuando llega la ubicacion real. Esto coincide con la logica actual de regenerar HTML cuando cambia la region inicial efectiva; no se pudo validar si abrir/cerrar paneles o modales evita reinicializaciones porque el dispositivo bloquea gestos ADB.
+- `uiautomator dump` no logro estado idle en la pantalla de Home, probablemente por animaciones/WebView; la validacion visual se hizo con captura y logs.
+
+Bloqueo para completar flujos interactivos:
+
+- El dispositivo rechaza gestos por ADB:
+  - Comando probado: `adb shell input swipe 500 1800 500 900 300`.
+  - Resultado: `SecurityException: Injecting input events requires the caller ... to have the INJECT_EVENTS permission`.
+- Por esta restriccion no se pudieron validar de forma remota:
+  - Pull-to-refresh en Home.
+  - Busqueda y filtros.
+  - Apertura/cierre de paneles o modales.
+  - MapScreen.
+  - Paquetes y `PackageDetailModal`.
+  - Reservas y mensajes.
+  - Dashboard de agencia.
+  - Notificaciones.
+  - Login, logout y cambio de cuenta.
+  - Manejo de sesion expirada o `401`.
+
+Estado de tareas:
+
+- `10.3` queda pendiente porque la revision manual completa de flujos no pudo terminarse sin interaccion.
+- `10.4` queda pendiente porque no se pudieron ejecutar flujos interactivos ni activar instrumentation runtime para comparar conteos antes/despues.
+
+Requisito para cerrar runtime completo:
+
+- Usar un emulador/dispositivo que permita `adb shell input`, o habilitar en el dispositivo actual la opcion de desarrollador equivalente a `USB debugging (Security settings)`, o realizar las interacciones fisicamente mientras se capturan logs/capturas.

@@ -93,6 +93,7 @@ const CatalogPlaceItem = React.memo(({
     />
   );
 });
+CatalogPlaceItem.displayName = "CatalogPlaceItem";
 
 const PackageListItem = React.memo(({
   item,
@@ -121,6 +122,7 @@ const PackageListItem = React.memo(({
     />
   );
 });
+PackageListItem.displayName = "PackageListItem";
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();

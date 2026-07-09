@@ -51,6 +51,7 @@ const NearbyPlaceItem = React.memo(({
     />
   );
 });
+NearbyPlaceItem.displayName = "NearbyPlaceItem";
 
 const NearbyMapBlock = ({
   coords,

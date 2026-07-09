@@ -68,8 +68,8 @@
 
 ## 10. Validacion final
 
-- [ ] 10.1 Ejecutar `npm test`.
-- [ ] 10.2 Ejecutar lint si el proyecto lo permite con `npm run lint`.
+- [x] 10.1 Ejecutar `npm test`.
+- [x] 10.2 Ejecutar lint si el proyecto lo permite con `npm run lint`.
 - [ ] 10.3 Revisar manualmente los flujos definidos en `design.md`.
 - [ ] 10.4 Comparar conteo de requests antes/despues en los flujos criticos.
-- [ ] 10.5 Confirmar que no se agregaron dependencias nuevas ni se cambiaron endpoints.
+- [x] 10.5 Confirmar que no se agregaron dependencias nuevas ni se cambiaron endpoints.
