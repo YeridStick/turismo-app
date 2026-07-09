@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
 import { IMAGE_PLACEHOLDER } from "../utils/constants";
 import { formatPrice } from "../utils/helpers";
+import { getPackagePresentation } from "../utils/packagePresentation";
 import styles from "../styles";
+
+const EMPTY_PLACES = [];
 
 const PackageCard = ({
   pkg,
@@ -21,7 +24,8 @@ const PackageCard = ({
   onReservePress,
   getImage,
   getGradient,
-  places = [],
+  places = EMPTY_PLACES,
+  placesById,
 }) => {
   const revealAnim = useRef(new Animated.Value(0)).current;
   const pressAnim = useRef(new Animated.Value(0)).current;
@@ -72,53 +76,27 @@ const PackageCard = ({
     };
   }, [pulseAnim, shineAnim]);
 
-  const sanitizedIncludes = Array.isArray(pkg.includes)
-    ? pkg.includes.filter((item) => item && String(item).trim())
-    : [];
-  const includeList = sanitizedIncludes.slice(0, 2);
-  const remaining = Math.max(sanitizedIncludes.length - includeList.length, 0);
-  const cityTags = pkg.city ? pkg.city.split("/").map((c) => c.trim()) : [];
-  const packageImage = getImage(pkg);
-  const hasImage = Boolean(packageImage);
-  const fallbackGradient = getGradient(pkg);
-  const placeLookup = new Map(
-    (places || [])
-      .filter((place) => place?.id != null)
-      .map((place) => [String(place.id), place]),
+  const {
+    includeList,
+    remainingIncludes,
+    visibleCityTags,
+    packageImage,
+    hasImage,
+    fallbackGradient,
+    routePlaces,
+    visibleRoutePlaces,
+    description,
+    vibeTags,
+  } = useMemo(
+    () =>
+      getPackagePresentation(pkg, {
+        places,
+        placesById,
+        getImage,
+        getGradient,
+      }),
+    [getGradient, getImage, pkg, places, placesById],
   );
-  const rawPackagePlaces =
-    (Array.isArray(pkg.places) && pkg.places) ||
-    (Array.isArray(pkg.sites) && pkg.sites) ||
-    (Array.isArray(pkg.destinations) && pkg.destinations) ||
-    [];
-  const placeIds =
-    (Array.isArray(pkg.placeIds) && pkg.placeIds) ||
-    (Array.isArray(pkg.place_ids) && pkg.place_ids) ||
-    (Array.isArray(pkg.siteIds) && pkg.siteIds) ||
-    (Array.isArray(pkg.site_ids) && pkg.site_ids) ||
-    [];
-  const routePlaces = rawPackagePlaces.length
-    ? rawPackagePlaces
-        .map((place) => {
-          const placeId = place?.place_id ?? place?.placeId ?? place?.id ?? place;
-          const found = placeLookup.get(String(placeId));
-          return found || place;
-        })
-        .filter(Boolean)
-    : placeIds
-        .map((placeId) => placeLookup.get(String(placeId)) || { id: placeId })
-        .filter(Boolean);
-  const visibleRoutePlaces = routePlaces.slice(0, 6);
-  const description =
-    pkg.description ||
-    pkg.summary ||
-    pkg.shortDescription ||
-    pkg.subtitle ||
-    "";
-  const vibeTags = [
-    pkg.days >= 3 ? "Ruta extendida" : "Escapada",
-    "Experiencia local",
-  ];
 
   const cardAnimatedStyle = {
     opacity: revealAnim,
@@ -167,22 +145,25 @@ const PackageCard = ({
     ],
   };
 
-  const animatePress = (toValue) => {
+  const animatePress = useCallback((toValue) => {
     Animated.timing(pressAnim, {
       toValue,
       duration: 140,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  };
+  }, [pressAnim]);
+
+  const handlePressIn = useCallback(() => animatePress(1), [animatePress]);
+  const handlePressOut = useCallback(() => animatePress(0), [animatePress]);
 
   return (
     <Animated.View style={cardAnimatedStyle}>
       <Pressable
         style={[styles.packageCard, { width }]}
         onPress={onOpenDetails}
-        onPressIn={() => animatePress(1)}
-        onPressOut={() => animatePress(0)}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
       >
         <View style={styles.packageImageWrapper}>
           {hasImage ? (
@@ -218,9 +199,9 @@ const PackageCard = ({
           <Animated.View pointerEvents="none" style={[styles.packageImageGlowOrb, pulseStyle]} />
           <Animated.View pointerEvents="none" style={[styles.packageImageShine, shineStyle]} />
 
-          {cityTags.length > 0 && (
+          {visibleCityTags.length > 0 && (
             <View style={styles.packageLocationRow}>
-              {cityTags.slice(0, 2).map((tag, idx) => (
+              {visibleCityTags.map((tag, idx) => (
                 <View
                   key={`${pkg.id}-city-${idx}`}
                   style={styles.packageLocationChip}
@@ -306,22 +287,9 @@ const PackageCard = ({
               <View style={styles.packageRouteVerticalList}>
                 {visibleRoutePlaces.length > 0 ? (
                   visibleRoutePlaces.map((place, idx) => {
-                    const placeId =
-                      place?.place_id ?? place?.placeId ?? place?.id ?? idx;
-                    const placeName =
-                      place?.name ||
-                      place?.placeName ||
-                      place?.title ||
-                      `Sitio #${placeId}`;
-                    const placeMeta =
-                      place?.categoryName ||
-                      place?.category?.name ||
-                      place?.city ||
-                      place?.location ||
-                      "Destino";
                     return (
                       <View
-                        key={`${pkg.id}-route-${placeId}-${idx}`}
+                        key={place.key}
                         style={styles.packageRouteChipVertical}
                       >
                         {idx < visibleRoutePlaces.length - 1 ? (
@@ -332,10 +300,10 @@ const PackageCard = ({
                         </View>
                         <View style={styles.packageRouteInfo}>
                           <Text style={styles.packageRouteName} numberOfLines={1}>
-                            {placeName}
+                            {place.name}
                           </Text>
                           <Text style={styles.packageRouteMeta} numberOfLines={1}>
-                            {placeMeta}
+                            {place.meta}
                           </Text>
                         </View>
                       </View>
@@ -372,9 +340,9 @@ const PackageCard = ({
                     </Text>
                   </View>
                 ))}
-                {remaining > 0 && (
+                {remainingIncludes > 0 && (
                   <Text style={[styles.packageIncludeCleanText, { color: "#94A3B8" }]}>
-                    +{remaining} más
+                    +{remainingIncludes} más
                   </Text>
                 )}
               </View>

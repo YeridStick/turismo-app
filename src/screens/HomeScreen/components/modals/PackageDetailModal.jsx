@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Modal,
   View,
@@ -11,17 +11,20 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { FontAwesome } from "@expo/vector-icons";
 import { IMAGE_PLACEHOLDER } from "../../utils/constants";
+import { getPackagePresentation } from "../../utils/packagePresentation";
 import styles from "../../styles";
 
-const PackageDetailModal = ({
-  visible,
+const EMPTY_PLACES = [];
+
+const PackageDetailModalContent = ({
   pkg,
   onClose,
   onReserve,
   getImage,
   getGradient,
   formatPrice,
-  places = [],
+  places = EMPTY_PLACES,
+  placesById,
 }) => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const isCompact = screenWidth < 400 || screenHeight < 760;
@@ -31,46 +34,28 @@ const PackageDetailModal = ({
     Math.floor(screenHeight * (isCompact ? 0.46 : 0.54)),
   );
 
-  if (!pkg) return null;
-
-  const sanitizedIncludes = Array.isArray(pkg.includes)
-    ? pkg.includes.filter((item) => item && String(item).trim())
-    : [];
-  const cityTags = pkg.city ? pkg.city.split("/").map((c) => c.trim()) : [];
-  const packageImage = getImage(pkg);
-  const hasImage = Boolean(packageImage);
-  const fallbackGradient = getGradient(pkg);
-  const placeLookup = new Map(
-    (places || [])
-      .filter((place) => place?.id != null)
-      .map((place) => [String(place.id), place]),
+  const {
+    sanitizedIncludes,
+    cityTags,
+    packageImage,
+    hasImage,
+    fallbackGradient,
+    routePlaces,
+    detailDescription,
+  } = useMemo(
+    () =>
+      getPackagePresentation(pkg, {
+        places,
+        placesById,
+        getImage,
+        getGradient,
+      }),
+    [getGradient, getImage, pkg, places, placesById],
   );
-  const rawPackagePlaces =
-    (Array.isArray(pkg.places) && pkg.places) ||
-    (Array.isArray(pkg.sites) && pkg.sites) ||
-    (Array.isArray(pkg.destinations) && pkg.destinations) ||
-    [];
-  const placeIds =
-    (Array.isArray(pkg.placeIds) && pkg.placeIds) ||
-    (Array.isArray(pkg.place_ids) && pkg.place_ids) ||
-    (Array.isArray(pkg.siteIds) && pkg.siteIds) ||
-    (Array.isArray(pkg.site_ids) && pkg.site_ids) ||
-    [];
-  const routePlaces = rawPackagePlaces.length
-    ? rawPackagePlaces
-        .map((place) => {
-          const placeId = place?.place_id ?? place?.placeId ?? place?.id ?? place;
-          const found = placeLookup.get(String(placeId));
-          return found || place;
-        })
-        .filter(Boolean)
-    : placeIds
-        .map((placeId) => placeLookup.get(String(placeId)) || { id: placeId })
-        .filter(Boolean);
 
   return (
     <Modal
-      visible={visible}
+      visible
       animationType="slide"
       transparent
       statusBarTranslucent
@@ -147,7 +132,7 @@ const PackageDetailModal = ({
             )}
 
             <Text style={styles.packageDetailDescription}>
-              {pkg.description || "Disfruta una experiencia turística completa con rutas, cultura local y momentos inolvidables."}
+              {detailDescription}
             </Text>
 
             <View style={styles.packageDetailRouteSection}>
@@ -179,35 +164,15 @@ const PackageDetailModal = ({
                   onTouchMove={(event) => event.stopPropagation?.()}
                 >
                   {routePlaces.map((place, idx) => {
-                    const placeId =
-                      place?.place_id ?? place?.placeId ?? place?.id ?? idx;
-                    const placeName =
-                      place?.name ||
-                      place?.placeName ||
-                      place?.title ||
-                      `Sitio #${placeId}`;
-                    const placeMeta =
-                      place?.categoryName ||
-                      place?.category?.name ||
-                      place?.city ||
-                      place?.location ||
-                      place?.address ||
-                      "Destino turistico";
-                    const imageUri =
-                      place?.imageUrls?.[0] ||
-                      place?.imageUrl ||
-                      place?.image ||
-                      null;
-
                     return (
                       <View
-                        key={`${pkg.id || pkg.title}-detail-route-${placeId}-${idx}`}
+                        key={`${place.key}-detail`}
                         style={styles.packageDetailRouteCard}
                       >
                         <View style={styles.packageDetailRouteMedia}>
-                          {imageUri ? (
+                          {place.imageUri ? (
                             <Image
-                              source={{ uri: imageUri }}
+                              source={{ uri: place.imageUri }}
                               style={styles.packageDetailRouteImage}
                               contentFit="cover"
                               cachePolicy="disk"
@@ -237,7 +202,7 @@ const PackageDetailModal = ({
                             style={styles.packageDetailRouteName}
                             numberOfLines={2}
                           >
-                            {placeName}
+                            {place.name}
                           </Text>
                           <View style={styles.packageDetailRouteMetaRow}>
                             <FontAwesome name="map-marker" size={10} color="#64748B" />
@@ -245,7 +210,7 @@ const PackageDetailModal = ({
                               style={styles.packageDetailRouteMeta}
                               numberOfLines={1}
                             >
-                              {placeMeta}
+                              {place.detailMeta}
                             </Text>
                           </View>
                         </View>
@@ -322,6 +287,33 @@ const PackageDetailModal = ({
         </View>
       </View>
     </Modal>
+  );
+};
+
+const PackageDetailModal = ({
+  visible,
+  pkg,
+  onClose,
+  onReserve,
+  getImage,
+  getGradient,
+  formatPrice,
+  places = EMPTY_PLACES,
+  placesById,
+}) => {
+  if (!visible || !pkg) return null;
+
+  return (
+    <PackageDetailModalContent
+      pkg={pkg}
+      onClose={onClose}
+      onReserve={onReserve}
+      getImage={getImage}
+      getGradient={getGradient}
+      formatPrice={formatPrice}
+      places={places}
+      placesById={placesById}
+    />
   );
 };
 

@@ -1,12 +1,54 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENDPOINTS } from "../../../config/api.config";
 import api from "../../../services/api";
+import {
+  buildRequestKey,
+  createInFlightDeduper,
+  extractArrayPayload,
+} from "../../../utils/requestHelpers";
+import { recordRequestInstrumentation } from "../../../utils/performanceInstrumentation";
 import { distanceBetweenMeters, getCategoryLabel, isSameCoords, normalizePlace, normalizeTopPlace } from "../utils/helpers";
 import useLocation from "./useLocation";
 
 const AGENCIES_PAGE_SIZE = 3;
 const PACKAGES_PAGE_SIZE = 3;
 const AGENCY_SEARCH_DEBOUNCE_MS = 450;
+const LOCATION_CACHE_TTL_MS = 15000;
+
+const isValidCoords = (value) =>
+  Number.isFinite(value?.latitude) && Number.isFinite(value?.longitude);
+
+const roundCoordinate = (value) => Number(Number(value).toFixed(5));
+
+const getTotalPages = (response) => {
+  const body = response?.data ?? response;
+  if (Array.isArray(body)) return 1;
+  const totalPages = body?.totalPages ?? body?.total_pages ?? body?.page?.totalPages;
+  const parsed = Number(totalPages);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
+const resolveCategoryId = (category) =>
+  category !== "todos" ? Number(category) : null;
+
+const buildNearbyParams = (coordsData, distanceKmValue, category) => {
+  const categoryId = resolveCategoryId(category);
+
+  return {
+    mode: "NEARBY",
+    lat: coordsData.latitude,
+    lng: coordsData.longitude,
+    radius: distanceKmValue * 1000,
+    size: 50,
+    categoryId: categoryId ?? undefined,
+  };
+};
+
+const buildNearbyKeyParams = (params) => ({
+  ...params,
+  lat: roundCoordinate(params.lat),
+  lng: roundCoordinate(params.lng),
+});
 
 const useHomeData = (user) => {
   const { coords, setCoords, ensureLocation, error: locationError } = useLocation();
@@ -75,8 +117,128 @@ const useHomeData = (user) => {
     data: [],
     categoryId: null,
   });
+  const coordsCacheRef = useRef({
+    coords: null,
+    updatedAt: 0,
+  });
   const didMountAgencySearchRef = useRef(false);
   const didMountPackageFilterRef = useRef(false);
+
+  const requestDeduper = useMemo(() => createInFlightDeduper(), []);
+
+  useEffect(() => {
+    if (isValidCoords(coords)) {
+      coordsCacheRef.current = {
+        coords,
+        updatedAt: Date.now(),
+      };
+    }
+  }, [coords]);
+
+  const getRecentCoords = useCallback(() => {
+    const cached = coordsCacheRef.current;
+    if (
+      isValidCoords(cached.coords) &&
+      Date.now() - cached.updatedAt <= LOCATION_CACHE_TTL_MS
+    ) {
+      return cached.coords;
+    }
+    return null;
+  }, []);
+
+  const runDedupedGet = useCallback(
+    (endpoint, params = {}, meta = {}) => {
+      const key = buildRequestKey({
+        method: "GET",
+        endpoint,
+        params: meta.keyParams || params,
+        scope: meta.scope,
+      });
+      const reused = requestDeduper.has(key);
+      const promise = requestDeduper.run(key, () => {
+        recordRequestInstrumentation(key, {
+          flow: meta.flow,
+          section: meta.section,
+        });
+        return api.get(endpoint, { params });
+      });
+
+      return { key, reused, promise };
+    },
+    [requestDeduper],
+  );
+
+  const ensureRecentLocation = useCallback(async () => {
+    const recentCoords = getRecentCoords();
+    if (recentCoords) return recentCoords;
+
+    const key = buildRequestKey({
+      method: "GET",
+      endpoint: "expo-location/current-position",
+      scope: "HomeScreen",
+    });
+
+    const coordsData = await requestDeduper.run(key, async () => {
+      recordRequestInstrumentation(key, {
+        flow: "Home location",
+        section: "location",
+      });
+      return ensureLocation();
+    });
+
+    if (isValidCoords(coordsData)) {
+      coordsCacheRef.current = {
+        coords: coordsData,
+        updatedAt: Date.now(),
+      };
+    }
+
+    return coordsData;
+  }, [ensureLocation, getRecentCoords, requestDeduper]);
+
+  const getNearbyRequestKey = useCallback(
+    (coordsData, distanceKmValue, category) => {
+      const params = buildNearbyParams(coordsData, distanceKmValue, category);
+      return buildRequestKey({
+        method: "GET",
+        endpoint: ENDPOINTS.PLACES_SEARCH,
+        params: buildNearbyKeyParams(params),
+      });
+    },
+    [],
+  );
+
+  const getReusableNearby = useCallback((coordsData, distanceKmValue, category) => {
+    const categoryId = resolveCategoryId(category);
+    const targetRadiusMeters = distanceKmValue * 1000;
+    const sameCoords =
+      nearbyCacheRef.current.coords &&
+      isSameCoords(nearbyCacheRef.current.coords, coordsData);
+    const canReuseCategory = nearbyCacheRef.current.categoryId === categoryId;
+
+    if (
+      sameCoords &&
+      canReuseCategory &&
+      nearbyCacheRef.current.radiusKm >= distanceKmValue &&
+      nearbyCacheRef.current.data.length
+    ) {
+      const filtered = nearbyCacheRef.current.data.filter((p) => {
+        const dist =
+          p.distanceMeters ??
+          (p.lat && p.lng
+            ? distanceBetweenMeters(coordsData, {
+                latitude: p.lat,
+                longitude: p.lng,
+              })
+            : Infinity);
+        return dist <= targetRadiusMeters;
+      });
+
+      return filtered.length > 0 ? filtered : null;
+    }
+
+    return null;
+  }, []);
 
   // Derived data: Filtered packages
   const filteredPackages = useMemo(() => {
@@ -95,27 +257,16 @@ const useHomeData = (user) => {
     setError("");
     try {
       const pageSize = 10;
-      const response = await api.get(ENDPOINTS.PLACES_SEARCH, { 
-        params: { mode: 'ALL', size: pageSize, page: pageIndex } 
+      const params = { mode: "ALL", size: pageSize, page: pageIndex };
+      const { reused, promise } = runDedupedGet(ENDPOINTS.PLACES_SEARCH, params, {
+        flow: isLoadMore ? "Home load more places" : "Home catalog",
+        section: "catalog",
       });
+      const response = await promise;
       
       // Manejar estructura de respuesta: { status, message, data: [...] }
-      const body = response.data;
-      let data = [];
-      let totalPages = 0;
-
-      if (body?.data && Array.isArray(body.data)) {
-        data = body.data;
-        totalPages = body.totalPages || body.total_pages || 0;
-      } else if (body?.content && Array.isArray(body.content)) {
-        data = body.content;
-        totalPages = body.totalPages || 0;
-      } else if (Array.isArray(body)) {
-        data = body;
-        totalPages = 1;
-      } else {
-        data = []; // Fallback total para evitar crashes
-      }
+      const data = extractArrayPayload(response);
+      const totalPages = getTotalPages(response);
 
       const normalized = data.map(normalizePlace);
 
@@ -134,10 +285,15 @@ const useHomeData = (user) => {
       }
 
       if (isLoadMore) {
-        setPlaces(prev => [...prev, ...normalized]);
+        if (!reused) {
+          setPlaces(prev => [...prev, ...normalized]);
+        }
       } else {
         setPlaces(normalized);
         setRecommended(normalized.slice(0, 10));
+        if (pageIndex === 0) {
+          setPopular(normalized.slice(0, 10));
+        }
       }
       return normalized;
     } catch (err) {
@@ -147,28 +303,55 @@ const useHomeData = (user) => {
       if (isLoadMore) setLoadingMorePlaces(false);
       else setLoadingAll(false);
     }
-  }, []);
+  }, [runDedupedGet]);
 
   const loadPopular = useCallback(async () => {
     try {
-      const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: 10 } });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPopular(data.map(normalizePlace).slice(0, 10));
+      const { promise } = runDedupedGet(
+        ENDPOINTS.PLACES_SEARCH,
+        { mode: "ALL", size: 10 },
+        {
+          flow: "Home popular fallback",
+          section: "popular",
+        },
+      );
+      const response = await promise;
+      const data = extractArrayPayload(response);
+      const normalized = data.map(normalizePlace).slice(0, 10);
+      setPopular(normalized);
+      return normalized;
     } catch (err) {
       console.warn("Error loadPopular", err);
+      return [];
     }
-  }, []);
+  }, [runDedupedGet]);
 
   const loadTopPlaces = useCallback(async () => {
     setLoadingTopPlaces(true);
     setTopPlacesError("");
     try {
-      const response = await api.get(ENDPOINTS.PLACES_TOP, { params: { limit: 8 } });
-      let data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const { promise } = runDedupedGet(
+        ENDPOINTS.PLACES_TOP,
+        { limit: 8 },
+        {
+          flow: "Home top places",
+          section: "topPlaces",
+        },
+      );
+      const response = await promise;
+      let data = extractArrayPayload(response);
 
       if (data.length === 0) {
-        const fallbackRes = await api.get(ENDPOINTS.PLACES_SEARCH, { params: { mode: 'ALL', size: 8 } });
-        data = Array.isArray(fallbackRes.data) ? fallbackRes.data : fallbackRes.data?.data || [];
+        const { promise: fallbackPromise } = runDedupedGet(
+          ENDPOINTS.PLACES_SEARCH,
+          { mode: "ALL", size: 8 },
+          {
+            flow: "Home top places fallback",
+            section: "topPlaces",
+          },
+        );
+        const fallbackRes = await fallbackPromise;
+        data = extractArrayPayload(fallbackRes);
       }
       setTopPlaces(data.map(normalizeTopPlace));
     } catch (err) {
@@ -176,15 +359,21 @@ const useHomeData = (user) => {
     } finally {
       setLoadingTopPlaces(false);
     }
-  }, []);
+  }, [runDedupedGet]);
 
   const loadBestRatedPlaces = useCallback(async () => {
     setBestRatedError("");
     try {
-      const response = await api.get(ENDPOINTS.PLACES_TOP_RATED, {
-        params: { limit: 8 },
-      });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const { promise } = runDedupedGet(
+        ENDPOINTS.PLACES_TOP_RATED,
+        { limit: 8 },
+        {
+          flow: "Home best rated places",
+          section: "bestRatedPlaces",
+        },
+      );
+      const response = await promise;
+      const data = extractArrayPayload(response);
       const normalized = data.map((item) => {
         const nestedPlace = item?.place || item?.site || item?.placeInfo || item?.placeData;
         const place = nestedPlace ? normalizePlace(nestedPlace) : normalizePlace(item);
@@ -214,9 +403,8 @@ const useHomeData = (user) => {
       setBestRatedPlaces(normalized);
     } catch (_err) {
       setBestRatedError("No se pudo cargar los mejor valorados.");
-      setBestRatedPlaces([]);
     }
-  }, []);
+  }, [runDedupedGet]);
 
   const loadPackages = useCallback(async (offset = 0, append = false, agency = selectedAgencyFilter) => {
     if (append) setLoadingMorePackages(true);
@@ -224,23 +412,29 @@ const useHomeData = (user) => {
     setPackagesError("");
     try {
       const endpoint = agency?.id ? ENDPOINTS.AGENCY_PACKAGES(agency.id) : ENDPOINTS.PACKAGES;
-      const response = await api.get(endpoint, {
-        params: {
-          limit: PACKAGES_PAGE_SIZE,
-          offset,
-        },
+      const params = {
+        limit: PACKAGES_PAGE_SIZE,
+        offset,
+      };
+      const { reused, promise } = runDedupedGet(endpoint, params, {
+        flow: append ? "Home load more packages" : "Home packages",
+        section: "packages",
+        scope: agency?.id ? { agencyId: agency.id } : undefined,
       });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPackages((prev) => (append ? [...prev, ...data] : data));
-      setPackagesOffset(offset);
-      setHasMorePackages(data.length >= PACKAGES_PAGE_SIZE);
+      const response = await promise;
+      const data = extractArrayPayload(response);
+      if (!(append && reused)) {
+        setPackages((prev) => (append ? [...prev, ...data] : data));
+        setPackagesOffset(offset);
+        setHasMorePackages(data.length >= PACKAGES_PAGE_SIZE);
+      }
     } catch (err) {
       setPackagesError("No se pudo cargar los paquetes.");
     } finally {
       if (append) setLoadingMorePackages(false);
       else setLoadingPackages(false);
     }
-  }, [selectedAgencyFilter]);
+  }, [runDedupedGet, selectedAgencyFilter]);
 
   const loadAgencies = useCallback(async (offset = 0, append = false, searchText = agencySearchQuery) => {
     const q = String(searchText || "").trim();
@@ -249,24 +443,29 @@ const useHomeData = (user) => {
     setAgenciesError("");
     try {
       const endpoint = q.length >= 2 ? ENDPOINTS.AGENCIES_SEARCH : ENDPOINTS.AGENCIES;
-      const response = await api.get(endpoint, {
-        params: {
-          q: q.length >= 2 ? q : undefined,
-          limit: AGENCIES_PAGE_SIZE,
-          offset,
-        },
+      const params = {
+        q: q.length >= 2 ? q : undefined,
+        limit: AGENCIES_PAGE_SIZE,
+        offset,
+      };
+      const { reused, promise } = runDedupedGet(endpoint, params, {
+        flow: append ? "Home load more agencies" : "Home agencies",
+        section: "agencies",
       });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setAgencies((prev) => (append ? [...prev, ...data] : data));
-      setAgenciesOffset(offset);
-      setHasMoreAgencies(data.length >= AGENCIES_PAGE_SIZE);
+      const response = await promise;
+      const data = extractArrayPayload(response);
+      if (!(append && reused)) {
+        setAgencies((prev) => (append ? [...prev, ...data] : data));
+        setAgenciesOffset(offset);
+        setHasMoreAgencies(data.length >= AGENCIES_PAGE_SIZE);
+      }
     } catch (err) {
       setAgenciesError("No se pudo cargar las agencias.");
     } finally {
       if (append) setLoadingMoreAgencies(false);
       else setLoadingAgencies(false);
     }
-  }, [agencySearchQuery]);
+  }, [agencySearchQuery, runDedupedGet]);
 
   const loadMoreAgencies = useCallback(() => {
     if (loadingMoreAgencies || loadingAgencies || !hasMoreAgencies) return;
@@ -280,56 +479,60 @@ const useHomeData = (user) => {
 
   const loadCategories = useCallback(async () => {
     try {
-      const response = await api.get(ENDPOINTS.CATEGORIES);
-      const data = Array.isArray(response.data?.data) ? response.data.data : (Array.isArray(response.data) ? response.data : []);
+      const { promise } = runDedupedGet(
+        ENDPOINTS.CATEGORIES,
+        {},
+        {
+          flow: "Home categories",
+          section: "categories",
+        },
+      );
+      const response = await promise;
+      const data = extractArrayPayload(response);
       setCategories(data);
     } catch (err) {
       console.warn("loadCategories error", err);
     }
-  }, []);
+  }, [runDedupedGet]);
 
-  const loadNearby = useCallback(async (forcedDistance, forcedCategory) => {
+  const loadNearby = useCallback(async (forcedDistance, forcedCategory, forcedCoords) => {
     const currentDistance = forcedDistance ?? distanceKm;
     const currentCategory = forcedCategory ?? selectedCategory;
     
     setLoadingNearby(true);
     try {
-      const coordsData = await ensureLocation();
+      const coordsData = forcedCoords || await ensureRecentLocation();
       if (!coordsData) {
         setLoadingNearby(false);
         return;
       }
       
-      const categoryId = currentCategory !== "todos" ? Number(currentCategory) : null;
-      const targetRadiusMeters = currentDistance * 1000;
+      const categoryId = resolveCategoryId(currentCategory);
 
       // Cache logic
-      const sameCoords = nearbyCacheRef.current.coords && isSameCoords(nearbyCacheRef.current.coords, coordsData);
-      const canReuseCategory = nearbyCacheRef.current.categoryId === categoryId;
-
-      if (sameCoords && canReuseCategory && nearbyCacheRef.current.radiusKm >= currentDistance && nearbyCacheRef.current.data.length) {
-        const filtered = nearbyCacheRef.current.data.filter((p) => {
-          const dist = p.distanceMeters ?? (p.lat && p.lng ? distanceBetweenMeters(coordsData, { latitude: p.lat, longitude: p.lng }) : Infinity);
-          return dist <= targetRadiusMeters;
-        });
-
-        if (filtered.length > 0) {
-          setNearby(filtered);
-          setLoadingNearby(false);
-          return;
-        }
+      const reusableNearby = getReusableNearby(
+        coordsData,
+        currentDistance,
+        currentCategory,
+      );
+      if (reusableNearby) {
+        setNearby(reusableNearby);
+        setLoadingNearby(false);
+        return reusableNearby;
       }
 
-      const params = {
-        mode: 'NEARBY',
-        lat: coordsData.latitude,
-        lng: coordsData.longitude,
-        radius: targetRadiusMeters,
-        size: 50,
-        categoryId: categoryId ?? undefined,
-      };
-      const response = await api.get(ENDPOINTS.PLACES_SEARCH, { params });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const params = buildNearbyParams(coordsData, currentDistance, currentCategory);
+      const { promise } = runDedupedGet(
+        ENDPOINTS.PLACES_SEARCH,
+        params,
+        {
+          flow: "Home nearby",
+          keyParams: buildNearbyKeyParams(params),
+          section: "nearby",
+        },
+      );
+      const response = await promise;
+      const data = extractArrayPayload(response);
       const normalized = data.map(normalizePlace);
       
       setNearby(normalized);
@@ -339,12 +542,20 @@ const useHomeData = (user) => {
         data: normalized,
         categoryId,
       };
+      return normalized;
     } catch (err) {
       console.warn("loadNearby error", err);
+      return [];
     } finally {
       setLoadingNearby(false);
     }
-  }, [distanceKm, selectedCategory, ensureLocation]);
+  }, [
+    distanceKm,
+    ensureRecentLocation,
+    getReusableNearby,
+    runDedupedGet,
+    selectedCategory,
+  ]);
 
   const loadNearbyContext = useCallback(async () => {
     if (!user) {
@@ -353,18 +564,30 @@ const useHomeData = (user) => {
     }
     setLoadingNearbyContext(true);
     try {
-      const coordsData = await ensureLocation();
+      const coordsData = await ensureRecentLocation();
       if (!coordsData) return;
-      
-      const response = await api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, {
-        params: {
-          lat: coordsData.latitude,
-          lng: coordsData.longitude,
-          radius: 150,
-          limit: 5,
+      const params = {
+        lat: coordsData.latitude,
+        lng: coordsData.longitude,
+        radius: 150,
+        limit: 5,
+      };
+      const { promise } = runDedupedGet(
+        ENDPOINTS.PLACES_NEARBY_CONTEXT,
+        params,
+        {
+          flow: "Home nearby context",
+          keyParams: {
+            ...params,
+            lat: roundCoordinate(params.lat),
+            lng: roundCoordinate(params.lng),
+          },
+          scope: { userEmail: user?.email },
+          section: "nearbyContext",
         },
-      });
-      const data = Array.isArray(response.data?.data) ? response.data.data : [];
+      );
+      const response = await promise;
+      const data = extractArrayPayload(response);
       const first = data[0] || null;
       if (first?.place) {
         setNearbyContext({
@@ -379,7 +602,7 @@ const useHomeData = (user) => {
     } finally {
       setLoadingNearbyContext(false);
     }
-  }, [user, ensureLocation]);
+  }, [ensureRecentLocation, runDedupedGet, user]);
 
   const performSearch = useCallback(async (searchQuery, overrideDistance, overrideCategory) => {
     const finalQuery = searchQuery ?? query;
@@ -390,36 +613,78 @@ const useHomeData = (user) => {
     setError("");
     try {
       let coordsData = coords;
-      if (!coordsData && finalDistance > 0) {
-        coordsData = await ensureLocation();
+      if (!isValidCoords(coordsData) && finalDistance > 0) {
+        coordsData = await ensureRecentLocation();
       }
-      
-      const response = await api.get(ENDPOINTS.PLACES_SEARCH, {
-        params: {
-          q: finalQuery.trim() || undefined,
-          categoryId: finalCategory !== "todos" ? finalCategory : undefined,
-          lat: coordsData?.latitude,
-          lng: coordsData?.longitude,
-          radiusMeters: coordsData ? finalDistance * 1000 : undefined,
-        },
+
+      const params = {
+        q: finalQuery.trim() || undefined,
+        categoryId: finalCategory !== "todos" ? finalCategory : undefined,
+        lat: coordsData?.latitude,
+        lng: coordsData?.longitude,
+        radiusMeters: coordsData ? finalDistance * 1000 : undefined,
+      };
+      const { promise } = runDedupedGet(ENDPOINTS.PLACES_SEARCH, params, {
+        flow: "Home search",
+        keyParams: isValidCoords(coordsData)
+          ? {
+              ...params,
+              lat: roundCoordinate(coordsData.latitude),
+              lng: roundCoordinate(coordsData.longitude),
+            }
+          : params,
+        section: "search",
       });
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const response = await promise;
+      const data = extractArrayPayload(response);
       setSearchResults(data.map(normalizePlace));
-      
-      if (coordsData) {
-        loadNearby(finalDistance, finalCategory);
+
+      if (isValidCoords(coordsData)) {
+        const reusableNearby = getReusableNearby(
+          coordsData,
+          finalDistance,
+          finalCategory,
+        );
+        if (reusableNearby) {
+          setNearby(reusableNearby);
+          return;
+        }
+
+        const nearbyKey = getNearbyRequestKey(
+          coordsData,
+          finalDistance,
+          finalCategory,
+        );
+        if (!requestDeduper.has(nearbyKey)) {
+          loadNearby(finalDistance, finalCategory, coordsData);
+        }
       }
     } catch (err) {
       setError("No se pudo realizar la búsqueda.");
     } finally {
       setLoadingAll(false);
     }
-  }, [query, distanceKm, selectedCategory, coords, ensureLocation, loadNearby]);
+  }, [
+    coords,
+    distanceKm,
+    ensureRecentLocation,
+    getNearbyRequestKey,
+    getReusableNearby,
+    loadNearby,
+    query,
+    requestDeduper,
+    runDedupedGet,
+    selectedCategory,
+  ]);
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([
-      loadAll(),
-      loadPopular(),
+    const catalogTask = loadAll().then(async (loadedPlaces) => {
+      if (loadedPlaces.length > 0) return loadedPlaces;
+      return loadPopular();
+    });
+
+    await Promise.allSettled([
+      catalogTask,
       loadPackages(),
       loadAgencies(),
       loadTopPlaces(),
@@ -428,7 +693,17 @@ const useHomeData = (user) => {
       loadNearbyContext(),
       loadCategories(),
     ]);
-  }, [loadAll, loadPopular, loadPackages, loadAgencies, loadTopPlaces, loadBestRatedPlaces, loadNearby, loadNearbyContext, loadCategories]);
+  }, [
+    loadAgencies,
+    loadAll,
+    loadBestRatedPlaces,
+    loadCategories,
+    loadNearby,
+    loadNearbyContext,
+    loadPackages,
+    loadPopular,
+    loadTopPlaces,
+  ]);
 
   useEffect(() => {
     if (!didMountAgencySearchRef.current) {

@@ -54,11 +54,73 @@ import {
     getPlaceImages,
     getPlaceVideo,
 } from "./utils/helpers";
+import { buildPlacesById } from "./utils/packagePresentation";
 
 const AGENCY_COLUMN_WIDTH = 310;
 const AGENCY_COLUMN_GAP = 12;
 const PANEL_HANDLE_WIDTH = 25;
 const PANEL_WIDTH = screenWidth - PANEL_HANDLE_WIDTH;
+
+const catalogKeyExtractor = (item, idx) => `${item.id || idx}-cat`;
+
+const CatalogPlaceItem = React.memo(({
+  item,
+  index,
+  sourcePlaces,
+  getTopPlaceMeta,
+  onOpenPlace,
+  onOpenAr,
+}) => {
+  const handlePress = useCallback(() => {
+    onOpenPlace(item, index, sourcePlaces);
+  }, [index, item, onOpenPlace, sourcePlaces]);
+
+  const handleArPress = useCallback(() => {
+    onOpenAr(item);
+  }, [item, onOpenAr]);
+
+  return (
+    <PlaceCard
+      title={item.name}
+      subtitle={item.description}
+      meta={getTopPlaceMeta(item)}
+      image={item.image}
+      rating={item.rating}
+      distance={item.distance}
+      variant="compact"
+      onPress={handlePress}
+      onArPress={handleArPress}
+    />
+  );
+});
+
+const PackageListItem = React.memo(({
+  item,
+  width,
+  placesById,
+  onOpenDetails,
+  onReservePress,
+}) => {
+  const handleOpenDetails = useCallback(() => {
+    onOpenDetails(item);
+  }, [item, onOpenDetails]);
+
+  const handleReservePress = useCallback(() => {
+    onReservePress(item);
+  }, [item, onReservePress]);
+
+  return (
+    <PackageCard
+      pkg={item}
+      width={width}
+      onOpenDetails={handleOpenDetails}
+      onReservePress={handleReservePress}
+      getImage={getPackageImage}
+      getGradient={getPackageGradient}
+      placesById={placesById}
+    />
+  );
+});
 
 const HomeScreen = ({ navigation }) => {
   const { user, roles, logout } = useAuth();
@@ -191,11 +253,37 @@ const HomeScreen = ({ navigation }) => {
   const [agencyPageIndex, setAgencyPageIndex] = useState(0);
   const visualSeedRef = useRef(Math.floor(Math.random() * 100000));
 
+  const trimmedQuery = useMemo(() => query.trim(), [query]);
+  const hasActiveCatalogFilter = Boolean(trimmedQuery) || selectedCategory !== "todos";
+
   const displayPlaces = useMemo(() => {
-    return query.trim() || selectedCategory !== "todos"
+    return hasActiveCatalogFilter
       ? searchResults
       : places;
-  }, [query, selectedCategory, searchResults, places]);
+  }, [hasActiveCatalogFilter, searchResults, places]);
+
+  const searchSuggestions = useMemo(() => {
+    if (!trimmedQuery) return [];
+
+    const normalizedQuery = trimmedQuery.toLowerCase();
+    return places
+      .filter((place) =>
+        (place.name || "").toLowerCase().includes(normalizedQuery),
+      )
+      .slice(0, 5);
+  }, [places, trimmedQuery]);
+
+  const placesById = useMemo(() => buildPlacesById(places), [places]);
+
+  const nearbyDisplayPlace = useMemo(
+    () => nearbyContext || (nearby.length ? nearby[0] : null),
+    [nearby, nearbyContext],
+  );
+
+  const arHtml = useMemo(
+    () => (modals.ar ? generateArHtml() : ""),
+    [generateArHtml, modals.ar],
+  );
 
   const visualPlacePool = useMemo(
     () => [
@@ -452,6 +540,221 @@ const HomeScreen = ({ navigation }) => {
     setIsInteractingWithMap(false);
   }, []);
 
+  const navigateToAuth = useCallback(() => {
+    navigation.navigate("Auth");
+  }, [navigation]);
+
+  const openFilterModal = useCallback(() => {
+    openModal('filter');
+  }, [openModal]);
+
+  const closeFilterModal = useCallback(() => {
+    closeModal('filter');
+  }, [closeModal]);
+
+  const openProfileModal = useCallback(() => {
+    openModal('profile');
+  }, [openModal]);
+
+  const closeProfileModal = useCallback(() => {
+    closeModal('profile');
+  }, [closeModal]);
+
+  const closeVerificationModal = useCallback(() => {
+    closeModal('verification');
+  }, [closeModal]);
+
+  const closeAgencyModal = useCallback(() => {
+    closeModal('agency');
+  }, [closeModal]);
+
+  const closePackageDetailModal = useCallback(() => {
+    closeModal('packageDetail');
+  }, [closeModal]);
+
+  const closeArModal = useCallback(() => {
+    closeModal('ar');
+  }, [closeModal]);
+
+  const handleSelectSuggestion = useCallback(
+    (item) => {
+      navigation.navigate("PlaceDetail", {
+        places: [item],
+        initialIndex: 0,
+      });
+    },
+    [navigation],
+  );
+
+  const handleMapTouchStart = useCallback(() => {
+    setIsInteractingWithMap(true);
+  }, []);
+
+  const handleMapTouchEnd = useCallback(() => {
+    setIsInteractingWithMap(false);
+  }, []);
+
+  const handleNearbyPlacePress = useCallback(
+    (_item, index) => {
+      unlockMapGesture();
+      navigation.navigate("PlaceDetail", {
+        places: nearby,
+        initialIndex: index,
+      });
+    },
+    [nearby, navigation, unlockMapGesture],
+  );
+
+  const handleNearbyArPress = useCallback(
+    (item) => {
+      unlockMapGesture();
+      openAR(item);
+    },
+    [openAR, unlockMapGesture],
+  );
+
+  const handleReloadNearby = useCallback(() => {
+    loadNearby(distanceKm);
+  }, [distanceKm, loadNearby]);
+
+  const handleCatalogPlacePress = useCallback(
+    (_item, index, sourcePlaces) => {
+      navigation.navigate("PlaceDetail", {
+        places: sourcePlaces,
+        initialIndex: index,
+      });
+    },
+    [navigation],
+  );
+
+  const handleCatalogArPress = useCallback(
+    (item) => {
+      openAR(item);
+    },
+    [openAR],
+  );
+
+  const renderCatalogItem = useCallback(
+    ({ item, index }) => (
+      <CatalogPlaceItem
+        item={item}
+        index={index}
+        sourcePlaces={displayPlaces}
+        getTopPlaceMeta={getTopPlaceMeta}
+        onOpenPlace={handleCatalogPlacePress}
+        onOpenAr={handleCatalogArPress}
+      />
+    ),
+    [
+      displayPlaces,
+      getTopPlaceMeta,
+      handleCatalogArPress,
+      handleCatalogPlacePress,
+    ],
+  );
+
+  const renderCatalogFooter = useCallback(
+    () =>
+      hasMorePlaces && !hasActiveCatalogFilter ? (
+        <TouchableOpacity
+          style={styles.loadMoreCard}
+          onPress={handleLoadMore}
+          disabled={loadingMorePlaces}
+        >
+          {loadingMorePlaces ? (
+            <ActivityIndicator color={COLORS.primary} />
+          ) : (
+            <>
+              <View style={styles.loadMoreIcon}>
+                <Text style={{ fontSize: 24, color: COLORS.primary }}>+</Text>
+              </View>
+              <Text style={styles.loadMoreText}>Cargar más</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      ) : null,
+    [handleLoadMore, hasActiveCatalogFilter, hasMorePlaces, loadingMorePlaces],
+  );
+
+  const renderPackageCard = useCallback(
+    (item, idx) => (
+      <PackageListItem
+        key={`${item.id || idx}-pkg`}
+        item={item}
+        width={screenWidth - 36}
+        placesById={placesById}
+        onOpenDetails={openPackageDetail}
+        onReservePress={openPackagePayment}
+      />
+    ),
+    [openPackageDetail, openPackagePayment, placesById],
+  );
+
+  const handleSelectTopPlace = useCallback(
+    (item) => {
+      navigation.navigate("PlaceDetail", {
+        places: [item],
+        initialIndex: 0,
+      });
+    },
+    [navigation],
+  );
+
+  const handleSelectPanelNearby = useCallback(
+    (item) => {
+      navigation.navigate("PlaceDetail", {
+        places: [item],
+        initialIndex: 0,
+      });
+    },
+    [navigation],
+  );
+
+  const getSidePanelPlaceKey = useCallback((place) => place?.id || place?.name, []);
+
+  const handleProfileRoutePress = useCallback(
+    (route) => {
+      closeProfileModal();
+      navigation.navigate(route);
+    },
+    [closeProfileModal, navigation],
+  );
+
+  const handleOpenVerificationFromProfile = useCallback(() => {
+    closeProfileModal();
+    openModal('verification');
+  }, [closeProfileModal, openModal]);
+
+  const handleFilterApply = useCallback(() => {
+    closeFilterModal();
+    performSearch();
+  }, [closeFilterModal, performSearch]);
+
+  const handlePackageDetailReserve = useCallback(() => {
+    openPackagePayment(modalData.selectedPackage);
+  }, [modalData.selectedPackage, openPackagePayment]);
+
+  const handleNotificationOpenReservations = useCallback(() => {
+    closeNotificationPanel();
+    navigation.navigate("MyReservations");
+  }, [closeNotificationPanel, navigation]);
+
+  const handleNotificationOpenFavoritePlace = useCallback(
+    (favoritePlace) => {
+      closeNotificationPanel();
+      navigation.navigate("PlaceDetail", {
+        place: favoritePlace,
+        places: [favoritePlace],
+        initialIndex: 0,
+      });
+    },
+    [closeNotificationPanel, navigation],
+  );
+
+  const clearAgencySearch = useCallback(() => {
+    setAgencySearchQuery("");
+  }, [setAgencySearchQuery]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -473,28 +776,13 @@ const HomeScreen = ({ navigation }) => {
               query={query}
               setQuery={setQuery}
               onPerformSearch={performSearch}
-              onOpenFilters={() => openModal('filter')}
-              onOpenProfile={() => openModal('profile')}
+              onOpenFilters={openFilterModal}
+              onOpenProfile={openProfileModal}
               onOpenNotifications={openNotificationPanel}
               unreadNotifications={unreadCount}
-              onLogin={() => navigation.navigate("Auth")}
-              searchSuggestions={
-                query.trim()
-                  ? places
-                      .filter((p) =>
-                        (p.name || "")
-                          .toLowerCase()
-                          .includes(query.toLowerCase()),
-                      )
-                      .slice(0, 5)
-                  : []
-              }
-              onSelectSuggestion={(item) =>
-                navigation.navigate("PlaceDetail", {
-                  places: [item],
-                  initialIndex: 0,
-                })
-              }
+              onLogin={navigateToAuth}
+              searchSuggestions={searchSuggestions}
+              onSelectSuggestion={handleSelectSuggestion}
             />
           </HeroMediaBackground>
         </View>
@@ -515,25 +803,14 @@ const HomeScreen = ({ navigation }) => {
             distanceKm={distanceKm}
             mapGestureLocked={mapGestureLocked}
             isInteractingWithMap={isInteractingWithMap}
-            onMapTouchStart={() => setIsInteractingWithMap(true)}
-            onMapTouchEnd={() => setIsInteractingWithMap(false)}
+            onMapTouchStart={handleMapTouchStart}
+            onMapTouchEnd={handleMapTouchEnd}
             onToggleMapGestureLock={toggleMapGestureLock}
             onUnlockMapGesture={unlockMapGesture}
-            onPlacePress={(item, index) =>
-              {
-                unlockMapGesture();
-              navigation.navigate("PlaceDetail", {
-                places: nearby,
-                initialIndex: index,
-              });
-              }
-            }
-            onArPress={(item) => {
-              unlockMapGesture();
-              openAR(item);
-            }}
+            onPlacePress={handleNearbyPlacePress}
+            onArPress={handleNearbyArPress}
             onIncreaseRadius={handleIncreaseRadius}
-            onReloadNearby={() => loadNearby(distanceKm)}
+            onReloadNearby={handleReloadNearby}
             getTopPlaceMeta={getTopPlaceMeta}
             loadingNearby={loadingNearby}
             pauseMapUpdates={
@@ -562,72 +839,37 @@ const HomeScreen = ({ navigation }) => {
 
             <View style={styles.sectionIntro}>
               <View style={styles.sectionTitleAccent} />
-              <View style={styles.sectionIconBubble}>
-                <FontAwesome
-                  name={
-                    query.trim() || selectedCategory !== "todos"
-                      ? "search"
-                      : "compass"
-                  }
+	              <View style={styles.sectionIconBubble}>
+	                <FontAwesome
+	                  name={
+	                    hasActiveCatalogFilter
+	                      ? "search"
+	                      : "compass"
+	                  }
                   size={11}
                   color="#0E7490"
                 />
-              </View>
-              <Text style={styles.sectionHeroTitle}>
-                {query.trim() || selectedCategory !== "todos"
-                  ? "Resultados de búsqueda"
-                  : "Tu próxima aventura"}
-              </Text>
+	              </View>
+	              <Text style={styles.sectionHeroTitle}>
+	                {hasActiveCatalogFilter
+	                  ? "Resultados de búsqueda"
+	                  : "Tu próxima aventura"}
+	              </Text>
             </View>
 
             <FlatList
-              horizontal
-              data={displayPlaces}
-              keyExtractor={(item, idx) => `${item.id || idx}-cat`}
-              renderItem={({ item, index }) => (
-                <PlaceCard
-                  title={item.name}
-                  subtitle={item.description}
-                  meta={getTopPlaceMeta(item)}
-                  image={item.image}
-                  rating={item.rating}
-                  distance={item.distance}
-                  variant="compact"
-                  onPress={() =>
-                    navigation.navigate("PlaceDetail", {
-                      places: displayPlaces,
-                      initialIndex: index,
-                    })
-                  }
-                  onArPress={() => openAR(item)}
-                />
-              )}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalList}
-              ListFooterComponent={() =>
-                hasMorePlaces &&
-                !(query.trim() || selectedCategory !== "todos") ? (
-                  <TouchableOpacity
-                    style={styles.loadMoreCard}
-                    onPress={handleLoadMore}
-                    disabled={loadingMorePlaces}
-                  >
-                    {loadingMorePlaces ? (
-                      <ActivityIndicator color={COLORS.primary} />
-                    ) : (
-                      <>
-                        <View style={styles.loadMoreIcon}>
-                          <Text style={{ fontSize: 24, color: COLORS.primary }}>
-                            +
-                          </Text>
-                        </View>
-                        <Text style={styles.loadMoreText}>Cargar más</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                ) : null
-              }
-            />
+	              horizontal
+	              data={displayPlaces}
+	              keyExtractor={catalogKeyExtractor}
+	              renderItem={renderCatalogItem}
+	              showsHorizontalScrollIndicator={false}
+	              contentContainerStyle={styles.horizontalList}
+	              ListFooterComponent={renderCatalogFooter}
+	              initialNumToRender={4}
+	              maxToRenderPerBatch={5}
+	              windowSize={5}
+	              removeClippedSubviews={Platform.OS === "android"}
+	            />
           </View>
         )}
 
@@ -671,9 +913,9 @@ const HomeScreen = ({ navigation }) => {
                   returnKeyType="search"
                 />
                 {agencySearchQuery ? (
-                  <TouchableOpacity
-                    onPress={() => setAgencySearchQuery("")}
-                    style={styles.agencySearchClear}
+	                  <TouchableOpacity
+	                    onPress={clearAgencySearch}
+	                    style={styles.agencySearchClear}
                     activeOpacity={0.8}
                   >
                     <Ionicons name="close" size={14} color="#64748B" />
@@ -874,21 +1116,10 @@ const HomeScreen = ({ navigation }) => {
               color={COLORS.primary}
               style={{ marginVertical: 40 }}
             />
-          ) : packages.length > 0 ? (
-            <View style={styles.packageColumnList}>
-              {packages.map((item, idx) => (
-                <PackageCard
-                  key={`${item.id || idx}-pkg`}
-                  pkg={item}
-                  width={screenWidth - 36}
-                  onOpenDetails={() => openPackageDetail(item)}
-                  onReservePress={() => openPackagePayment(item)}
-                  getImage={getPackageImage}
-                  getGradient={getPackageGradient}
-                  places={places}
-                />
-              ))}
-              {hasMorePackages ? (
+	          ) : packages.length > 0 ? (
+	            <View style={styles.packageColumnList}>
+	              {packages.map(renderPackageCard)}
+	              {hasMorePackages ? (
                 <TouchableOpacity
                   style={styles.packageMoreButton}
                   onPress={loadMorePackages}
@@ -974,57 +1205,41 @@ const HomeScreen = ({ navigation }) => {
         sidePanelWidth={PANEL_WIDTH}
         openSidePanel={openSidePanel}
         closeSidePanel={closeSidePanel}
-        onMotionStart={handlePanelMotionStart}
-        onMotionEnd={handlePanelMotionEnd}
-        nearbyContext={nearbyContext}
-        loadingNearbyContext={loadingNearbyContext}
-        nearbyDisplayPlace={nearbyContext || (nearby.length ? nearby[0] : null)}
-        topPlaces={topPlaces}
-        bestRatedPlaces={bestRatedPlaces}
-        places={places}
+	        onMotionStart={handlePanelMotionStart}
+	        onMotionEnd={handlePanelMotionEnd}
+	        nearbyContext={nearbyContext}
+	        loadingNearbyContext={loadingNearbyContext}
+	        nearbyDisplayPlace={nearbyDisplayPlace}
+	        topPlaces={topPlaces}
+	        bestRatedPlaces={bestRatedPlaces}
+	        places={places}
         loadingTopPlaces={loadingTopPlaces}
         bestRatedError={bestRatedError}
-        onReloadPanelData={handleRefresh}
-        getCategoryLabel={getCategoryLabel}
-        getTopPlaceMeta={getTopPlaceMeta}
-        onSelectTop={(item) =>
-          navigation.navigate("PlaceDetail", {
-            places: [item],
-            initialIndex: 0,
-          })
-        }
-        onSelectNearby={(item, index) =>
-          navigation.navigate("PlaceDetail", {
-            places: [item],
-            initialIndex: 0,
-          })
-        }
-        getPlaceKey={(p) => p?.id || p?.name}
-        categories={categories}
-      />
+	        onReloadPanelData={handleRefresh}
+	        getCategoryLabel={getCategoryLabel}
+	        getTopPlaceMeta={getTopPlaceMeta}
+	        onSelectTop={handleSelectTopPlace}
+	        onSelectNearby={handleSelectPanelNearby}
+	        getPlaceKey={getSidePanelPlaceKey}
+	        categories={categories}
+	      />
 
       {/* Modals */}
-      <ProfileModal
-        visible={modals.profile}
-        onClose={() => closeModal('profile')}
-        user={user}
-        logout={logout}
-        allowedRoutes={allowedRoutes}
-        onRoutePress={(r) => {
-          closeModal('profile');
-          navigation.navigate(r);
-        }}
-        onOpenVerification={() => {
-          closeModal('profile');
-          openModal('verification');
-        }}
-        onAddAccount={() => navigation.navigate("Auth")}
-      />
+	      <ProfileModal
+	        visible={modals.profile}
+	        onClose={closeProfileModal}
+	        user={user}
+	        logout={logout}
+	        allowedRoutes={allowedRoutes}
+	        onRoutePress={handleProfileRoutePress}
+	        onOpenVerification={handleOpenVerificationFromProfile}
+	        onAddAccount={navigateToAuth}
+	      />
 
-      <VerificationModal
-        visible={modals.verification}
-        onClose={() => closeModal('verification')}
-        email={user?.email}
+	      <VerificationModal
+	        visible={modals.verification}
+	        onClose={closeVerificationModal}
+	        email={user?.email}
         loading={emailVerifyLoading}
         status={emailVerifyStatus}
         token={verifyToken}
@@ -1033,11 +1248,11 @@ const HomeScreen = ({ navigation }) => {
         onVerifyToken={handleConfirmVerificationToken}
       />
 
-      <AgencyModal
-        visible={modals.agency}
-        onClose={() => closeModal('agency')}
-        agency={modalData.selectedAgency}
-      />
+	      <AgencyModal
+	        visible={modals.agency}
+	        onClose={closeAgencyModal}
+	        agency={modalData.selectedAgency}
+	      />
 
       <NotificationPanel
         enabled={Boolean(user) && !sidePanelOpen && !mapGestureLocked}
@@ -1051,23 +1266,13 @@ const HomeScreen = ({ navigation }) => {
         unreadCount={unreadCount}
         loading={loadingNotifications}
         error={notificationError}
-        onRefresh={loadNotifications}
-        onMarkRead={markAsRead}
-        onMarkAllRead={markAllAsRead}
-        onOpenReservations={() => {
-          closeNotificationPanel();
-          navigation.navigate("MyReservations");
-        }}
-        onOpenFavoritePlace={(favoritePlace) => {
-          closeNotificationPanel();
-          navigation.navigate("PlaceDetail", {
-            place: favoritePlace,
-            places: [favoritePlace],
-            initialIndex: 0,
-          });
-        }}
-        panelWidth={PANEL_WIDTH}
-      />
+	        onRefresh={loadNotifications}
+	        onMarkRead={markAsRead}
+	        onMarkAllRead={markAllAsRead}
+	        onOpenReservations={handleNotificationOpenReservations}
+	        onOpenFavoritePlace={handleNotificationOpenFavoritePlace}
+	        panelWidth={PANEL_WIDTH}
+	      />
 
       <ReservationModal
         visible={reservationVisible}
@@ -1090,37 +1295,34 @@ const HomeScreen = ({ navigation }) => {
         onClose={closeReservationStatusModal}
       />
 
-      <PackageDetailModal
-        visible={modals.packageDetail}
-        pkg={modalData.selectedPackage}
-        onClose={() => closeModal('packageDetail')}
-        onReserve={() => openPackagePayment(modalData.selectedPackage)}
-        getImage={getPackageImage}
-        getGradient={getPackageGradient}
-        formatPrice={formatPrice}
-        places={places}
-      />
+	      <PackageDetailModal
+	        visible={modals.packageDetail}
+	        pkg={modalData.selectedPackage}
+	        onClose={closePackageDetailModal}
+	        onReserve={handlePackageDetailReserve}
+	        getImage={getPackageImage}
+	        getGradient={getPackageGradient}
+	        formatPrice={formatPrice}
+	        placesById={placesById}
+	      />
 
-      <FilterModal
-        visible={modals.filter}
-        onClose={() => closeModal('filter')}
-        selectedCategory={selectedCategory}
+	      <FilterModal
+	        visible={modals.filter}
+	        onClose={closeFilterModal}
+	        selectedCategory={selectedCategory}
         setSelectedCategory={setSelectedCategory}
-        distanceKm={distanceKm}
-        setDistanceKm={setDistanceKm}
-        categories={categories}
-        onApply={() => {
-          closeModal('filter');
-          performSearch();
-        }}
-      />
+	        distanceKm={distanceKm}
+	        setDistanceKm={setDistanceKm}
+	        categories={categories}
+	        onApply={handleFilterApply}
+	      />
 
-      <ArWebViewModal
-        visible={modals.ar}
-        onClose={() => closeModal('ar')}
-        html={generateArHtml()}
-        onShouldStartLoadWithRequest={handleShouldStartLoad}
-      />
+		      <ArWebViewModal
+		        visible={modals.ar}
+		        onClose={closeArModal}
+		        html={arHtml}
+	        onShouldStartLoadWithRequest={handleShouldStartLoad}
+	      />
 
       {/* Other map modals if needed */}
     </KeyboardAvoidingView>

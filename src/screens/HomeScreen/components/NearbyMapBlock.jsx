@@ -15,6 +15,40 @@ import { FALLBACK_CENTER } from "../utils/constants";
 import { formatDistance, getPlaceImage } from "../utils/helpers";
 import PlaceCard from "./PlaceCard";
 
+const nearbyKeyExtractor = (item, idx) => `nearby-${item.id || idx}`;
+
+const NearbyPlaceItem = React.memo(({
+  item,
+  index,
+  getTopPlaceMeta,
+  onPlacePress,
+  onArPress,
+}) => {
+  const handlePress = useCallback(() => {
+    onPlacePress(item, index);
+  }, [index, item, onPlacePress]);
+
+  const handleArPress = useCallback(() => {
+    onArPress(item);
+  }, [item, onArPress]);
+
+  return (
+    <PlaceCard
+      title={item.name}
+      subtitle={item.description}
+      meta={getTopPlaceMeta(item)}
+      image={getPlaceImage(item)}
+      rating={item.rating}
+      distance={item.distance}
+      variant="compact"
+      cardWidth={250}
+      imageHeight={180}
+      onPress={handlePress}
+      onArPress={handleArPress}
+    />
+  );
+});
+
 const NearbyMapBlock = ({
   coords,
   filteredNearby,
@@ -90,6 +124,19 @@ const NearbyMapBlock = ({
       onMapTouchEnd?.(event);
     },
     [mapGestureLocked, onMapTouchEnd, onToggleMapGestureLock],
+  );
+
+  const renderNearbyItem = useCallback(
+    ({ item, index }) => (
+      <NearbyPlaceItem
+        item={item}
+        index={index}
+        getTopPlaceMeta={getTopPlaceMeta}
+        onPlacePress={onPlacePress}
+        onArPress={onArPress}
+      />
+    ),
+    [getTopPlaceMeta, onArPress, onPlacePress],
   );
 
   const center =
@@ -194,24 +241,14 @@ const NearbyMapBlock = ({
           <FlatList
             horizontal
             data={filteredNearby}
-            keyExtractor={(item, idx) => `nearby-${item.id || idx}`}
+            keyExtractor={nearbyKeyExtractor}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.mapCarrouselContent}
-            renderItem={({ item, index }) => (
-              <PlaceCard
-                title={item.name}
-                subtitle={item.description}
-                meta={getTopPlaceMeta(item)}
-                image={getPlaceImage(item)}
-                rating={item.rating}
-                distance={item.distance}
-                variant="compact"
-                cardWidth={250}
-                imageHeight={180}
-                onPress={() => onPlacePress(item, index)}
-                onArPress={() => onArPress(item)}
-              />
-            )}
+            renderItem={renderNearbyItem}
+            initialNumToRender={3}
+            maxToRenderPerBatch={4}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS === "android"}
           />
         ) : (
           <View style={styles.mapEmptyCard}>

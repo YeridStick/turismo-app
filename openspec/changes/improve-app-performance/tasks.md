@@ -16,26 +16,26 @@
 
 ## 3. Home data sin duplicados
 
-- [ ] 3.1 Aplicar deduplicacion a `loadAll`, `loadTopPlaces`, `loadBestRatedPlaces`, `loadPackages`, `loadAgencies`, `loadCategories`, `loadNearby` y `loadNearbyContext`.
-- [ ] 3.2 Reutilizar `loadAll(0)` para poblar `popular` cuando aplique, dejando `loadPopular` como fallback aislado.
-- [ ] 3.3 Cambiar `handleRefresh` a coordinacion por seccion con `Promise.allSettled` y sin borrar datos validos por errores parciales.
-- [ ] 3.4 Evitar doble request de nearby desde `performSearch` cuando haya cache o request equivalente en vuelo.
-- [ ] 3.5 Verificar que filtros, busqueda, carga mas y pull-to-refresh no duplican endpoints equivalentes.
+- [x] 3.1 Aplicar deduplicacion a `loadAll`, `loadTopPlaces`, `loadBestRatedPlaces`, `loadPackages`, `loadAgencies`, `loadCategories`, `loadNearby` y `loadNearbyContext`.
+- [x] 3.2 Reutilizar `loadAll(0)` para poblar `popular` cuando aplique, dejando `loadPopular` como fallback aislado.
+- [x] 3.3 Cambiar `handleRefresh` a coordinacion por seccion con `Promise.allSettled` y sin borrar datos validos por errores parciales.
+- [x] 3.4 Evitar doble request de nearby desde `performSearch` cuando haya cache o request equivalente en vuelo.
+- [x] 3.5 Verificar que filtros, busqueda, carga mas y pull-to-refresh no duplican endpoints equivalentes.
 
 ## 4. Home render y props estables
 
-- [ ] 4.1 Memoizar `searchSuggestions`, footers de listas y handlers principales en `HomeScreen`.
-- [ ] 4.2 Crear `placesById` memoizado y pasarlo donde se resuelven rutas de paquetes.
-- [ ] 4.3 Reemplazar callbacks inline evitables en `NearbyMapBlock`, catalogo, paquetes, `SidePanel` y modales.
-- [ ] 4.4 Confirmar que `React.memo` evita renders de cards/modales cuando sus datos no cambian.
+- [x] 4.1 Memoizar `searchSuggestions`, footers de listas y handlers principales en `HomeScreen`.
+- [x] 4.2 Crear `placesById` memoizado y pasarlo donde se resuelven rutas de paquetes.
+- [x] 4.3 Reemplazar callbacks inline evitables en `NearbyMapBlock`, catalogo, paquetes, `SidePanel` y modales.
+- [x] 4.4 Confirmar que `React.memo` evita renders de cards/modales cuando sus datos no cambian.
 
 ## 5. Cards, listas y modales
 
-- [ ] 5.1 Extraer helper de presentacion de paquete usado por `PackageCard` y `PackageDetailModal`.
-- [ ] 5.2 Mover derivaciones de includes, city tags, route places, imagen y gradiente a `useMemo` o helper puro.
-- [ ] 5.3 Hacer que `PackageDetailModal` retorne `null` cuando `visible=false` antes de calcular contenido pesado.
-- [ ] 5.4 Convertir la lista creciente de paquetes en Home a `FlatList` o agregar una tarea previa de limite/configuracion si se decide mantenerla pequena.
-- [ ] 5.5 Ajustar `FlatList` de nearby/catalogo con `renderItem`, `keyExtractor`, `initialNumToRender`, `windowSize` y `removeClippedSubviews` donde sea seguro.
+- [x] 5.1 Extraer helper de presentacion de paquete usado por `PackageCard` y `PackageDetailModal`.
+- [x] 5.2 Mover derivaciones de includes, city tags, route places, imagen y gradiente a `useMemo` o helper puro.
+- [x] 5.3 Hacer que `PackageDetailModal` retorne `null` cuando `visible=false` antes de calcular contenido pesado.
+- [x] 5.4 Convertir la lista creciente de paquetes en Home a `FlatList` o agregar una tarea previa de limite/configuracion si se decide mantenerla pequena.
+- [x] 5.5 Ajustar `FlatList` de nearby/catalogo con `renderItem`, `keyExtractor`, `initialNumToRender`, `windowSize` y `removeClippedSubviews` donde sea seguro.
 
 ## 6. Mapa
 

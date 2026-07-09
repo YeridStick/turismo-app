@@ -319,3 +319,71 @@ Restriccion:
 - No activar instrumentation por defecto.
 - No dejar logs permanentes en produccion.
 - Mantener cache en memoria acotada y con invalidacion por filtros, coordenadas, usuario, mutaciones y cambio de cuenta.
+
+## Nota de ejecucion tarea 3
+
+Fecha: posterior a tareas 1 y 2.
+
+Cambios aplicados:
+
+- `useHomeData` usa request keys estables y deduper en memoria para cargas `GET` de Home.
+- La deduplicacion se aplico solo a lecturas:
+  - `loadAll`
+  - `loadTopPlaces`
+  - `loadBestRatedPlaces`
+  - `loadPackages`
+  - `loadAgencies`
+  - `loadCategories`
+  - `loadNearby`
+  - `loadNearbyContext`
+  - `performSearch`
+- No se deduplicaron mutaciones `POST`, `PATCH` ni `DELETE`.
+- `loadAll(0)` alimenta `popular` con los mismos datos del catalogo inicial.
+- `loadPopular()` queda como fallback cuando el catalogo inicial no entrega datos.
+- `handleRefresh()` ahora coordina cargas con `Promise.allSettled`.
+- `loadNearby()` reutiliza cache existente por coordenadas/categoria/radio y usa request key con coordenadas redondeadas solo para deduplicacion.
+- `performSearch()` evita disparar nearby si ya hay cache valida o una request nearby equivalente en vuelo.
+- La ubicacion en Home se reutiliza durante una rafaga corta mediante cache en memoria de 15 segundos.
+
+Hallazgos esperados antes/despues:
+
+- Home mount: se evita la llamada duplicada innecesaria a popular cuando `loadAll(0)` ya trae datos.
+- Pull-to-refresh: rafagas equivalentes reutilizan requests en vuelo por key.
+- Busqueda/filtros: la busqueda reutiliza request equivalente en vuelo y evita doble nearby cuando corresponde.
+- Nearby: requests equivalentes por coordenadas redondeadas, radio y categoria se reutilizan mientras estan en vuelo.
+- Paquetes/agencias: requests equivalentes de paginacion se reutilizan; si una llamada append esta duplicada, no aplica el append dos veces.
+- Categorias: requests equivalentes se reutilizan mientras estan en vuelo.
+
+Validacion ejecutada:
+
+- `npm test -- --runInBand`
+- Resultado: 3 suites passing, 72 tests passing.
+
+Limitaciones:
+
+- No se hizo medicion runtime con la app abierta en dispositivo/emulador durante esta fase.
+- La instrumentation dev-only ya puede contar requests reales si se activa con `EXPO_PUBLIC_PERF_INSTRUMENTATION=true`, pero permanece desactivada por defecto.
+
+## Nota de ejecucion tareas 4 y 5
+
+Fecha: posterior a tarea 3.
+
+Renders y props estabilizados:
+
+- `HomeScreen` memoiza `searchSuggestions`, `placesById`, `nearbyDisplayPlace`, footer del catalogo, render de catalogo y render de paquetes.
+- `HomeHeader`, `NearbyMapBlock`, catalogo, paquetes, `SidePanel` y modales principales reciben handlers estables en lugar de callbacks inline evitables.
+- `NearbyMapBlock` usa `renderItem` y `keyExtractor` estables para el carrusel nearby, con `initialNumToRender`, `maxToRenderPerBatch`, `windowSize` y `removeClippedSubviews` solo en Android.
+- El catalogo horizontal usa `renderItem` y `keyExtractor` estables, mas configuracion de render inicial y ventana.
+- `PackageCard` y `PackageDetailModal` comparten `getPackagePresentation()` para derivar includes, city tags, route places, imagen, gradiente y descripcion.
+- `PackageDetailModal` retorna `null` cuando `visible=false` o no hay paquete, antes de montar el contenido con calculos pesados.
+- La lista de paquetes se mantuvo como lista pequena/paginada dentro del `ScrollView` principal para evitar una `FlatList` vertical anidada con la misma orientacion. La estabilizacion se hizo con `PackageListItem` memoizado y `placesById`; una conversion estructural a lista virtualizada principal queda para una fase separada si el volumen crece.
+
+Validacion ejecutada:
+
+- `npm test -- --runInBand`
+- Resultado: 4 suites passing, 76 tests passing.
+
+Limitaciones:
+
+- No se hizo medicion runtime con la app abierta en dispositivo/emulador durante esta fase.
+- No se tocaron endpoints, navegacion, `api.js`, dashboard, reservas, notificaciones ni `WebViewMap`.
