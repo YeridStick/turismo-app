@@ -47,11 +47,11 @@
 
 ## 7. Dashboard, reservas y notificaciones
 
-- [ ] 7.1 Deduplicar `loadNotifications` y conservar fallback de polling/stream actual.
-- [ ] 7.2 Deduplicar `AgencyDashboardScreen.loadData`, `loadAgencyDashboard` y conteos por agencia.
-- [ ] 7.3 Evitar respuestas obsoletas al cambiar rapido de agencia.
-- [ ] 7.4 Deduplicar apertura de detalle y mensajes en `MyReservationsScreen` y `AgencyReservationsScreen`.
-- [ ] 7.5 Tras mutaciones de reserva/mensaje/estado, refrescar solo datos afectados y conservar UI previa mientras carga.
+- [x] 7.1 Deduplicar `loadNotifications` y conservar fallback de polling/stream actual.
+- [x] 7.2 Deduplicar `AgencyDashboardScreen.loadData`, `loadAgencyDashboard` y conteos por agencia.
+- [x] 7.3 Evitar respuestas obsoletas al cambiar rapido de agencia.
+- [x] 7.4 Deduplicar apertura de detalle y mensajes en `MyReservationsScreen` y `AgencyReservationsScreen`.
+- [x] 7.5 Tras mutaciones de reserva/mensaje/estado, refrescar solo datos afectados y conservar UI previa mientras carga.
 
 ## 8. Servicio API y token
 

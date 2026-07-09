@@ -68,6 +68,8 @@ const NearbyMapBlock = ({
   onReloadNearby,
   getTopPlaceMeta,
   loadingNearby,
+  nearbyError = "",
+  locationError = "",
   pauseMapUpdates = false,
 }) => {
   const lastTapRef = useRef(0);
@@ -187,6 +189,43 @@ const NearbyMapBlock = ({
 
   const circleRadius = useMemo(() => distanceKm * 1000, [distanceKm]);
 
+  const emptyState = useMemo(() => {
+    if (!userLocation) {
+      return {
+        icon: "location-arrow",
+        title: "Sin ubicación disponible",
+        description:
+          locationError ||
+          "Activa el permiso de ubicación para encontrar lugares cercanos.",
+        primaryLabel: "Intentar ubicación",
+        primaryIcon: "refresh",
+        showSecondary: false,
+      };
+    }
+
+    if (nearbyError) {
+      return {
+        icon: "exclamation-circle",
+        title: "No pudimos cargar cercanos",
+        description:
+          nearbyError ||
+          "Conservamos el mapa actual. Puedes intentar cargar esta sección nuevamente.",
+        primaryLabel: "Volver a cargar",
+        primaryIcon: "refresh",
+        showSecondary: false,
+      };
+    }
+
+    return {
+      icon: "map-marker",
+      title: "Sin sitios cercanos",
+      description: `No hay lugares en tu rango actual (${distanceKm}km). Aqui apareceran destinos, rutas y experiencias cercanas cuando tengamos informacion disponible.`,
+      primaryLabel: "Explorar mas lejos",
+      primaryIcon: "search-plus",
+      showSecondary: true,
+    };
+  }, [distanceKm, locationError, nearbyError, userLocation]);
+
   return (
     <View style={styles.mapCard}>
       <View
@@ -271,40 +310,42 @@ const NearbyMapBlock = ({
         ) : (
           <View style={styles.mapEmptyCard}>
             <View style={styles.mapEmptyIconContainer}>
-              <FontAwesome name="map-marker" size={24} color="#0E7490" />
+              <FontAwesome name={emptyState.icon} size={24} color="#0E7490" />
             </View>
             <View style={{ alignItems: "center" }}>
-              <Text style={styles.mapEmptyTitle}>Sin sitios cercanos</Text>
+              <Text style={styles.mapEmptyTitle}>{emptyState.title}</Text>
               <Text style={styles.mapEmptyDesc}>
-                No hay lugares en tu rango actual ({distanceKm}km). Aqui
-                apareceran destinos, rutas y experiencias cercanas cuando
-                tengamos informacion disponible.
+                {emptyState.description}
               </Text>
             </View>
             <View style={styles.mapEmptyActions}>
               <TouchableOpacity
                 style={styles.mapEmptyButton}
-                onPress={onIncreaseRadius}
+                onPress={emptyState.showSecondary ? onIncreaseRadius : onReloadNearby}
+                disabled={loadingNearby}
                 activeOpacity={0.8}
               >
-                <FontAwesome name="search-plus" size={16} color="#FFF" />
-                <Text style={styles.mapEmptyButtonText}>Explorar mas lejos</Text>
+                <FontAwesome name={emptyState.primaryIcon} size={16} color="#FFF" />
+                <Text style={styles.mapEmptyButtonText}>{emptyState.primaryLabel}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.mapEmptyButton, styles.mapEmptyButtonSecondary]}
-                onPress={onReloadNearby}
-                activeOpacity={0.8}
-              >
-                <FontAwesome name="refresh" size={15} color="#0E7490" />
-                <Text
-                  style={[
-                    styles.mapEmptyButtonText,
-                    styles.mapEmptyButtonSecondaryText,
-                  ]}
+              {emptyState.showSecondary ? (
+                <TouchableOpacity
+                  style={[styles.mapEmptyButton, styles.mapEmptyButtonSecondary]}
+                  onPress={onReloadNearby}
+                  disabled={loadingNearby}
+                  activeOpacity={0.8}
                 >
-                  Volver a cargar
-                </Text>
-              </TouchableOpacity>
+                  <FontAwesome name="refresh" size={15} color="#0E7490" />
+                  <Text
+                    style={[
+                      styles.mapEmptyButtonText,
+                      styles.mapEmptyButtonSecondaryText,
+                    ]}
+                  >
+                    Volver a cargar
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         )}

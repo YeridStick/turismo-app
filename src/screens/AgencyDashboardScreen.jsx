@@ -1,7 +1,7 @@
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -24,6 +24,11 @@ import api, {
     getMyAgencies,
 } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
+import {
+    buildRequestKey,
+    createInFlightDeduper,
+    extractArrayPayload,
+} from "../utils/requestHelpers";
 const ACCENT = "#0E7490";
 const ACTIVE_RESERVATION_STATUSES = ["requested", "contacted", "awaiting_payment"];
 
@@ -138,11 +143,7 @@ const formatCurrency = (value) => {
 };
 
 const extractItems = (payload) => {
-    const data = payload?.data?.data ?? payload?.data ?? payload;
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.content)) return data.content;
-    if (Array.isArray(data?.items)) return data.items;
-    return [];
+    return extractArrayPayload(payload);
 };
 
 const AgencyDashboardScreen = ({ navigation }) => {
@@ -156,79 +157,89 @@ const AgencyDashboardScreen = ({ navigation }) => {
     const [error, setError] = useState("");
     const [refreshing, setRefreshing] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const requestDeduper = useMemo(() => createInFlightDeduper(), []);
+    const activeAgencyRef = useRef(null);
+    const dataRequestSeqRef = useRef(0);
+    const dashboardRequestSeqRef = useRef(0);
+    const countsRequestSeqRef = useRef(0);
 
     const isAdmin = useMemo(() => {
         return user?.roles?.map(r => r.toLowerCase()).includes('admin');
     }, [user]);
 
-    const loadData = async () => {
-        if (!user?.email) return;
-        setLoading(true);
-        setError("");
-        try {
-            const agenciesResp = await getMyAgencies(user.email);
-            const myAgencies = agenciesResp.data?.data || [];
-            setAgencies(myAgencies);
-            loadAgencyReservationCounts(myAgencies);
+    useEffect(() => {
+        activeAgencyRef.current = activeAgency;
+    }, [activeAgency]);
 
-            if (myAgencies.length > 0) {
-                const defaultAgency = activeAgency || myAgencies[0];
-                setActiveAgency(defaultAgency);
-                await loadAgencyDashboard(defaultAgency);
-            }
-        } catch (err) {
-            console.error("Error loading dashboard data:", err);
-            setError("No pudimos conectar con los servicios centrales.");
-        } finally {
-            setLoading(false);
-        }
-    };
+    const loadAgencyDashboard = useCallback(async (targetAgency) => {
+        if (!targetAgency || !user?.email) return;
 
-    const onRefresh = async () => {
-        setRefreshing(true);
-        await loadData();
-        setRefreshing(false);
-    };
-
-    const loadAgencyDashboard = async (targetAgency) => {
-        if (!targetAgency) return;
+        const requestSeq = dashboardRequestSeqRef.current + 1;
+        dashboardRequestSeqRef.current = requestSeq;
         setFetchingDashboard(true);
+
         try {
             const now = new Date();
             const from = new Date(now);
             from.setDate(now.getDate() - 30);
-            
-            const dResp = await api.get(ENDPOINTS.AGENCY_DASHBOARD, {
-                params: {
-                    email: user.email,
-                    agencyId: targetAgency.id,
-                    from: from.toISOString().slice(0, 10),
-                    to: now.toISOString().slice(0, 10),
-                },
+
+            const dashboardParams = {
+                email: user.email,
+                agencyId: targetAgency.id,
+                from: from.toISOString().slice(0, 10),
+                to: now.toISOString().slice(0, 10),
+            };
+            const dashboardKey = buildRequestKey({
+                endpoint: ENDPOINTS.AGENCY_DASHBOARD,
+                params: dashboardParams,
+                scope: { agencyId: targetAgency.id, email: user.email },
             });
-            
+            const dResp = await requestDeduper.run(dashboardKey, () =>
+                api.get(ENDPOINTS.AGENCY_DASHBOARD, { params: dashboardParams }),
+            );
+
             let dData = dResp.data?.data || dResp.data || null;
 
             if (!dData?.packages || dData.packages.length === 0) {
                 try {
-                    const pkgsResp = await getAgencyPackages(targetAgency.id);
-                    const agencyPkgs = pkgsResp.data?.data || [];
-                    if (!dData) dData = { packages: [], salesSummary: { totalSold: 0, totalRevenue: 0 } };
+                    const packagesKey = buildRequestKey({
+                        endpoint: ENDPOINTS.AGENCY_PACKAGES(targetAgency.id),
+                        scope: { agencyId: targetAgency.id },
+                    });
+                    const pkgsResp = await requestDeduper.run(packagesKey, () =>
+                        getAgencyPackages(targetAgency.id),
+                    );
+                    const agencyPkgs = extractItems(pkgsResp);
+                    if (!dData) {
+                        dData = {
+                            packages: [],
+                            salesSummary: { totalSold: 0, totalRevenue: 0 },
+                        };
+                    }
                     dData.packages = agencyPkgs;
                 } catch (pkgErr) {
                     console.error("Error fetching agency packages:", pkgErr);
                 }
             }
-            
-            setDashboard(dData);
-        } catch (err) {
-            console.error("Error loading agency dashboard:", err);
-        } finally {
-            setFetchingDashboard(false);
-        }
-    };
 
-    const loadAgencyReservationCounts = async (agencyList = []) => {
+            if (requestSeq === dashboardRequestSeqRef.current) {
+                setDashboard(dData);
+            }
+        } catch (err) {
+            if (requestSeq === dashboardRequestSeqRef.current) {
+                console.error("Error loading agency dashboard:", err);
+            }
+        } finally {
+            if (requestSeq === dashboardRequestSeqRef.current) {
+                setFetchingDashboard(false);
+            }
+        }
+    }, [requestDeduper, user?.email]);
+
+    const loadAgencyReservationCounts = useCallback(async (agencyList = []) => {
+        const requestSeq = countsRequestSeqRef.current + 1;
+        countsRequestSeqRef.current = requestSeq;
+
         if (!Array.isArray(agencyList) || agencyList.length === 0) {
             setReservationCounts({});
             return;
@@ -237,12 +248,24 @@ const AgencyDashboardScreen = ({ navigation }) => {
         const results = await Promise.allSettled(
             agencyList.map(async (agency) => {
                 const responses = await Promise.allSettled(
-                    ACTIVE_RESERVATION_STATUSES.map((status) =>
-                        getAgencyReservations(
-                            { status, page: 0, size: 50 },
-                            { agencyId: agency.id },
-                        ),
-                    ),
+                    ACTIVE_RESERVATION_STATUSES.map((status) => {
+                        const params = { status, page: 0, size: 50 };
+                        const endpoint = agency?.id
+                            ? ENDPOINTS.AGENCY_SCOPED_RESERVATIONS(agency.id)
+                            : ENDPOINTS.AGENCY_RESERVATIONS;
+                        const requestKey = buildRequestKey({
+                            endpoint,
+                            params,
+                            scope: {
+                                agencyId: agency?.id,
+                                purpose: "dashboard-counts",
+                            },
+                        });
+
+                        return requestDeduper.run(requestKey, () =>
+                            getAgencyReservations(params, { agencyId: agency.id }),
+                        );
+                    }),
                 );
                 const seen = new Set();
                 const total = responses.reduce((count, result) => {
@@ -262,6 +285,8 @@ const AgencyDashboardScreen = ({ navigation }) => {
             }),
         );
 
+        if (requestSeq !== countsRequestSeqRef.current) return;
+
         const nextCounts = {};
         results.forEach((result) => {
             if (result.status === "fulfilled") {
@@ -270,16 +295,77 @@ const AgencyDashboardScreen = ({ navigation }) => {
             }
         });
         setReservationCounts(nextCounts);
-    };
+    }, [requestDeduper]);
 
-    const switchAgency = (target) => {
+    const loadData = useCallback(async () => {
+        if (!user?.email) return;
+        const requestSeq = dataRequestSeqRef.current + 1;
+        dataRequestSeqRef.current = requestSeq;
+        setLoading(true);
+        setError("");
+        try {
+            const agenciesKey = buildRequestKey({
+                endpoint: ENDPOINTS.AGENCY_MY,
+                scope: { email: user.email },
+            });
+            const agenciesResp = await requestDeduper.run(agenciesKey, () =>
+                getMyAgencies(),
+            );
+            const myAgencies = extractItems(agenciesResp);
+            if (requestSeq !== dataRequestSeqRef.current) return;
+            setAgencies(myAgencies);
+            loadAgencyReservationCounts(myAgencies);
+
+            if (myAgencies.length > 0) {
+                const currentActiveAgency = activeAgencyRef.current;
+                const defaultAgency =
+                    myAgencies.find(
+                        (agency) =>
+                            String(agency.id) === String(currentActiveAgency?.id),
+                    ) || myAgencies[0];
+                setActiveAgency(defaultAgency);
+                activeAgencyRef.current = defaultAgency;
+                await loadAgencyDashboard(defaultAgency);
+            } else {
+                setActiveAgency(null);
+                activeAgencyRef.current = null;
+                setDashboard(null);
+            }
+        } catch (err) {
+            if (requestSeq === dataRequestSeqRef.current) {
+                console.error("Error loading dashboard data:", err);
+                setError("No pudimos conectar con los servicios centrales.");
+            }
+        } finally {
+            if (requestSeq === dataRequestSeqRef.current) {
+                setLoading(false);
+            }
+        }
+    }, [
+        loadAgencyDashboard,
+        loadAgencyReservationCounts,
+        requestDeduper,
+        user?.email,
+    ]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await loadData();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [loadData]);
+
+    const switchAgency = useCallback((target) => {
         setActiveAgency(target);
+        activeAgencyRef.current = target;
         loadAgencyDashboard(target);
-    };
+    }, [loadAgencyDashboard]);
 
     useEffect(() => {
         loadData();
-    }, [user?.email, isAdmin]);
+    }, [isAdmin, loadData]);
 
     return (
         <View style={styles.container}>

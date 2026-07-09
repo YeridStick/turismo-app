@@ -413,3 +413,34 @@ Limitaciones:
 
 - No se hizo medicion runtime con la app abierta en dispositivo/emulador durante esta fase.
 - La verificacion de no reinicializacion del mapa se hizo por estabilidad de props/source: abrir/cerrar paneles o modales cambia `pauseUpdates`, pero no cambia `mapHTML` si la region efectiva permanece igual.
+
+## Nota de ejecucion tarea 7
+
+Fecha: posterior a tarea 6.
+
+Requests deduplicadas:
+
+- Notificaciones: `loadNotifications` reutiliza requests GET equivalentes por `ENDPOINTS.NOTIFICATIONS`, params y `accountKey`; se conserva el stream y el polling fallback actual.
+- Dashboard de agencia: `loadData`, `loadAgencyDashboard`, fallback de paquetes por agencia y conteos por estado/agencia usan request keys estables y deduper en vuelo.
+- Reservas de usuario: lista, detalle y mensajes se deduplican por endpoint, params y scope de pantalla.
+- Reservas de agencia: lista por filtro/agencia, detalle y mensajes se deduplican por endpoint, params y `agencyId`.
+
+Invalidaciones aplicadas:
+
+- Notificaciones invalida requests en vuelo locales al marcar una o todas como leidas para que respuestas antiguas no sobrescriban la UI optimista.
+- Dashboard usa secuencias por carga general, dashboard activo y conteos; una respuesta vieja no reemplaza la agencia activa ni sus metricas.
+- Reservas limpian solo keys afectadas tras mutaciones: lista, detalle y mensajes de la reserva tocada cuando aplica.
+- Despues de editar, eliminar, iniciar pago, enviar mensaje o cambiar estado, se actualiza la reserva afectada y se evita recargar flujos no relacionados.
+- Los errores parciales no vacian mensajes, listas ni dashboard previamente visibles.
+
+Validacion ejecutada:
+
+- Parseo JSX de `useNotifications`, `AgencyDashboardScreen`, `MyReservationsScreen` y `AgencyReservationsScreen`.
+- `npm test -- --runInBand`
+  - Resultado: 4 suites passing, 76 tests passing.
+
+Limitaciones:
+
+- No se hizo validacion runtime en dispositivo/emulador durante esta fase.
+- Queda pendiente revisar manualmente: notificaciones, marcar leidas, dashboard de agencia, cambio rapido de agencias, conteos, reservas de usuario, doble apertura de detalle, mensajes, envio de mensaje y cambio de estado desde agencia.
+- No se cambiaron endpoints, navegacion, parametros de pantalla, proveedor de datos ni `api.js`.

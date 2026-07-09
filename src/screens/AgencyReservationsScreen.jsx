@@ -1,5 +1,5 @@
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { ENDPOINTS } from "../config/api.config";
 import {
   getAgencyReservationById,
   getAgencyReservationMessages,
@@ -21,6 +22,10 @@ import {
   updateAgencyReservationStatus,
 } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
+import {
+  buildRequestKey,
+  createInFlightDeduper,
+} from "../utils/requestHelpers";
 
 const STATUS_LABELS = {
   requested: "Solicitada",
@@ -179,16 +184,97 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
   });
 
   const params = useMemo(() => ({ status, page: 0, size: 20 }), [status]);
+  const requestDeduper = useMemo(() => createInFlightDeduper(), []);
+  const selectedReservationRef = useRef(null);
+  const listRequestSeqRef = useRef(0);
+  const detailRequestSeqRef = useRef(0);
+  const messagesRequestSeqRef = useRef(0);
+
+  useEffect(() => {
+    selectedReservationRef.current = selectedReservation;
+  }, [selectedReservation]);
+
+  const updateReservationInList = useCallback((reservation) => {
+    if (!reservation?.id) return;
+
+    setReservations((prev) => {
+      const matchesCurrentFilter = reservation.status === status;
+
+      if (!matchesCurrentFilter) {
+        return prev.filter((item) => String(item.id) !== String(reservation.id));
+      }
+
+      let found = false;
+      const next = prev.map((item) => {
+        if (String(item.id) !== String(reservation.id)) return item;
+        found = true;
+        return { ...item, ...reservation };
+      });
+
+      return found ? next : [reservation, ...prev];
+    });
+  }, [status]);
+
+  const getReservationsListKey = useCallback(() => {
+    const endpoint = agencyId
+      ? ENDPOINTS.AGENCY_SCOPED_RESERVATIONS(agencyId)
+      : ENDPOINTS.AGENCY_RESERVATIONS;
+
+    return buildRequestKey({
+      endpoint,
+      params,
+      scope: { agencyId },
+    });
+  }, [agencyId, params]);
+
+  const getReservationDetailKey = useCallback((reservationId) => {
+    const endpoint = agencyId
+      ? ENDPOINTS.AGENCY_SCOPED_RESERVATION_DETAIL(agencyId, reservationId)
+      : ENDPOINTS.AGENCY_RESERVATION_DETAIL(reservationId);
+
+    return buildRequestKey({
+      endpoint,
+      scope: { agencyId },
+    });
+  }, [agencyId]);
+
+  const getReservationMessagesKey = useCallback((reservationId) => {
+    const endpoint = agencyId
+      ? ENDPOINTS.AGENCY_SCOPED_RESERVATION_MESSAGES(agencyId, reservationId)
+      : ENDPOINTS.AGENCY_RESERVATION_MESSAGES(reservationId);
+
+    return buildRequestKey({
+      endpoint,
+      params: { page: 0, size: 50 },
+      scope: { agencyId },
+    });
+  }, [agencyId]);
+
+  const fetchReservationDetail = useCallback((reservationId) => {
+    return requestDeduper.run(getReservationDetailKey(reservationId), () =>
+      getAgencyReservationById(reservationId, { agencyId }),
+    );
+  }, [agencyId, getReservationDetailKey, requestDeduper]);
 
   const loadReservations = useCallback(async () => {
+    const requestSeq = listRequestSeqRef.current + 1;
+    listRequestSeqRef.current = requestSeq;
     setError("");
     try {
-      const response = await getAgencyReservations(params, { agencyId });
-      setReservations(extractItems(response));
+      const requestKey = getReservationsListKey();
+      const response = await requestDeduper.run(requestKey, () =>
+        getAgencyReservations(params, { agencyId }),
+      );
+
+      if (requestSeq === listRequestSeqRef.current) {
+        setReservations(extractItems(response));
+      }
     } catch (err) {
-      setError(err?.response?.data?.message || "No pudimos cargar las solicitudes.");
+      if (requestSeq === listRequestSeqRef.current) {
+        setError(err?.response?.data?.message || "No pudimos cargar las solicitudes.");
+      }
     }
-  }, [agencyId, params]);
+  }, [agencyId, getReservationsListKey, params, requestDeduper]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -199,58 +285,94 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
   const loadMessages = useCallback(async (reservationId) => {
     if (!reservationId) return;
 
+    const requestSeq = messagesRequestSeqRef.current + 1;
+    messagesRequestSeqRef.current = requestSeq;
     setMessagesLoading(true);
 
     try {
-      const response = await getAgencyReservationMessages(
-        reservationId,
-        {
-          page: 0,
-          size: 50,
-        },
-        { agencyId },
+      const params = {
+        page: 0,
+        size: 50,
+      };
+      const requestKey = getReservationMessagesKey(reservationId);
+      const response = await requestDeduper.run(requestKey, () =>
+        getAgencyReservationMessages(reservationId, params, { agencyId }),
       );
 
-      setMessages(orderChatMessages(extractItems(response)));
+      if (
+        requestSeq === messagesRequestSeqRef.current &&
+        String(selectedReservationRef.current?.id) === String(reservationId)
+      ) {
+        setMessages(orderChatMessages(extractItems(response)));
+      }
     } catch (_err) {
-      setMessages([]);
+      // Conserva los mensajes visibles; el siguiente refresh reconcilia.
     } finally {
-      setMessagesLoading(false);
+      if (requestSeq === messagesRequestSeqRef.current) {
+        setMessagesLoading(false);
+      }
     }
-  }, [agencyId]);
+  }, [agencyId, getReservationMessagesKey, requestDeduper]);
 
   const openDetail = useCallback(
     async (reservation) => {
       if (!reservation?.id) return;
+      if (
+        detailLoading &&
+        String(selectedReservationRef.current?.id) === String(reservation.id)
+      ) {
+        return;
+      }
 
+      const requestSeq = detailRequestSeqRef.current + 1;
+      detailRequestSeqRef.current = requestSeq;
+      const previousReservationId = selectedReservationRef.current?.id;
+      const openingSameReservation =
+        String(previousReservationId) === String(reservation.id);
       setDetailVisible(true);
+      selectedReservationRef.current = reservation;
       setSelectedReservation(reservation);
-      setMessages([]);
+      if (!openingSameReservation) {
+        setMessages([]);
+      }
       setMessageText("");
       setDetailLoading(true);
 
       try {
-        const response = await getAgencyReservationById(reservation.id, { agencyId });
-        const detail = extractReservation(response);
+        const response = await fetchReservationDetail(reservation.id);
+        const detail = extractReservation(response) || reservation;
 
-        setSelectedReservation(detail);
-        await loadMessages(reservation.id);
+        if (requestSeq === detailRequestSeqRef.current) {
+          selectedReservationRef.current = detail;
+          setSelectedReservation(detail);
+          updateReservationInList(detail);
+          await loadMessages(reservation.id);
+        }
       } catch (err) {
-        Alert.alert(
-          "No se pudo cargar",
-          err?.response?.data?.message || "Intenta nuevamente.",
-        );
+        if (requestSeq === detailRequestSeqRef.current) {
+          Alert.alert(
+            "No se pudo cargar",
+            err?.response?.data?.message || "Intenta nuevamente.",
+          );
+        }
       } finally {
-        setDetailLoading(false);
+        if (requestSeq === detailRequestSeqRef.current) {
+          setDetailLoading(false);
+        }
       }
     },
-    [agencyId, loadMessages],
+    [detailLoading, fetchReservationDetail, loadMessages, updateReservationInList],
   );
 
   const closeDetail = () => {
+    detailRequestSeqRef.current += 1;
+    messagesRequestSeqRef.current += 1;
     setDetailVisible(false);
+    selectedReservationRef.current = null;
     setSelectedReservation(null);
+    setDetailLoading(false);
     setMessages([]);
+    setMessagesLoading(false);
     setMessageText("");
   };
 
@@ -277,7 +399,7 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
 
   const confirmStatusChange = async () => {
     const { reservation, nextStatus, notes } = statusModal;
-    if (!reservation?.id || !nextStatus) return;
+    if (!reservation?.id || !nextStatus || updatingId) return;
 
     setUpdatingId(reservation.id);
 
@@ -288,12 +410,20 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
         notes.trim(),
         { agencyId },
       );
-      const updated = extractReservation(response);
+      const updated =
+        extractReservation(response) || { ...reservation, status: nextStatus };
 
       setSelectedReservation((prev) =>
-        prev?.id === updated?.id ? updated : prev,
+        String(prev?.id) === String(updated?.id) ? updated : prev,
       );
-      await loadReservations();
+      if (String(selectedReservationRef.current?.id) === String(updated?.id)) {
+        selectedReservationRef.current = updated;
+      }
+      requestDeduper.clear(getReservationsListKey());
+      requestDeduper.clear(getReservationDetailKey(reservation.id));
+      requestDeduper.clear(getReservationMessagesKey(reservation.id));
+      listRequestSeqRef.current += 1;
+      updateReservationInList(updated);
       closeStatusModal();
     } catch (err) {
       Alert.alert(
@@ -318,15 +448,23 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
 
     try {
       await sendAgencyReservationMessage(selectedReservation.id, text, { agencyId });
+      requestDeduper.clear(getReservationsListKey());
+      requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
+      requestDeduper.clear(getReservationMessagesKey(selectedReservation.id));
       setMessageText("");
       const [detailResult] = await Promise.allSettled([
-        getAgencyReservationById(selectedReservation.id, { agencyId }),
+        fetchReservationDetail(selectedReservation.id),
         loadMessages(selectedReservation.id),
-        loadReservations(),
       ]);
 
       if (detailResult.status === "fulfilled") {
-        setSelectedReservation(extractReservation(detailResult.value));
+        const reservation = extractReservation(detailResult.value);
+        if (reservation) {
+          selectedReservationRef.current = reservation;
+          setSelectedReservation(reservation);
+          listRequestSeqRef.current += 1;
+          updateReservationInList(reservation);
+        }
       }
     } catch (err) {
       Alert.alert(

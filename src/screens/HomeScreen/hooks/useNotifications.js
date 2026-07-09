@@ -6,22 +6,17 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../../services/api";
+import {
+  buildRequestKey,
+  createInFlightDeduper,
+  extractArrayPayload,
+} from "../../../utils/requestHelpers";
 
 const NOTIFICATION_STREAM_EVENTS = [
   "RESERVATION_REQUEST_CREATED",
   "RESERVATION_MESSAGE",
   "RESERVATION_STATUS_CHANGED",
 ];
-
-const extractItems = (payload) => {
-  const data = payload?.data?.data ?? payload?.data ?? payload;
-
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.content)) return data.content;
-  if (Array.isArray(data?.items)) return data.items;
-
-  return [];
-};
 
 const normalizeNotification = (item) => {
   const payload = item?.payload || item?.metadata || {};
@@ -78,6 +73,8 @@ const useNotifications = ({ enabled = false, accountKey = "" } = {}) => {
   const [notificationError, setNotificationError] = useState("");
   const eventSourceRef = useRef(null);
   const pollingRef = useRef(null);
+  const notificationsRequestSeqRef = useRef(0);
+  const requestDeduper = useMemo(() => createInFlightDeduper(), []);
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => !item.read).length,
@@ -89,28 +86,47 @@ const useNotifications = ({ enabled = false, accountKey = "" } = {}) => {
 
     setLoadingNotifications(true);
     setNotificationError("");
+    const requestSeq = notificationsRequestSeqRef.current + 1;
+    notificationsRequestSeqRef.current = requestSeq;
 
     try {
-      const response = await getNotifications({
+      const params = {
         unreadOnly,
         page: 0,
         size: 30,
+      };
+      const requestKey = buildRequestKey({
+        endpoint: ENDPOINTS.NOTIFICATIONS,
+        params,
+        scope: { accountKey },
       });
-
-      setNotifications(extractItems(response).map(normalizeNotification));
-    } catch (err) {
-      setNotificationError(
-        err?.response?.data?.message ||
-          "No pudimos cargar tus notificaciones.",
+      const response = await requestDeduper.run(requestKey, () =>
+        getNotifications(params),
       );
+
+      if (requestSeq === notificationsRequestSeqRef.current) {
+        setNotifications(extractArrayPayload(response).map(normalizeNotification));
+      }
+    } catch (err) {
+      if (requestSeq === notificationsRequestSeqRef.current) {
+        setNotificationError(
+          err?.response?.data?.message ||
+            "No pudimos cargar tus notificaciones.",
+        );
+      }
     } finally {
-      setLoadingNotifications(false);
+      if (requestSeq === notificationsRequestSeqRef.current) {
+        setLoadingNotifications(false);
+      }
     }
-  }, [enabled]);
+  }, [accountKey, enabled, requestDeduper]);
 
   const markAsRead = useCallback(async (notification) => {
     if (!notification?.id) return;
 
+    notificationsRequestSeqRef.current += 1;
+    requestDeduper.clear();
+    setLoadingNotifications(false);
     setNotifications((prev) =>
       prev.map((item) =>
         String(item.id) === String(notification.id)
@@ -124,9 +140,12 @@ const useNotifications = ({ enabled = false, accountKey = "" } = {}) => {
     } catch (_err) {
       // La UI queda optimista; el siguiente refresh reconcilia con backend.
     }
-  }, []);
+  }, [requestDeduper]);
 
   const markAllAsRead = useCallback(async () => {
+    notificationsRequestSeqRef.current += 1;
+    requestDeduper.clear();
+    setLoadingNotifications(false);
     setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
 
     try {
@@ -134,11 +153,13 @@ const useNotifications = ({ enabled = false, accountKey = "" } = {}) => {
     } catch (_err) {
       loadNotifications();
     }
-  }, [loadNotifications]);
+  }, [loadNotifications, requestDeduper]);
 
   useEffect(() => {
     if (!enabled) {
+      notificationsRequestSeqRef.current += 1;
       setNotifications([]);
+      setLoadingNotifications(false);
       return undefined;
     }
 

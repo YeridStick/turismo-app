@@ -76,11 +76,14 @@ const useHomeData = (user) => {
   const [loadingMorePackages, setLoadingMorePackages] = useState(false);
   const [loadingMoreAgencies, setLoadingMoreAgencies] = useState(false);
   const [loadingNearbyContext, setLoadingNearbyContext] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(false);
   const [error, setError] = useState("");
+  const [nearbyError, setNearbyError] = useState("");
   const [topPlacesError, setTopPlacesError] = useState("");
   const [bestRatedError, setBestRatedError] = useState("");
   const [packagesError, setPackagesError] = useState("");
   const [agenciesError, setAgenciesError] = useState("");
+  const [categoriesError, setCategoriesError] = useState("");
 
   // Pagination & Filters
   const [allPlacesPage, setAllPlacesPage] = useState(0);
@@ -478,6 +481,8 @@ const useHomeData = (user) => {
   }, [hasMorePackages, loadPackages, loadingMorePackages, loadingPackages, packagesOffset]);
 
   const loadCategories = useCallback(async () => {
+    setLoadingCategories(true);
+    setCategoriesError("");
     try {
       const { promise } = runDedupedGet(
         ENDPOINTS.CATEGORIES,
@@ -492,6 +497,9 @@ const useHomeData = (user) => {
       setCategories(data);
     } catch (err) {
       console.warn("loadCategories error", err);
+      setCategoriesError("No se pudieron cargar las categorías.");
+    } finally {
+      setLoadingCategories(false);
     }
   }, [runDedupedGet]);
 
@@ -500,6 +508,7 @@ const useHomeData = (user) => {
     const currentCategory = forcedCategory ?? selectedCategory;
     
     setLoadingNearby(true);
+    setNearbyError("");
     try {
       const coordsData = forcedCoords || await ensureRecentLocation();
       if (!coordsData) {
@@ -545,6 +554,7 @@ const useHomeData = (user) => {
       return normalized;
     } catch (err) {
       console.warn("loadNearby error", err);
+      setNearbyError("No se pudieron cargar los sitios cercanos.");
       return [];
     } finally {
       setLoadingNearby(false);
@@ -756,11 +766,14 @@ const useHomeData = (user) => {
     loadingMorePackages,
     loadingMoreAgencies,
     loadingNearbyContext,
+    loadingCategories,
     error,
+    nearbyError,
     topPlacesError,
     bestRatedError,
     packagesError,
     agenciesError,
+    categoriesError,
     locationError,
     
     // Pagination & Filters
@@ -786,6 +799,7 @@ const useHomeData = (user) => {
     loadAll,
     loadPackages,
     loadAgencies,
+    loadCategories,
     loadNearby,
     loadNearbyContext,
     loadMoreAgencies,

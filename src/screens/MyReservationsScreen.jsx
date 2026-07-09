@@ -1,6 +1,6 @@
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +24,12 @@ import {
   sendReservationMessage,
   updateReservation,
 } from "../services/api";
+import { ENDPOINTS } from "../config/api.config";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
+import {
+  buildRequestKey,
+  createInFlightDeduper,
+} from "../utils/requestHelpers";
 
 const STATUS_LABELS = {
   requested: "Solicitada",
@@ -295,24 +300,86 @@ const MyReservationsScreen = ({ navigation }) => {
   const [messageText, setMessageText] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const requestDeduper = useMemo(() => createInFlightDeduper(), []);
+  const selectedReservationRef = useRef(null);
+  const listRequestSeqRef = useRef(0);
+  const detailRequestSeqRef = useRef(0);
+  const messagesRequestSeqRef = useRef(0);
+
+  useEffect(() => {
+    selectedReservationRef.current = selectedReservation;
+  }, [selectedReservation]);
+
+  const upsertReservation = useCallback((reservation) => {
+    if (!reservation?.id) return;
+
+    setReservations((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(reservation.id)
+          ? { ...item, ...reservation }
+          : item,
+      ),
+    );
+  }, []);
+
+  const removeReservationFromList = useCallback((reservationId) => {
+    setReservations((prev) =>
+      prev.filter((item) => String(item.id) !== String(reservationId)),
+    );
+  }, []);
+
+  const getReservationsListKey = useCallback(() =>
+    buildRequestKey({
+      endpoint: ENDPOINTS.RESERVATIONS_ME,
+      params: { page: 0, size: 20 },
+    }), []);
+
+  const getReservationDetailKey = useCallback((reservationId) =>
+    buildRequestKey({
+      endpoint: ENDPOINTS.RESERVATION_DETAIL(reservationId),
+      scope: { screen: "MyReservations" },
+    }), []);
+
+  const getReservationMessagesKey = useCallback((reservationId) =>
+    buildRequestKey({
+      endpoint: ENDPOINTS.RESERVATION_MESSAGES(reservationId),
+      params: { page: 0, size: 50 },
+      scope: { screen: "MyReservations" },
+    }), []);
+
+  const fetchReservationDetail = useCallback((reservationId) =>
+    requestDeduper.run(
+      getReservationDetailKey(reservationId),
+      () => getReservationById(reservationId),
+    ), [getReservationDetailKey, requestDeduper]);
 
   const loadReservations = useCallback(async () => {
+    const requestSeq = listRequestSeqRef.current + 1;
+    listRequestSeqRef.current = requestSeq;
     setError("");
 
     try {
-      const response = await getMyReservations({
+      const params = {
         page: 0,
         size: 20,
-      });
-
-      setReservations(extractItems(response));
-    } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          "No pudimos cargar tus reservas.",
+      };
+      const requestKey = getReservationsListKey();
+      const response = await requestDeduper.run(requestKey, () =>
+        getMyReservations(params),
       );
+
+      if (requestSeq === listRequestSeqRef.current) {
+        setReservations(extractItems(response));
+      }
+    } catch (err) {
+      if (requestSeq === listRequestSeqRef.current) {
+        setError(
+          err?.response?.data?.message ||
+            "No pudimos cargar tus reservas.",
+        );
+      }
     }
-  }, []);
+  }, [getReservationsListKey, requestDeduper]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -334,49 +401,84 @@ const MyReservationsScreen = ({ navigation }) => {
 
   const openReservationDetail = useCallback(async (item) => {
     if (!item?.id) return;
+    if (
+      detailLoading &&
+      String(selectedReservationRef.current?.id) === String(item.id)
+    ) {
+      return;
+    }
 
+    const requestSeq = detailRequestSeqRef.current + 1;
+    detailRequestSeqRef.current = requestSeq;
+    const previousReservationId = selectedReservationRef.current?.id;
+    const openingSameReservation =
+      String(previousReservationId) === String(item.id);
     setModalVisible(true);
+    selectedReservationRef.current = item;
     setSelectedReservation(item);
     setEditForm(buildEditForm(item));
-    setMessages([]);
+    if (!openingSameReservation) {
+      setMessages([]);
+    }
     setMessageText("");
     setDetailLoading(true);
     setDetailError("");
 
     try {
-      const response = await getReservationById(item.id);
-      const reservation = extractReservation(response);
+      const response = await fetchReservationDetail(item.id);
+      const reservation = extractReservation(response) || item;
 
-      setSelectedReservation(reservation);
-      setEditForm(buildEditForm(reservation));
+      if (requestSeq === detailRequestSeqRef.current) {
+        selectedReservationRef.current = reservation;
+        setSelectedReservation(reservation);
+        setEditForm(buildEditForm(reservation));
+        upsertReservation(reservation);
+      }
     } catch (err) {
-      setDetailError(
-        err?.response?.data?.message ||
-          "No pudimos cargar el detalle de la reserva.",
-      );
+      if (requestSeq === detailRequestSeqRef.current) {
+        setDetailError(
+          err?.response?.data?.message ||
+            "No pudimos cargar el detalle de la reserva.",
+        );
+      }
     } finally {
-      setDetailLoading(false);
+      if (requestSeq === detailRequestSeqRef.current) {
+        setDetailLoading(false);
+      }
     }
-  }, []);
+  }, [detailLoading, fetchReservationDetail, upsertReservation]);
 
   const loadMessages = useCallback(async (reservationId) => {
     if (!reservationId) return;
 
+    const requestSeq = messagesRequestSeqRef.current + 1;
+    messagesRequestSeqRef.current = requestSeq;
     setMessagesLoading(true);
 
     try {
-      const response = await getReservationMessages(reservationId, {
+      const params = {
         page: 0,
         size: 50,
-      });
+      };
+      const requestKey = getReservationMessagesKey(reservationId);
+      const response = await requestDeduper.run(requestKey, () =>
+        getReservationMessages(reservationId, params),
+      );
 
-      setMessages(orderChatMessages(extractItems(response)));
+      if (
+        requestSeq === messagesRequestSeqRef.current &&
+        String(selectedReservationRef.current?.id) === String(reservationId)
+      ) {
+        setMessages(orderChatMessages(extractItems(response)));
+      }
     } catch (_err) {
-      setMessages([]);
+      // Conserva los mensajes visibles; el siguiente refresh reconcilia.
     } finally {
-      setMessagesLoading(false);
+      if (requestSeq === messagesRequestSeqRef.current) {
+        setMessagesLoading(false);
+      }
     }
-  }, []);
+  }, [getReservationMessagesKey, requestDeduper]);
 
   useEffect(() => {
     if (!modalVisible || detailLoading || detailError || !selectedReservation?.id) {
@@ -393,11 +495,15 @@ const MyReservationsScreen = ({ navigation }) => {
   ]);
 
   const closeModal = () => {
+    detailRequestSeqRef.current += 1;
+    messagesRequestSeqRef.current += 1;
     setModalVisible(false);
+    selectedReservationRef.current = null;
     setSelectedReservation(null);
     setDetailError("");
     setDetailLoading(false);
     setMessages([]);
+    setMessagesLoading(false);
     setMessageText("");
     setEditForm(buildEditForm(null));
     setPaymentLoading(false);
@@ -441,11 +547,16 @@ const MyReservationsScreen = ({ navigation }) => {
 
     try {
       const response = await updateReservation(selectedReservation.id, payload);
-      const reservation = extractReservation(response);
+      const reservation =
+        extractReservation(response) || { ...selectedReservation, ...payload };
 
       setSelectedReservation(reservation);
+      selectedReservationRef.current = reservation;
       setEditForm(buildEditForm(reservation));
-      await loadReservations();
+      requestDeduper.clear(getReservationsListKey());
+      requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
+      listRequestSeqRef.current += 1;
+      upsertReservation(reservation);
       Alert.alert("Reserva actualizada", "Tu solicitud fue actualizada correctamente.");
     } catch (err) {
       Alert.alert(
@@ -475,7 +586,11 @@ const MyReservationsScreen = ({ navigation }) => {
 
             try {
               await deleteReservation(selectedReservation.id);
-              await loadReservations();
+              requestDeduper.clear(getReservationsListKey());
+              requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
+              requestDeduper.clear(getReservationMessagesKey(selectedReservation.id));
+              listRequestSeqRef.current += 1;
+              removeReservationFromList(selectedReservation.id);
               closeModal();
             } catch (err) {
               Alert.alert(
@@ -504,6 +619,7 @@ const MyReservationsScreen = ({ navigation }) => {
 
     try {
       await sendReservationMessage(selectedReservation.id, text);
+      requestDeduper.clear(getReservationMessagesKey(selectedReservation.id));
       setMessageText("");
       await loadMessages(selectedReservation.id);
     } catch (err) {
@@ -519,7 +635,7 @@ const MyReservationsScreen = ({ navigation }) => {
   };
 
   const startReservationPayment = async () => {
-    if (!canPayReservation) return;
+    if (!canPayReservation || paymentLoading) return;
 
     setPaymentLoading(true);
 
@@ -536,27 +652,50 @@ const MyReservationsScreen = ({ navigation }) => {
 
       if (checkoutUrl) {
         await WebBrowser.openBrowserAsync(checkoutUrl);
+        const paymentStatusKey = buildRequestKey({
+          endpoint: ENDPOINTS.RESERVATION_PAYMENT_STATUS(selectedReservation.id),
+          scope: { screen: "MyReservations" },
+        });
+        requestDeduper.clear(getReservationsListKey());
+        requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
+        requestDeduper.clear(paymentStatusKey);
         const [statusResult, detailResult] = await Promise.allSettled([
-          getReservationPaymentStatus(selectedReservation.id),
-          getReservationById(selectedReservation.id),
-          loadReservations(),
+          requestDeduper.run(paymentStatusKey, () =>
+            getReservationPaymentStatus(selectedReservation.id),
+          ),
+          fetchReservationDetail(selectedReservation.id),
         ]);
         if (detailResult.status === "fulfilled") {
-          setSelectedReservation(extractReservation(detailResult.value));
+          const reservation = extractReservation(detailResult.value);
+          if (reservation) {
+            selectedReservationRef.current = reservation;
+            setSelectedReservation(reservation);
+            listRequestSeqRef.current += 1;
+            upsertReservation(reservation);
+          }
         } else if (statusResult.status === "fulfilled") {
           const statusData = statusResult.value?.data?.data || statusResult.value?.data;
-          setSelectedReservation((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  status: statusData?.reservationStatus || prev.status,
-                  paymentProvider: statusData?.paymentProvider || prev.paymentProvider,
-                  paymentStatus: statusData?.paymentStatus || prev.paymentStatus,
-                  paymentId: statusData?.providerTransactionId || prev.paymentId,
-                  paidAt: statusData?.paidAt || prev.paidAt,
-                }
-              : prev,
-          );
+          const currentReservation = selectedReservationRef.current;
+          const reservation = currentReservation
+            ? {
+                ...currentReservation,
+                status: statusData?.reservationStatus || currentReservation.status,
+                paymentProvider:
+                  statusData?.paymentProvider || currentReservation.paymentProvider,
+                paymentStatus:
+                  statusData?.paymentStatus || currentReservation.paymentStatus,
+                paymentId:
+                  statusData?.providerTransactionId || currentReservation.paymentId,
+                paidAt: statusData?.paidAt || currentReservation.paidAt,
+              }
+            : currentReservation;
+
+          if (reservation) {
+            selectedReservationRef.current = reservation;
+            setSelectedReservation(reservation);
+            listRequestSeqRef.current += 1;
+            upsertReservation(reservation);
+          }
         }
         return;
       }
