@@ -5,8 +5,9 @@ import {
     ViroARSceneNavigator,
     ViroDirectionalLight,
 } from '@reactvision/react-viro';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
+import { logARDebug } from '../utils/arDebug';
 
 // URL del modelo de prueba
 const TEST_MODEL_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb';
@@ -25,6 +26,7 @@ interface ARSceneProps {
     onModelLoad?: () => void;
     onModelError?: (error: any) => void;
     sceneRef?: any;
+    debugStartedAt?: number;
 }
 
 const ARScene = ({
@@ -33,7 +35,8 @@ const ARScene = ({
     onLoadProgress,
     onModelLoad,
     onModelError,
-    sceneRef
+    sceneRef,
+    debugStartedAt
 }: ARSceneProps) => {
     const modelType = resolveModelType(modelUrl);
     // Estados tipados correctamente
@@ -47,6 +50,47 @@ const ARScene = ({
     const baseScale = useRef<[number, number, number]>([0.05, 0.05, 0.05]);
     const baseRotation = useRef(0);
     const lastGestureTime = useRef(0);
+    const sceneStartedAtRef = useRef(debugStartedAt ?? Date.now());
+    const renderCountRef = useRef(0);
+    const lastRenderSnapshotRef = useRef("");
+
+    renderCountRef.current += 1;
+
+    useEffect(() => {
+        logARDebug("ARScene mount", {
+            modelUrl,
+            modelType,
+            powerSaver,
+        }, sceneStartedAtRef.current);
+
+        return () => {
+            logARDebug("ARScene unmount", {
+                modelUrl,
+                modelType,
+                renderCount: renderCountRef.current,
+            }, sceneStartedAtRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        const snapshot = JSON.stringify({
+            modelUrl,
+            modelType,
+            modelVisible,
+            powerSaver,
+        });
+
+        if (lastRenderSnapshotRef.current === snapshot) return;
+        lastRenderSnapshotRef.current = snapshot;
+
+        logARDebug("ARScene render state", {
+            renderCount: renderCountRef.current,
+            modelUrl,
+            modelType,
+            modelVisible,
+            powerSaver,
+        }, sceneStartedAtRef.current);
+    });
 
     // Exponer función de reset al componente padre
     if (sceneRef) {
@@ -61,6 +105,10 @@ const ARScene = ({
                 baseScale.current = [0.05, 0.05, 0.05];
 
                 setModelVisible(true);
+                logARDebug("ARScene resetPosition", {
+                    modelUrl,
+                    modelType,
+                }, sceneStartedAtRef.current);
                 console.log('↻ Modelo reseteado frente a la cámara');
             },
             increaseScale: () => {
@@ -144,12 +192,21 @@ const ARScene = ({
     // Detectar cuando el modelo carga correctamente
     const onModelLoadEnd = () => {
         setModelVisible(true);
+        logARDebug("ARScene model load end", {
+            modelUrl,
+            modelType,
+        }, sceneStartedAtRef.current);
         console.log(`✓ Modelo cargado correctamente (${modelType})`);
         onLoadProgress?.(100);
         onModelLoad?.();
     };
 
     const handleModelError = (error: any) => {
+        logARDebug("ARScene model error", {
+            modelUrl,
+            modelType,
+            message: error?.message || String(error),
+        }, sceneStartedAtRef.current);
         console.error('✗ Error cargando modelo:', error);
         setModelVisible(false);
         onModelError?.(error);
@@ -183,6 +240,10 @@ const ARScene = ({
                     scale={scale}
                     rotation={rotation}
                     onLoadStart={() => {
+                        logARDebug("ARScene model load start", {
+                            modelUrl,
+                            modelType,
+                        }, sceneStartedAtRef.current);
                         console.log('Iniciando carga del modelo...');
                         onLoadProgress?.(65);
                     }}
@@ -208,6 +269,7 @@ interface ARViewerProps {
     onModelLoad?: () => void;
     onModelError?: (error: any) => void;
     viewerRef?: any;
+    debugStartedAt?: number;
 }
 
 export const ARViewer: React.FC<ARViewerProps> = ({
@@ -217,12 +279,53 @@ export const ARViewer: React.FC<ARViewerProps> = ({
     onLoadProgress,
     onModelLoad,
     onModelError,
-    viewerRef
+    viewerRef,
+    debugStartedAt
 }) => {
     // Referencia interna para comunicarse con la escena
     const sceneRef = useRef<any>(null);
     const callbacksRef = useRef({ onLoadProgress, onModelLoad, onModelError });
+    const viewerStartedAtRef = useRef(debugStartedAt ?? Date.now());
+    const renderCountRef = useRef(0);
+    const lastRenderSnapshotRef = useRef("");
     callbacksRef.current = { onLoadProgress, onModelLoad, onModelError };
+    renderCountRef.current += 1;
+    const navigatorKey = `ar-${modelUrl || TEST_MODEL_URL}`;
+
+    useEffect(() => {
+        logARDebug("ARViewer mount", {
+            modelUrl,
+            navigatorKey,
+            powerSaver,
+        }, viewerStartedAtRef.current);
+
+        return () => {
+            logARDebug("ARViewer unmount", {
+                modelUrl,
+                navigatorKey,
+                renderCount: renderCountRef.current,
+            }, viewerStartedAtRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        const snapshot = JSON.stringify({
+            modelUrl,
+            navigatorKey,
+            powerSaver,
+        });
+
+        if (lastRenderSnapshotRef.current === snapshot) return;
+        lastRenderSnapshotRef.current = snapshot;
+
+        logARDebug("ARViewer render state", {
+            renderCount: renderCountRef.current,
+            modelUrl,
+            navigatorKey,
+            powerSaver,
+        }, viewerStartedAtRef.current);
+    });
+
     const sceneProps = useMemo(
         () => ({
             modelUrl,
@@ -230,7 +333,8 @@ export const ARViewer: React.FC<ARViewerProps> = ({
             onLoadProgress: (progress: number) => callbacksRef.current.onLoadProgress?.(progress),
             onModelLoad: () => callbacksRef.current.onModelLoad?.(),
             onModelError: (error: any) => callbacksRef.current.onModelError?.(error),
-            sceneRef
+            sceneRef,
+            debugStartedAt: viewerStartedAtRef.current
         }),
         [modelUrl, powerSaver]
     );
@@ -274,7 +378,7 @@ export const ARViewer: React.FC<ARViewerProps> = ({
 
     return (
         <ViroARSceneNavigator
-            key={`ar-${modelUrl || TEST_MODEL_URL}`}
+            key={navigatorKey}
             autofocus={true}
             initialScene={arInitialScene}
             style={styles.container}

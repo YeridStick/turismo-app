@@ -4,6 +4,7 @@ import {
   Animated,
   ActivityIndicator,
   Alert,
+  AppState,
   Easing,
   Linking,
   Platform,
@@ -22,6 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
 import { getPlaceArConfig } from '../services/ar';
@@ -35,6 +37,7 @@ import { ENDPOINTS } from '../config/api.config';
 import { useAuth } from '../context/AuthContext';
 import { PremiumModal } from '../components/ui/PremiumModal';
 import WebViewMap from '../components/WebViewMap';
+import { logARDebug } from '../utils/arDebug';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -417,6 +420,7 @@ const GradientParticleButton = ({
 // Componente para el contenido de un solo sitio
 const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const { user } = useAuth();
+  const isFocused = useIsFocused();
   const { width: windowWidth } = useWindowDimensions();
   const isSmall = windowWidth < BREAKPOINTS.medium;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -454,6 +458,11 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const autoConfirmInFlightRef = useRef(false);
   const autoLastCheckinAttemptRef = useRef(0);
   const autoLastConfirmAttemptRef = useRef(0);
+  const placeDetailDebugStartedAtRef = useRef(Date.now());
+  const nearbyIntervalTickRef = useRef(0);
+  const isFocusedRef = useRef(isFocused);
+
+  isFocusedRef.current = isFocused;
 
   // Cargar datos detallados en segundo plano
   useEffect(() => {
@@ -479,6 +488,64 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     if (!fullPlace) return initialPlace;
     return { ...initialPlace, ...fullPlace };
   }, [initialPlace, fullPlace]);
+
+  const getPlaceDetailFocusState = useCallback(() => {
+    return isFocusedRef.current;
+  }, []);
+
+  useEffect(() => {
+    logARDebug("PlaceDetailContent mount", {
+      placeId: initialPlace?.id,
+      placeName: initialPlace?.name,
+      focused: getPlaceDetailFocusState(),
+      appState: AppState.currentState,
+    }, placeDetailDebugStartedAtRef.current);
+
+    return () => {
+      logARDebug("PlaceDetailContent unmount", {
+        placeId: initialPlace?.id,
+        placeName: initialPlace?.name,
+        intervalTicks: nearbyIntervalTickRef.current,
+      }, placeDetailDebugStartedAtRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      logARDebug("PlaceDetailContent AppState change", {
+        appState: nextState,
+        placeId: place?.id,
+        focused: getPlaceDetailFocusState(),
+      }, placeDetailDebugStartedAtRef.current);
+    });
+
+    return () => {
+      subscription?.remove?.();
+    };
+  }, [getPlaceDetailFocusState, place?.id]);
+
+  useEffect(() => {
+    const unsubscribeFocus = navigation?.addListener?.("focus", () => {
+      isFocusedRef.current = true;
+      logARDebug("PlaceDetailContent navigation focus", {
+        placeId: place?.id,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+    });
+
+    const unsubscribeBlur = navigation?.addListener?.("blur", () => {
+      isFocusedRef.current = false;
+      logARDebug("PlaceDetailContent navigation blur", {
+        placeId: place?.id,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+    });
+
+    return () => {
+      unsubscribeFocus?.();
+      unsubscribeBlur?.();
+    };
+  }, [navigation, place?.id]);
 
   const images = useMemo(() => {
     if (Array.isArray(place.imageUrls) && place.imageUrls.length > 0) {
@@ -714,7 +781,28 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   }, [place?.id]);
 
   const refreshNearbyState = useCallback(async () => {
+    logARDebug("PlaceDetail refreshNearbyState start", {
+      placeId: place?.id,
+      hasUser: Boolean(user),
+      focused: getPlaceDetailFocusState(),
+      appState: AppState.currentState,
+    }, placeDetailDebugStartedAtRef.current);
+
+    if (!isFocusedRef.current) {
+      logARDebug("PlaceDetail refreshNearbyState skipped", {
+        reason: "screen-blurred",
+        placeId: place?.id,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+      return;
+    }
+
     if (!user || !place?.id) {
+      logARDebug("PlaceDetail refreshNearbyState skipped", {
+        reason: !user ? "missing-user" : "missing-place",
+        focused: getPlaceDetailFocusState(),
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
       setNearbyDistanceM(null);
       setPendingVisitId(null);
       return;
@@ -722,16 +810,42 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
+        logARDebug("PlaceDetail refreshNearbyState permission denied", {
+          status,
+          focused: getPlaceDetailFocusState(),
+        }, placeDetailDebugStartedAtRef.current);
         setNearbyDistanceM(null);
         return;
       }
+      const locationStartedAt = Date.now();
+      logARDebug("PlaceDetail location start", {
+        placeId: place.id,
+        focused: getPlaceDetailFocusState(),
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
       const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      logARDebug("PlaceDetail location end", {
+        placeId: place.id,
+        durationMs: Date.now() - locationStartedAt,
+        hasCoords: Boolean(current?.coords),
+        accuracy: current?.coords?.accuracy,
+        focused: getPlaceDetailFocusState(),
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
       const lat = current?.coords?.latitude;
       const lng = current?.coords?.longitude;
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
+      const nearbyStartedAt = Date.now();
+      const nearbyParams = { lat, lng, radius: 200, limit: 5 };
+      logARDebug("PlaceDetail nearby request start", {
+        placeId: place.id,
+        endpoint: ENDPOINTS.PLACES_NEARBY_CONTEXT,
+        params: nearbyParams,
+        focused: getPlaceDetailFocusState(),
+      }, placeDetailDebugStartedAtRef.current);
       const response = await api.get(ENDPOINTS.PLACES_NEARBY_CONTEXT, {
-        params: { lat, lng, radius: 200, limit: 5 },
+        params: nearbyParams,
       });
       const nearbyList = ensureArray(getApiData(response));
       const matched = nearbyList.find((item) => {
@@ -740,6 +854,15 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
       });
       const distance = toNum(matched?.distanceM ?? matched?.distance_m);
       const possibleVisitId = pickVisitId(matched);
+      logARDebug("PlaceDetail nearby request end", {
+        placeId: place.id,
+        durationMs: Date.now() - nearbyStartedAt,
+        resultCount: nearbyList.length,
+        matched: Boolean(matched),
+        distance,
+        possibleVisitId,
+        focused: getPlaceDetailFocusState(),
+      }, placeDetailDebugStartedAtRef.current);
       setNearbyDistanceM(distance);
       if (possibleVisitId != null) {
         setPendingVisitId(possibleVisitId);
@@ -748,24 +871,79 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
         }
       }
     } catch (_err) {
+      logARDebug("PlaceDetail refreshNearbyState error", {
+        placeId: place?.id,
+        message: _err?.message || String(_err),
+        focused: getPlaceDetailFocusState(),
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
       setNearbyDistanceM(null);
     }
-  }, [autoVisitEnabled, user, place?.id]);
+  }, [autoVisitEnabled, getPlaceDetailFocusState, user, place?.id]);
 
   useEffect(() => {
+    if (!isFocused) {
+      logARDebug("PlaceDetail focused refresh paused", {
+        placeId: place?.id,
+        focused: false,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+      return undefined;
+    }
+
     loadReviewsAndRating();
     refreshNearbyState();
-  }, [loadReviewsAndRating, refreshNearbyState]);
+    return undefined;
+  }, [isFocused, loadReviewsAndRating, place?.id, refreshNearbyState]);
 
   useEffect(() => {
+    if (!isFocused) {
+      logARDebug("PlaceDetail nearby interval paused", {
+        placeId: place?.id,
+        focused: false,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+      return undefined;
+    }
+
     if (!user || !place?.id) return undefined;
+    logARDebug("PlaceDetail nearby interval setup", {
+      placeId: place.id,
+      focused: getPlaceDetailFocusState(),
+      appState: AppState.currentState,
+      intervalMs: 20000,
+    }, placeDetailDebugStartedAtRef.current);
     const timer = setInterval(() => {
+      nearbyIntervalTickRef.current += 1;
+      logARDebug("PlaceDetail nearby interval tick", {
+        tick: nearbyIntervalTickRef.current,
+        placeId: place.id,
+        focused: getPlaceDetailFocusState(),
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
       refreshNearbyState();
     }, 20000);
-    return () => clearInterval(timer);
-  }, [user, place?.id, refreshNearbyState]);
+    return () => {
+      logARDebug("PlaceDetail nearby interval cleanup", {
+        placeId: place.id,
+        ticks: nearbyIntervalTickRef.current,
+        focused: getPlaceDetailFocusState(),
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+      clearInterval(timer);
+    };
+  }, [getPlaceDetailFocusState, isFocused, user, place?.id, refreshNearbyState]);
 
   const handleStartVisit = useCallback(async () => {
+    if (!isFocusedRef.current) {
+      logARDebug("PlaceDetail handleStartVisit skipped", {
+        reason: "screen-blurred",
+        placeId: place?.id,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+      return;
+    }
+
     if (!user || !place?.id || !isNearPlace) return;
     setVisitStartLoading(true);
     try {
@@ -842,6 +1020,16 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   }, [autoVisitEnabled, isNearPlace, place?.id, user]);
 
   const handleConfirmVisit = useCallback(async () => {
+    if (!isFocusedRef.current) {
+      logARDebug("PlaceDetail handleConfirmVisit skipped", {
+        reason: "screen-blurred",
+        pendingVisitId,
+        placeId: place?.id,
+        appState: AppState.currentState,
+      }, placeDetailDebugStartedAtRef.current);
+      return;
+    }
+
     if (!pendingVisitId || visitCountdown > 0) return;
     setVisitConfirmLoading(true);
     try {
@@ -891,9 +1079,10 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     } finally {
       setVisitConfirmLoading(false);
     }
-  }, [autoVisitEnabled, loadReviewsAndRating, pendingVisitId, refreshNearbyState, visitCountdown]);
+  }, [autoVisitEnabled, loadReviewsAndRating, pendingVisitId, place?.id, refreshNearbyState, visitCountdown]);
 
   useEffect(() => {
+    if (!isFocused) return;
     if (!autoVisitEnabled || !user || !isNearPlace || visitConfirmed || pendingVisitId) return;
     if (autoCheckinInFlightRef.current) return;
     if (Date.now() - autoLastCheckinAttemptRef.current < 30000) return;
@@ -913,9 +1102,11 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     visitConfirmed,
     pendingVisitId,
     handleStartVisit,
+    isFocused,
   ]);
 
   useEffect(() => {
+    if (!isFocused) return;
     if (!autoVisitEnabled || !autoVisitFlowArmed || !pendingVisitId || visitConfirmed) return;
     if (visitCountdown > 0) return;
     if (autoConfirmInFlightRef.current) return;
@@ -934,6 +1125,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     visitConfirmed,
     visitCountdown,
     handleConfirmVisit,
+    isFocused,
   ]);
 
   const handleSubmitReview = async () => {

@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Animated,
+    AppState,
     Easing,
     Platform,
     StatusBar,
@@ -13,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import { ARViewer } from '../components/ARViewer';
+import { logARDebug } from '../utils/arDebug';
 
 interface ARScreenProps {
     route?: any;
@@ -135,11 +137,91 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     const lastResetAtRef = useRef(0);
     const hintOpacity = useRef(new Animated.Value(1)).current;
     const controlsAnim = useRef(new Animated.Value(0)).current;
+    const arOpenedAtRef = useRef(Date.now());
+    const initialModelUrlRef = useRef(modelUrl);
+    const initialPlaceNameRef = useRef(placeName);
+    const renderCountRef = useRef(0);
+    const lastRenderSnapshotRef = useRef("");
+    const latestARStateRef = useRef({
+        modelUrl,
+        resolvedModelUrl,
+        modelLoaded,
+        isLoading,
+        error,
+    });
+
+    renderCountRef.current += 1;
+    latestARStateRef.current = {
+        modelUrl,
+        resolvedModelUrl,
+        modelLoaded,
+        isLoading,
+        error,
+    };
+
+    useEffect(() => {
+        logARDebug("ARScreen mount", {
+            modelUrl: initialModelUrlRef.current,
+            placeName: initialPlaceNameRef.current,
+        }, arOpenedAtRef.current);
+
+        return () => {
+            logARDebug("ARScreen unmount", {
+                modelUrl: initialModelUrlRef.current,
+                placeName: initialPlaceNameRef.current,
+                renderCount: renderCountRef.current,
+            }, arOpenedAtRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        logARDebug("ARScreen AppState initial", {
+            appState: AppState.currentState,
+        }, arOpenedAtRef.current);
+
+        const subscription = AppState.addEventListener("change", (nextState) => {
+            logARDebug("ARScreen AppState change", {
+                appState: nextState,
+                ...latestARStateRef.current,
+            }, arOpenedAtRef.current);
+        });
+
+        return () => {
+            subscription?.remove?.();
+        };
+    }, []);
+
+    useEffect(() => {
+        const snapshot = JSON.stringify({
+            modelUrl,
+            resolvedModelUrl,
+            modelLoaded,
+            isLoading,
+            error,
+            showControls,
+            showHelpHint,
+        });
+
+        if (lastRenderSnapshotRef.current === snapshot) return;
+        lastRenderSnapshotRef.current = snapshot;
+
+        logARDebug("ARScreen render state", {
+            renderCount: renderCountRef.current,
+            modelUrl,
+            resolvedModelUrl,
+            modelLoaded,
+            isLoading,
+            error,
+            showControls,
+            showHelpHint,
+        }, arOpenedAtRef.current);
+    });
 
     useEffect(() => {
         let cancelled = false;
 
         const prepareModel = async () => {
+            logARDebug("ARScreen prepareModel start", { modelUrl }, arOpenedAtRef.current);
             setLoadProgress(4);
             setIsLoading(true);
             setModelLoaded(false);
@@ -147,12 +229,14 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
             setResolvedModelUrl(undefined);
 
             if (!modelUrl) {
+                logARDebug("ARScreen prepareModel no modelUrl", {}, arOpenedAtRef.current);
                 setResolvedModelUrl(undefined);
                 setLoadProgress(20);
                 return;
             }
 
             if (typeof modelUrl === 'string' && modelUrl.startsWith('file://')) {
+                logARDebug("ARScreen prepareModel using file uri", { modelUrl }, arOpenedAtRef.current);
                 setResolvedModelUrl(modelUrl);
                 setLoadProgress(45);
                 return;
@@ -160,6 +244,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
 
             const cachedUri = getCachedModelUri(modelUrl);
             if (!cachedUri || !FileSystem.cacheDirectory) {
+                logARDebug("ARScreen prepareModel no cache dir", { modelUrl }, arOpenedAtRef.current);
                 setResolvedModelUrl(modelUrl);
                 setLoadProgress(35);
                 return;
@@ -172,12 +257,22 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 const cachedInfo = await FileSystem.getInfoAsync(cachedUri);
                 if (cachedInfo.exists && (cachedInfo.size ?? 1) > 0) {
                     if (!cancelled) {
+                        logARDebug("ARScreen prepareModel cache hit", {
+                            modelUrl,
+                            cachedUri,
+                            size: cachedInfo.size,
+                        }, arOpenedAtRef.current);
                         setResolvedModelUrl(cachedUri);
                         setLoadProgress(55);
                     }
                     return;
                 }
 
+                const downloadStartedAt = Date.now();
+                logARDebug("ARScreen prepareModel download start", {
+                    modelUrl,
+                    cachedUri,
+                }, arOpenedAtRef.current);
                 const download = FileSystem.createDownloadResumable(
                     modelUrl,
                     cachedUri,
@@ -194,10 +289,20 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                 }
 
                 if (!cancelled) {
+                    logARDebug("ARScreen prepareModel download end", {
+                        modelUrl,
+                        cachedUri,
+                        status: result.status,
+                        durationMs: Date.now() - downloadStartedAt,
+                    }, arOpenedAtRef.current);
                     setResolvedModelUrl(result.uri);
                     setLoadProgress(58);
                 }
             } catch (downloadError) {
+                logARDebug("ARScreen prepareModel error", {
+                    modelUrl,
+                    message: downloadError instanceof Error ? downloadError.message : String(downloadError),
+                }, arOpenedAtRef.current);
                 console.error('Error preparando modelo AR:', downloadError);
                 if (!cancelled) {
                     setIsLoading(false);
@@ -272,8 +377,17 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     }, []);
 
     const handleModelLoad = () => {
+        logARDebug("ARScreen handleModelLoad", {
+            modelUrl,
+            resolvedModelUrl,
+            loadProgress,
+        }, arOpenedAtRef.current);
         setLoadProgress(100);
         setTimeout(() => {
+            logARDebug("ARScreen modelLoaded state commit", {
+                modelUrl,
+                resolvedModelUrl,
+            }, arOpenedAtRef.current);
             setIsLoading(false);
             setModelLoaded(true);
             setError(null);
@@ -281,6 +395,10 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
     };
 
     const handleModelError = () => {
+        logARDebug("ARScreen handleModelError", {
+            modelUrl,
+            resolvedModelUrl,
+        }, arOpenedAtRef.current);
         setIsLoading(false);
         setError('No se pudo cargar el modelo 3D. Verifica la URL del archivo.');
         setModelLoaded(false);
@@ -360,6 +478,7 @@ const ARScreen: React.FC<ARScreenProps> = ({ route, navigation }) => {
                     onModelError={handleModelError}
                     onLoadProgress={handleLoadProgress}
                     viewerRef={viewerRef}
+                    debugStartedAt={arOpenedAtRef.current}
                 />
             )}
 
