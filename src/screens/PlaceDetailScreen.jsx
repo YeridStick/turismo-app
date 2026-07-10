@@ -1,43 +1,43 @@
-import { Image } from 'expo-image';
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Animated,
-  ActivityIndicator,
-  Alert,
-  AppState,
-  Easing,
-  Linking,
-  Platform,
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  useWindowDimensions,
-  FlatList,
-  Modal,
-  TextInput,
-} from 'react-native';
+import { FontAwesome, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
-import * as Location from 'expo-location';
-import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
-import { COLORS, SPACING, FONT_SIZES, PLACE_SERVICES } from '../utils/constants';
-import { BREAKPOINTS } from '../utils/responsive';
-import { getPlaceArConfig } from '../services/ar';
-import { formatDistance } from '../utils/utils';
+import { Image } from 'expo-image';
+import * as Location from 'expo-location';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  AppState,
+  Dimensions,
+  Easing,
+  FlatList,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { PremiumModal } from '../components/ui/PremiumModal';
+import WebViewMap from '../components/WebViewMap';
+import { ENDPOINTS } from '../config/api.config';
+import { useAuth } from '../context/AuthContext';
 import api, {
   addFavoritePlace,
   getFavoritePlaces,
   removeFavoritePlace,
 } from '../services/api';
-import { ENDPOINTS } from '../config/api.config';
-import { useAuth } from '../context/AuthContext';
-import { PremiumModal } from '../components/ui/PremiumModal';
-import WebViewMap from '../components/WebViewMap';
+import { getPlaceArConfig } from '../services/ar';
 import { logARDebug } from '../utils/arDebug';
+import { COLORS, FONT_SIZES, PLACE_SERVICES, SPACING } from '../utils/constants';
+import { BREAKPOINTS } from '../utils/responsive';
+import { formatDistance } from '../utils/utils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -2112,7 +2112,6 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    flexWrap: "wrap",
     gap: SPACING.sm,
     marginTop: SPACING.md,
   },
