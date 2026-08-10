@@ -1,5 +1,5 @@
 // Cambia esta URL por la de tu backend
-export const API_BASE_URL = 'https://turismo-back-uv7n.onrender.com';//https://turismo-back-uv7n.onrender.com //http://192.168.80.113:7860 http://localhost:8082 
+export const API_BASE_URL = 'http://3.211.84.105'; //https://turismo-back-uv7n.onrender.com //https://turismo-back-uv7n.onrender.com //http://192.168.80.113:7860 http://localhost:8082
 
 // O si estás probando localmente en LAN:
 // export const API_BASE_URL = 'http://192.168.1.X:8082'; // Reemplaza X con tu IP local
@@ -28,6 +28,8 @@ export const ENDPOINTS = {
   PLACE_UPDATE: (id) => `/api/places/${id}`,
   PLACES_CREATE: '/api/places',
   PLACES_MINE: '/api/places/mine',
+  PLACE_MEDIA: (id) => `/api/places/${id}/media`,
+  PLACE_MEDIA_ITEM: (placeId, mediaId) => `/api/places/${placeId}/media/${mediaId}`,
   PLACES_TOP: '/api/pruebas/analytics/places/top',
   PLACES_TOP_RATED: '/api/pruebas/places/top-rated',
 
@@ -65,12 +67,17 @@ export const ENDPOINTS = {
   AGENCY_SCOPED_RESERVATION_DETAIL: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}`,
   AGENCY_SCOPED_RESERVATION_STATUS: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}/status`,
   AGENCY_SCOPED_RESERVATION_MESSAGES: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}/messages`,
+  AGENCY_IN_PERSON_PAYMENT_REQUEST: (agencyId, id) => `/api/agencies/${agencyId}/reservations/${id}/payment-requests`,
+  AGENCY_IN_PERSON_PAYMENT_LOOKUP: (agencyId) => `/api/agencies/${agencyId}/reservations/payment-requests/lookup`,
+  AGENCY_IN_PERSON_PAYMENT_VERIFY: (agencyId, reservationId, requestId) => `/api/agencies/${agencyId}/reservations/${reservationId}/payment-requests/${requestId}/verify`,
+  AGENCY_IN_PERSON_PAYMENT_CANCEL: (agencyId, reservationId, requestId) => `/api/agencies/${agencyId}/reservations/${reservationId}/payment-requests/${requestId}/cancel`,
   NOTIFICATIONS_STREAM: "/api/notifications/stream",
   NOTIFICATIONS: "/api/notifications",
   NOTIFICATION_READ: (id) => `/api/notifications/${id}/read`,
   NOTIFICATIONS_READ_ALL: "/api/notifications/read-all",
   GEOCODE: "/api/tools/geocode",
   CATEGORIES: "/api/categories",
+  CATEGORY_DETAIL: (id) => `/api/categories/${id}`,
   
   // Agency User Management
   AGENCY_USERS: (id) => `/api/agencies/${id}/users`,
@@ -78,6 +85,9 @@ export const ENDPOINTS = {
 
   // User Management
   USERS_ME: '/api/users/me',
+  USER_INFO: '/api/info/user',
+  USERS_ME_PROFILE_IMAGE: '/api/users/me/profile-image',
   USERS_ME_PASSWORD: '/api/users/me/password',
+  PACKAGE_COVER_IMAGE: (id) => `/api/packages/${id}/cover-image`,
   ADMIN_USERS: '/api/admin/all/user',
 };

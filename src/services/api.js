@@ -5,9 +5,6 @@ import { API_BASE_URL, API_TIMEOUT, ENDPOINTS } from '../config/api.config';
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_TIMEOUT,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 let cachedAuthToken;
@@ -90,6 +87,17 @@ export const getTopRatedPlaces = (limit = 8) => api.get(ENDPOINTS.PLACES_TOP_RAT
 export const getPackages = (params = {}) => api.get(ENDPOINTS.PACKAGES, { params });
 export const createPackage = (data) => api.post(ENDPOINTS.PACKAGES, data);
 export const getPackageById = (id) => api.get(`${ENDPOINTS.PACKAGES}/${id}`);
+
+// Los endpoints de lectura son la fuente de la URL prefirmada vigente.
+// No reutilizar cover_image_key ni construir URLs de S3 en el cliente.
+export const getPackageCover = async (id) => {
+  const response = await getPackageById(id);
+  return response?.data?.data || response?.data || null;
+};
+export const getPackageCoverImage = async (id) => {
+  const response = await api.get(ENDPOINTS.PACKAGE_COVER_IMAGE(id));
+  return response?.data?.data || response?.data || null;
+};
 export const getAgencies = (params = {}) => api.get(ENDPOINTS.AGENCIES, { params });
 export const searchAgencies = (params = {}) => api.get(ENDPOINTS.AGENCIES_SEARCH, { params });
 export const createAgency = (data) => api.post(ENDPOINTS.AGENCIES, data);
@@ -147,6 +155,14 @@ export const sendAgencyReservationMessage = (id, message, options = {}) => {
 
   return api.post(endpoint, { message });
 };
+export const requestAgencyInPersonPayment = (id, data = {}, options = {}) =>
+  api.post(ENDPOINTS.AGENCY_IN_PERSON_PAYMENT_REQUEST(options.agencyId, id), data);
+export const lookupAgencyInPersonPayment = (code, options = {}) =>
+  api.get(ENDPOINTS.AGENCY_IN_PERSON_PAYMENT_LOOKUP(options.agencyId), { params: { code } });
+export const verifyAgencyInPersonPayment = (reservationId, requestId, data = {}, options = {}) =>
+  api.post(ENDPOINTS.AGENCY_IN_PERSON_PAYMENT_VERIFY(options.agencyId, reservationId, requestId), data);
+export const cancelAgencyInPersonPayment = (reservationId, requestId, options = {}) =>
+  api.post(ENDPOINTS.AGENCY_IN_PERSON_PAYMENT_CANCEL(options.agencyId, reservationId, requestId));
 
 // Notifications
 export const getNotifications = (params = {}) =>
@@ -180,8 +196,96 @@ export const addFavoritePlace = (placeId) => api.post(ENDPOINTS.FAVORITE_PLACE(p
 export const removeFavoritePlace = (placeId) => api.delete(ENDPOINTS.FAVORITE_PLACE(placeId));
 
 export const getMyPlaces = () => api.get(ENDPOINTS.PLACES_MINE);
+export const getUserInfo = (email) =>
+  api.get(ENDPOINTS.USER_INFO, { params: { userEmail: email } });
+const uploadPrivateImage = async (endpoint, file) => {
+  if (!file?.uri || !file?.name || !file?.type) {
+    throw new Error('El archivo debe incluir uri, name y type');
+  }
+  const token = await getAuthToken();
+  if (!token) throw new Error('La sesión no tiene un token válido');
+  const form = new FormData();
+  form.append('file', file);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: form,
+    });
+  } catch (error) {
+    const networkError = new Error('No se pudo conectar con el servidor para cargar la imagen.');
+    networkError.cause = error;
+    throw networkError;
+  }
+  const payload = await response.json().catch(() => ({ message: 'Respuesta inválida del servidor.', data: null }));
+  if (!response.ok) {
+    const requestError = new Error(payload?.message || 'No se pudo cargar la imagen.');
+    requestError.response = { status: response.status, data: payload };
+    throw requestError;
+  }
+  return { status: response.status, data: payload };
+};
+
+export const uploadProfileImage = (file) => uploadPrivateImage(ENDPOINTS.USERS_ME_PROFILE_IMAGE, file);
+export const getProfileImage = () => api.get(ENDPOINTS.USERS_ME_PROFILE_IMAGE);
+export const deleteProfileImage = () => api.delete(ENDPOINTS.USERS_ME_PROFILE_IMAGE);
+export const uploadPackageCoverImage = (packageId, file) =>
+  uploadPrivateImage(ENDPOINTS.PACKAGE_COVER_IMAGE(packageId), file);
+export const deletePackageCoverImage = (packageId) => api.delete(ENDPOINTS.PACKAGE_COVER_IMAGE(packageId));
+export const deletePlace = (siteId) => api.delete(ENDPOINTS.PLACE_DETAIL(siteId));
+export const createCategory = (data) => api.post(ENDPOINTS.CATEGORIES, data);
+export const updateCategory = (id, data) => api.patch(ENDPOINTS.CATEGORY_DETAIL(id), data);
 export const createPlace = (data) => api.post(ENDPOINTS.PLACES_CREATE, data);
 export const updatePlace = (id, data) => api.patch(ENDPOINTS.PLACE_UPDATE(id), data);
+export const listPlaceMedia = (siteId) => api.get(ENDPOINTS.PLACE_MEDIA(siteId));
+export const uploadPlaceMedia = async (siteId, file, category) => {
+  if (!siteId) throw new Error('El sitio todavía no tiene ID');
+  if (!file?.uri || !file?.name || !file?.type) {
+    throw new Error('El archivo debe incluir uri, name y type');
+  }
+
+  const token = await getAuthToken();
+  if (!token) throw new Error('La sesión no tiene un token válido');
+
+  const form = new FormData();
+  form.append('category', category);
+  form.append('file', file);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${ENDPOINTS.PLACE_MEDIA(siteId)}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: form,
+    });
+  } catch (error) {
+    const networkError = new Error('No se pudo conectar con el servidor para cargar el archivo.');
+    networkError.cause = error;
+    throw networkError;
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (_error) {
+    payload = { message: 'El servidor devolvió una respuesta inválida.', data: null };
+  }
+
+  if (!response.ok) {
+    const requestError = new Error(payload?.message || 'No se pudo cargar el archivo');
+    requestError.response = { status: response.status, data: payload };
+    throw requestError;
+  }
+
+  return { status: response.status, data: payload };
+};
+export const deletePlaceMedia = (siteId, mediaId) =>
+  api.delete(ENDPOINTS.PLACE_MEDIA_ITEM(siteId, mediaId));
 
 // New features: Edit / Delete Agencies and Packages
 export const updateAgency = (id, data) => api.patch(`${ENDPOINTS.AGENCIES}/${id}`, data);

@@ -18,7 +18,10 @@ import {
   getAgencyReservationById,
   getAgencyReservationMessages,
   getAgencyReservations,
+  lookupAgencyInPersonPayment,
+  requestAgencyInPersonPayment,
   sendAgencyReservationMessage,
+  verifyAgencyInPersonPayment,
   updateAgencyReservationStatus,
 } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
@@ -85,6 +88,9 @@ const orderChatMessages = (messages = []) => {
 };
 
 const extractReservation = (payload) =>
+  payload?.data?.data ?? payload?.data ?? payload ?? null;
+
+const extractPaymentLookup = (payload) =>
   payload?.data?.data ?? payload?.data ?? payload ?? null;
 
 const formatCurrency = (value, currency = "COP") => {
@@ -178,6 +184,16 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
   const [messagesError, setMessagesError] = useState("");
   const [messageText, setMessageText] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [paymentRequest, setPaymentRequest] = useState(null);
+  const [paymentCode, setPaymentCode] = useState("");
+  const [paymentDialog, setPaymentDialog] = useState({
+    visible: false,
+    mode: "request",
+    locationUrl: "",
+    notes: "",
+    paymentReference: "",
+  });
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [statusModal, setStatusModal] = useState({
     visible: false,
     reservation: null,
@@ -496,6 +512,79 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
     }
   };
 
+  const lookupPaymentRequest = async () => {
+    const code = paymentCode.trim();
+    if (!code || !agencyId) return;
+    setPaymentLoading(true);
+    try {
+      const response = await lookupAgencyInPersonPayment(code, { agencyId });
+      const result = extractPaymentLookup(response);
+      if (!result?.reservation || !result?.paymentRequest) throw new Error("Solicitud no encontrada");
+      const reservation = result.reservation;
+      selectedReservationRef.current = reservation;
+      setSelectedReservation(reservation);
+      setPaymentRequest(result.paymentRequest);
+      setMessages(orderChatMessages(result.messages || []));
+      setDetailVisible(true);
+      setPaymentCode("");
+    } catch (err) {
+      Alert.alert("No se encontró la solicitud", err?.response?.data?.message || "Verifica el código e intenta nuevamente.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const openPaymentRequestDialog = () => {
+    setPaymentDialog({ visible: true, mode: "request", locationUrl: "", notes: "", paymentReference: "" });
+  };
+
+  const openPaymentVerifyDialog = () => {
+    setPaymentDialog((prev) => ({ ...prev, visible: true, mode: "verify" }));
+  };
+
+  const closePaymentDialog = () => {
+    if (!paymentLoading) setPaymentDialog((prev) => ({ ...prev, visible: false }));
+  };
+
+  const submitPaymentDialog = async () => {
+    if (!selectedReservation?.id || !agencyId || paymentLoading) return;
+    setPaymentLoading(true);
+    try {
+      if (paymentDialog.mode === "request") {
+        const response = await requestAgencyInPersonPayment(selectedReservation.id, {
+          locationUrl: paymentDialog.locationUrl.trim() || undefined,
+          notes: paymentDialog.notes.trim() || undefined,
+        }, { agencyId });
+        const request = extractPaymentLookup(response);
+        setPaymentRequest(request);
+        Alert.alert("Pago solicitado", `Código de atención: ${request?.code || "generado"}`);
+      } else {
+        const response = await verifyAgencyInPersonPayment(
+          selectedReservation.id,
+          paymentRequest?.id,
+          {
+            paymentReference: paymentDialog.paymentReference.trim() || undefined,
+            notes: paymentDialog.notes.trim() || undefined,
+          },
+          { agencyId },
+        );
+        const request = extractPaymentLookup(response);
+        setPaymentRequest(request);
+        setSelectedReservation((prev) => ({ ...prev, status: "confirmed", paymentStatus: "verified_by_agency", paymentProvider: "agency_managed" }));
+        await loadMessages(selectedReservation.id);
+        Alert.alert("Pago confirmado", "La reserva fue confirmada correctamente.");
+      }
+      setPaymentDialog((prev) => ({ ...prev, visible: false }));
+      requestDeduper.clear(getReservationsListKey());
+      requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
+      updateReservationInList({ ...selectedReservation, ...(paymentDialog.mode === "verify" ? { status: "confirmed", paymentStatus: "verified_by_agency" } : {}) });
+    } catch (err) {
+      Alert.alert("No se pudo completar", err?.response?.data?.message || "Intenta nuevamente.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
     loadReservations().finally(() => setLoading(false));
@@ -515,6 +604,19 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
               : "Reservas administradas por agencia"}
           </Text>
         </View>
+      </View>
+
+      <View style={styles.paymentLookupBar}>
+        <TextInput
+          style={styles.paymentLookupInput}
+          value={paymentCode}
+          onChangeText={setPaymentCode}
+          autoCapitalize="characters"
+          placeholder="Código de pago presencial (TRM-...)"
+        />
+        <TouchableOpacity style={styles.paymentLookupButton} onPress={lookupPaymentRequest} disabled={paymentLoading || !paymentCode.trim()}>
+          {paymentLoading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Ionicons name="search" size={18} color="#FFFFFF" />}
+        </TouchableOpacity>
       </View>
 
       <View style={styles.filters}>
@@ -682,6 +784,25 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
                   <Text style={styles.detailBoxText}>{selectedReservation?.customerPhone || "Sin telefono"}</Text>
                 </View>
 
+                {selectedReservation?.status !== "confirmed" && selectedReservation?.status !== "rejected" && selectedReservation?.status !== "cancelled" ? (
+                  <View style={styles.paymentActionsBox}>
+                    <Text style={styles.detailBoxTitle}>Pago presencial</Text>
+                    {paymentRequest ? (
+                      <>
+                        <Text style={styles.paymentCodeText}>Código: {paymentRequest.code}</Text>
+                        <Text style={styles.detailBoxText}>Estado: {paymentRequest.status === "REQUESTED" ? "Pendiente de verificación" : paymentRequest.status}</Text>
+                        <TouchableOpacity style={styles.confirmButton} onPress={openPaymentVerifyDialog}>
+                          <Text style={styles.confirmButtonText}>Confirmar pago recibido</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity style={styles.paymentRequestButton} onPress={openPaymentRequestDialog}>
+                        <Text style={styles.confirmButtonText}>Solicitar pago presencial</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : null}
+
                 <View style={styles.detailBox}>
                   <Text style={styles.detailBoxTitle}>Estado y pago</Text>
                   <Text style={styles.detailBoxText}>
@@ -802,6 +923,33 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={paymentDialog.visible} transparent animationType="fade" onRequestClose={closePaymentDialog}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.statusModalCard}>
+            <Text style={styles.modalTitle}>{paymentDialog.mode === "request" ? "Solicitar pago presencial" : "Confirmar pago recibido"}</Text>
+            {paymentDialog.mode === "request" ? (
+              <>
+                <Text style={styles.inputLabel}>Enlace de ubicación (opcional)</Text>
+                <TextInput style={styles.notesInput} value={paymentDialog.locationUrl} placeholder="https://maps.google.com/..." onChangeText={(locationUrl) => setPaymentDialog((prev) => ({ ...prev, locationUrl }))} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.inputLabel}>Referencia del pago (opcional)</Text>
+                <TextInput style={styles.notesInput} value={paymentDialog.paymentReference} placeholder="Recibo o referencia" onChangeText={(paymentReference) => setPaymentDialog((prev) => ({ ...prev, paymentReference }))} />
+              </>
+            )}
+            <Text style={styles.inputLabel}>Notas</Text>
+            <TextInput style={styles.notesInput} value={paymentDialog.notes} multiline maxLength={1000} placeholder="Instrucciones u observaciones" onChangeText={(notes) => setPaymentDialog((prev) => ({ ...prev, notes }))} />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelButton} onPress={closePaymentDialog} disabled={paymentLoading}><Text style={styles.cancelButtonText}>Cancelar</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.confirmButton, paymentLoading && styles.disabledAction]} onPress={submitPaymentDialog} disabled={paymentLoading}>
+                {paymentLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmButtonText}>{paymentDialog.mode === "request" ? "Solicitar" : "Confirmar"}</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -838,6 +986,56 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     color: COLORS.textLight,
     fontSize: FONT_SIZES.xs,
+  },
+  paymentLookupBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 10,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  paymentLookupInput: {
+    flex: 1,
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    color: COLORS.text,
+    backgroundColor: "#F8FAFC",
+  },
+  paymentLookupButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+  },
+  paymentActionsBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#F0FDFA",
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+  },
+  paymentCodeText: {
+    marginVertical: 6,
+    color: COLORS.primary,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  paymentRequestButton: {
+    marginTop: 8,
+    minHeight: 42,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
   },
   filters: {
     paddingVertical: 12,
