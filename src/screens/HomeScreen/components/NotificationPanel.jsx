@@ -20,12 +20,15 @@ import {
   getReservationMessages,
   getReservationPaymentStatus,
   initiateReservationPayment,
+  requestAgencyInPersonPayment,
   sendAgencyReservationMessage,
   sendReservationMessage,
+  verifyAgencyInPersonPayment,
   updateAgencyReservationStatus,
 } from "../../../services/api";
 import EdgeDrawer from "../../../components/ui/EdgeDrawer";
 import { COLORS, FONT_SIZES, SPACING } from "../../../utils/constants";
+import { isPaymentPending } from "../../../utils/paymentState";
 
 const FINAL_STATUSES = ["confirmed", "rejected", "cancelled"];
 const ACTIVE_CHAT_STATUSES = ["requested", "contacted", "awaiting_payment"];
@@ -35,10 +38,12 @@ const PAYABLE_PAYMENT_STATUSES = [
   "failed",
   "expired",
 ];
+const PAYMENT_POLL_INTERVAL_MS = 3000;
+const PAYMENT_MAX_POLLS = 8;
 
 const CHAT_STATUS_ACTIONS = {
   contacted: {
-    nextStatus: "awaiting_payment",
+    nextStatus: "in_person_payment",
     label: "Solicitar pago",
     icon: "card-outline",
     notes: "La agencia solicitó continuar con el pago.",
@@ -202,11 +207,13 @@ const NotificationPanel = ({
   const [chatMessages, setChatMessages] = useState([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messagesError, setMessagesError] = useState("");
   const [chatError, setChatError] = useState("");
   const [chatActionError, setChatActionError] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [updatingChatStatus, setUpdatingChatStatus] = useState(false);
+  const [inPersonRequests, setInPersonRequests] = useState({});
   const [startingPayment, setStartingPayment] = useState(false);
   const [historyPackages, setHistoryPackages] = useState([]);
   const [favoritePlaces, setFavoritePlaces] = useState([]);
@@ -216,6 +223,7 @@ const NotificationPanel = ({
   const [historyError, setHistoryError] = useState("");
   const [favoritesError, setFavoritesError] = useState("");
   const preferredChatRef = useRef(null);
+  const pendingChatNotificationRef = useRef(null);
   const selectedChatIdRef = useRef(null);
   const messagesByChatRef = useRef({});
   const chatsLoadedRef = useRef(false);
@@ -240,6 +248,9 @@ const NotificationPanel = ({
     [chatReservations, selectedChatId],
   );
   const selectedPaymentStatus = selectedReservation?.paymentStatus || "pending";
+  const selectedInPersonRequest = selectedReservation?.id
+    ? inPersonRequests[selectedReservation.id]
+    : null;
   const canStartClientPayment =
     !usesAgencyInbox &&
     selectedReservation?.id &&
@@ -286,6 +297,7 @@ const NotificationPanel = ({
     if (showLoader) {
       setLoadingMessages(true);
     }
+    setMessagesError("");
     try {
       const params = { page: 0, size: 60 };
       const response = usesAgencyInbox
@@ -300,16 +312,27 @@ const NotificationPanel = ({
       if (String(selectedChatIdRef.current) === chatKey) {
         setChatMessages(nextMessages);
       }
+      const pendingNotification = pendingChatNotificationRef.current;
+      if (
+        pendingNotification?.reservationId &&
+        String(pendingNotification.reservationId) === chatKey
+      ) {
+        pendingChatNotificationRef.current = null;
+        onMarkRead?.(pendingNotification);
+      }
     } catch (_err) {
       if (!cachedMessages && String(selectedChatIdRef.current) === chatKey) {
         setChatMessages([]);
+      }
+      if (String(selectedChatIdRef.current) === chatKey) {
+        setMessagesError("No pudimos cargar los mensajes. Intenta nuevamente.");
       }
     } finally {
       if (showLoader) {
         setLoadingMessages(false);
       }
     }
-  }, [getAgencyOptions, rememberChatMessages, usesAgencyInbox]);
+  }, [getAgencyOptions, onMarkRead, rememberChatMessages, usesAgencyInbox]);
 
   const loadChats = useCallback(async (options = {}) => {
     const showLoader = options.forceLoader || !chatsLoadedRef.current;
@@ -461,11 +484,11 @@ const NotificationPanel = ({
   };
 
   const handleOpenNotification = (notification) => {
-    onMarkRead?.(notification);
     if (
       notification.type === "RESERVATION_MESSAGE" ||
       notification.type === "RESERVATION_REQUEST_CREATED"
     ) {
+      pendingChatNotificationRef.current = notification;
       preferredChatRef.current = {
         reservationId: notification.reservationId || null,
         agencyId: notification.agencyId || null,
@@ -473,6 +496,7 @@ const NotificationPanel = ({
       setActiveView("chats");
       return;
     }
+    onMarkRead?.(notification);
     onOpenReservations?.(notification);
   };
 
@@ -520,6 +544,49 @@ const NotificationPanel = ({
     setChatActionError("");
 
     try {
+      if (action.nextStatus === "in_person_payment") {
+        if (selectedInPersonRequest?.id) {
+          const response = await verifyAgencyInPersonPayment(
+            selectedReservation.id,
+            selectedInPersonRequest.id,
+            { notes: "Pago presencial confirmado desde el chat." },
+            getAgencyOptions(selectedReservation),
+          );
+          const verified = response?.data?.data || response?.data || null;
+          if (verified?.id) {
+            setInPersonRequests((prev) => ({
+              ...prev,
+              [selectedReservation.id]: verified,
+            }));
+          }
+          await Promise.all([
+            loadMessages(selectedReservation, { forceLoader: false }),
+            loadChats({ forceLoader: false }),
+          ]);
+          setChatActionError("Pago confirmado y reserva actualizada.");
+          return;
+        }
+
+        const response = await requestAgencyInPersonPayment(
+          selectedReservation.id,
+          { notes: action.notes },
+          getAgencyOptions(selectedReservation),
+        );
+        const request = response?.data?.data || response?.data || null;
+        if (request?.id) {
+          setInPersonRequests((prev) => ({
+            ...prev,
+            [selectedReservation.id]: request,
+          }));
+          setChatActionError(`Pago presencial solicitado. Código: ${request.code}`);
+        }
+        await Promise.all([
+          loadMessages(selectedReservation, { forceLoader: false }),
+          loadChats({ forceLoader: false }),
+        ]);
+        return;
+      }
+
       const response = await updateAgencyReservationStatus(
         selectedReservation.id,
         action.nextStatus,
@@ -563,8 +630,21 @@ const NotificationPanel = ({
       }
 
       await WebBrowser.openBrowserAsync(checkoutUrl);
+      for (let attempt = 0; attempt < PAYMENT_MAX_POLLS; attempt += 1) {
+        const statusResult = await getReservationPaymentStatus(selectedReservation.id)
+          .then((result) => ({ ok: true, result }))
+          .catch(() => ({ ok: false }));
+
+        if (statusResult.ok) {
+          const statusData = statusResult.result?.data?.data || statusResult.result?.data || {};
+          if (!isPaymentPending(statusData.paymentStatus)) break;
+        }
+
+        if (attempt < PAYMENT_MAX_POLLS - 1) {
+          await new Promise((resolve) => setTimeout(resolve, PAYMENT_POLL_INTERVAL_MS));
+        }
+      }
       await Promise.allSettled([
-        getReservationPaymentStatus(selectedReservation.id),
         loadChats({ forceLoader: false }),
         loadMessages(selectedReservation, { forceLoader: false }),
       ]);
@@ -844,7 +924,9 @@ const NotificationPanel = ({
                       />
                     )}
                     <Text style={panelStyles.chatStatusButtonText}>
-                      {CHAT_STATUS_ACTIONS[selectedReservation.status].label}
+                      {selectedInPersonRequest?.status === "REQUESTED"
+                        ? "Confirmar pago"
+                        : CHAT_STATUS_ACTIONS[selectedReservation.status].label}
                     </Text>
                   </TouchableOpacity>
                 ) : selectedReservation.status === "requested" ? (
@@ -895,6 +977,21 @@ const NotificationPanel = ({
             {loadingMessages ? (
               <View style={panelStyles.messagesLoading}>
                 <ActivityIndicator color={COLORS.primary} />
+                <Text style={panelStyles.centerText}>Cargando mensajes...</Text>
+              </View>
+            ) : messagesError && chatMessages.length === 0 ? (
+              <View style={panelStyles.chatEmptyState}>
+                <View style={panelStyles.chatEmptyIcon}>
+                  <Ionicons name="cloud-offline-outline" size={24} color="#F97316" />
+                </View>
+                <Text style={panelStyles.chatEmptyTitle}>No se pudo cargar el chat</Text>
+                <Text style={panelStyles.chatEmptyText}>{messagesError}</Text>
+                <TouchableOpacity
+                  style={panelStyles.primaryButtonWide}
+                  onPress={() => loadMessages(selectedReservation || selectedChatId, { forceLoader: true })}
+                >
+                  <Text style={panelStyles.primaryButtonText}>Reintentar</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <ScrollView
