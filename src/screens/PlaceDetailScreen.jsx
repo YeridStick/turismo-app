@@ -38,6 +38,7 @@ import { logARDebug } from '../utils/arDebug';
 import { COLORS, FONT_SIZES, PLACE_SERVICES, SPACING } from '../utils/constants';
 import { BREAKPOINTS } from '../utils/responsive';
 import { formatDistance } from '../utils/utils';
+import { getCachedPlaceImages } from '../utils/placeMediaCache';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -438,6 +439,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [placeMedia, setPlaceMedia] = useState([]);
   const [visitStartLoading, setVisitStartLoading] = useState(false);
   const [visitConfirmLoading, setVisitConfirmLoading] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: "5", comment: "" });
@@ -483,6 +485,25 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
     fetchDetails();
     return () => { isMounted = false; };
   }, [initialPlace?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMedia = async () => {
+      if (!initialPlace?.id || !isFocused) return;
+      setPlaceMedia([]);
+      try {
+        const media = await getCachedPlaceImages(initialPlace.id);
+        if (isMounted) {
+          setPlaceMedia(media);
+        }
+      } catch (_mediaError) {
+        // Mantener imageUrls como fallback para sitios heredados si media aún no está disponible.
+        if (isMounted) setPlaceMedia([]);
+      }
+    };
+    fetchMedia();
+    return () => { isMounted = false; };
+  }, [initialPlace?.id, isFocused]);
 
   const place = useMemo(() => {
     if (!fullPlace) return initialPlace;
@@ -548,11 +569,14 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
   }, [navigation, place?.id]);
 
   const images = useMemo(() => {
+    if (placeMedia.length > 0) {
+      return placeMedia.map((media) => ({ id: media.id, uri: media.url, media }));
+    }
     if (Array.isArray(place.imageUrls) && place.imageUrls.length > 0) {
       return place.imageUrls.map((uri, id) => ({ id, uri }));
     }
     return [{ id: 'placeholder', uri: IMAGE_PLACEHOLDER }];
-  }, [place.imageUrls]);
+  }, [place.imageUrls, placeMedia]);
 
   // --- LOGICA DE AUTO-PLAY ---
   useEffect(() => {

@@ -19,6 +19,7 @@ import {
   getAgencyReservationMessages,
   getAgencyReservations,
   lookupAgencyInPersonPayment,
+  cancelAgencyInPersonPayment,
   requestAgencyInPersonPayment,
   sendAgencyReservationMessage,
   verifyAgencyInPersonPayment,
@@ -52,6 +53,12 @@ const PAYMENT_STATUS_LABELS = {
 const PAYMENT_PROVIDER_LABELS = {
   agency_managed: "Gestionado por la agencia",
   wompi: "Wompi",
+};
+
+const IN_PERSON_PAYMENT_STATUS_LABELS = {
+  REQUESTED: "Pago presencial pendiente",
+  VERIFIED: "Pago verificado",
+  CANCELLED: "Solicitud cancelada",
 };
 
 const STATUS_FILTERS = ["requested", "contacted", "awaiting_payment", "confirmed", "rejected", "cancelled"];
@@ -92,6 +99,11 @@ const extractReservation = (payload) =>
 
 const extractPaymentLookup = (payload) =>
   payload?.data?.data ?? payload?.data ?? payload ?? null;
+
+const extractPaymentRequest = (payload) => {
+  const data = extractPaymentLookup(payload);
+  return data?.paymentRequest || data;
+};
 
 const formatCurrency = (value, currency = "COP") => {
   if (value == null || Number.isNaN(Number(value))) return "$ 0";
@@ -373,6 +385,7 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
         if (requestSeq === detailRequestSeqRef.current) {
           selectedReservationRef.current = detail;
           setSelectedReservation(detail);
+          setPaymentRequest(detail.paymentRequest || detail.inPersonPaymentRequest || null);
           updateReservationInList(detail);
           await loadMessages(reservation.id);
         }
@@ -546,19 +559,63 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
     if (!paymentLoading) setPaymentDialog((prev) => ({ ...prev, visible: false }));
   };
 
+  const cancelPaymentRequest = async () => {
+    if (!selectedReservation?.id || !paymentRequest?.id || !agencyId || paymentLoading) return;
+    setPaymentLoading(true);
+    try {
+      await cancelAgencyInPersonPayment(selectedReservation.id, paymentRequest.id, { agencyId });
+      requestDeduper.clear(getReservationsListKey());
+      requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
+      requestDeduper.clear(getReservationMessagesKey(selectedReservation.id));
+      const [detailResult] = await Promise.allSettled([
+        fetchReservationDetail(selectedReservation.id),
+        loadMessages(selectedReservation.id),
+      ]);
+      setPaymentRequest((prev) => ({ ...prev, status: "CANCELLED" }));
+      if (detailResult.status === "fulfilled") {
+        const refreshed = extractReservation(detailResult.value);
+        if (refreshed) {
+          selectedReservationRef.current = refreshed;
+          setSelectedReservation(refreshed);
+          setPaymentRequest(refreshed.paymentRequest || refreshed.inPersonPaymentRequest || { ...paymentRequest, status: "CANCELLED" });
+          updateReservationInList(refreshed);
+        }
+      }
+      Alert.alert("Solicitud cancelada", "El pago presencial fue cancelado.");
+    } catch (err) {
+      Alert.alert(
+        "No se pudo cancelar",
+        err?.response?.status === 409
+          ? "La solicitud ya fue verificada o cancelada."
+          : err?.response?.data?.message || "Intenta nuevamente.",
+      );
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const submitPaymentDialog = async () => {
     if (!selectedReservation?.id || !agencyId || paymentLoading) return;
     setPaymentLoading(true);
     try {
       if (paymentDialog.mode === "request") {
+        const locationUrl = paymentDialog.locationUrl.trim();
+        if (locationUrl && !/^https:\/\//i.test(locationUrl)) {
+          Alert.alert("Ubicación inválida", "El enlace debe usar HTTPS, por ejemplo Google Maps.");
+          return;
+        }
         const response = await requestAgencyInPersonPayment(selectedReservation.id, {
-          locationUrl: paymentDialog.locationUrl.trim() || undefined,
+          locationUrl: locationUrl || undefined,
           notes: paymentDialog.notes.trim() || undefined,
         }, { agencyId });
-        const request = extractPaymentLookup(response);
+        const request = extractPaymentRequest(response);
         setPaymentRequest(request);
         Alert.alert("Pago solicitado", `Código de atención: ${request?.code || "generado"}`);
       } else {
+        if (!paymentRequest?.id) {
+          Alert.alert("Solicitud no disponible", "Primero debes solicitar el pago presencial.");
+          return;
+        }
         const response = await verifyAgencyInPersonPayment(
           selectedReservation.id,
           paymentRequest?.id,
@@ -568,16 +625,41 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
           },
           { agencyId },
         );
-        const request = extractPaymentLookup(response);
+        const request = extractPaymentRequest(response);
         setPaymentRequest(request);
-        setSelectedReservation((prev) => ({ ...prev, status: "confirmed", paymentStatus: "verified_by_agency", paymentProvider: "agency_managed" }));
-        await loadMessages(selectedReservation.id);
+        const updatedReservation = {
+          ...selectedReservation,
+          status: "confirmed",
+          paymentStatus: "verified_by_agency",
+          paymentProvider: "agency_managed",
+        };
+        selectedReservationRef.current = updatedReservation;
+        setSelectedReservation(updatedReservation);
         Alert.alert("Pago confirmado", "La reserva fue confirmada correctamente.");
       }
       setPaymentDialog((prev) => ({ ...prev, visible: false }));
       requestDeduper.clear(getReservationsListKey());
       requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
-      updateReservationInList({ ...selectedReservation, ...(paymentDialog.mode === "verify" ? { status: "confirmed", paymentStatus: "verified_by_agency" } : {}) });
+      requestDeduper.clear(getReservationMessagesKey(selectedReservation.id));
+      const [detailResult] = await Promise.allSettled([
+        fetchReservationDetail(selectedReservation.id),
+        loadMessages(selectedReservation.id),
+      ]);
+      if (detailResult.status === "fulfilled") {
+        const refreshed = extractReservation(detailResult.value);
+        if (refreshed) {
+          selectedReservationRef.current = refreshed;
+          setSelectedReservation(refreshed);
+          setPaymentRequest(refreshed.paymentRequest || refreshed.inPersonPaymentRequest || paymentRequest);
+          updateReservationInList(refreshed);
+        }
+      }
+      updateReservationInList({
+        ...selectedReservation,
+        ...(paymentDialog.mode === "verify"
+          ? { status: "confirmed", paymentStatus: "verified_by_agency" }
+          : {}),
+      });
     } catch (err) {
       Alert.alert("No se pudo completar", err?.response?.data?.message || "Intenta nuevamente.");
     } finally {
@@ -787,13 +869,29 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
                 {selectedReservation?.status !== "confirmed" && selectedReservation?.status !== "rejected" && selectedReservation?.status !== "cancelled" ? (
                   <View style={styles.paymentActionsBox}>
                     <Text style={styles.detailBoxTitle}>Pago presencial</Text>
-                    {paymentRequest ? (
+                    {paymentRequest && paymentRequest.status !== "CANCELLED" ? (
                       <>
                         <Text style={styles.paymentCodeText}>Código: {paymentRequest.code}</Text>
-                        <Text style={styles.detailBoxText}>Estado: {paymentRequest.status === "REQUESTED" ? "Pendiente de verificación" : paymentRequest.status}</Text>
-                        <TouchableOpacity style={styles.confirmButton} onPress={openPaymentVerifyDialog}>
-                          <Text style={styles.confirmButtonText}>Confirmar pago recibido</Text>
-                        </TouchableOpacity>
+                        <Text style={styles.detailBoxText}>Estado: {IN_PERSON_PAYMENT_STATUS_LABELS[paymentRequest.status] || paymentRequest.status}</Text>
+                        {paymentRequest.status === "REQUESTED" ? (
+                          <>
+                            <TouchableOpacity style={styles.confirmButton} onPress={openPaymentVerifyDialog}>
+                              <Text style={styles.confirmButtonText}>Confirmar pago recibido</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.cancelButton} onPress={cancelPaymentRequest} disabled={paymentLoading}>
+                              <Text style={styles.cancelButtonText}>Cancelar solicitud</Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : null}
+                      </>
+                    ) : paymentRequest?.status === "CANCELLED" ? (
+                      <>
+                        <Text style={styles.detailBoxText}>Estado: Solicitud cancelada</Text>
+                        {selectedReservation?.status !== "confirmed" ? (
+                          <TouchableOpacity style={styles.paymentRequestButton} onPress={openPaymentRequestDialog}>
+                            <Text style={styles.confirmButtonText}>Solicitar nuevamente</Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </>
                     ) : (
                       <TouchableOpacity style={styles.paymentRequestButton} onPress={openPaymentRequestDialog}>

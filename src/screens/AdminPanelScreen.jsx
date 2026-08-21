@@ -9,6 +9,9 @@ import {
     Image,
     Modal,
     TextInput,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
 } from 'react-native';
 import { Ionicons, FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -202,6 +205,11 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUs
     return (
         <Modal visible={visible} animationType="slide" transparent>
             <BlurView intensity={20} style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    style={styles.modalKeyboard}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+                >
                 <View style={styles.modalContent}>
                     <View style={styles.modalHeader}>
                         <Text style={styles.modalTitle}>{initialData ? 'Editar Agencia' : 'Nueva Agencia'}</Text>
@@ -209,7 +217,14 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUs
                             <Ionicons name="close" size={24} color={COLORS.text} />
                         </TouchableOpacity>
                     </View>
-                    <ScrollView showsVerticalScrollIndicator={false}>
+                    <ScrollView
+                        style={styles.modalFormScroll}
+                        contentContainerStyle={styles.modalFormContent}
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                        automaticallyAdjustKeyboardInsets
+                        showsVerticalScrollIndicator={false}
+                    >
                         <Text style={styles.inputLabel}>Nombre de la Agencia</Text>
                         <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Ej. Turismo Huila" />
                         <Text style={styles.inputLabel}>Correo Electronico</Text>
@@ -264,6 +279,7 @@ const CreateAgencyModal = ({ visible, onClose, onSuccess, initialData, currentUs
                         <View style={{ height: 40 }} />
                     </ScrollView>
                 </View>
+                </KeyboardAvoidingView>
             </BlurView>
             <PremiumModal 
                 {...statusModal} 
@@ -352,7 +368,7 @@ const AdminPanelScreen = ({ navigation }) => {
     );
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={24} color={COLORS.text} />
@@ -398,26 +414,26 @@ const AdminPanelScreen = ({ navigation }) => {
                 initialData={editingAgency}
                 currentUserEmail={user?.email || ''}
             />
-        </View>
+        </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.bg },
+    container: { flex: 1, backgroundColor: "#F7FCFE" },
     header: {
         flexDirection: "row",
         alignItems: "center",
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 14,
+        paddingBottom: 14,
         paddingHorizontal: 20,
         borderBottomWidth: 1,
-        borderBottomColor: "rgba(0,0,0,0.03)",
+        borderBottomColor: "#E7F0F3",
     },
     backButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: "#F8FAFC",
+        backgroundColor: "#EAF4F6",
         alignItems: "center",
         justifyContent: "center",
         marginRight: 15,
@@ -456,11 +472,11 @@ const styles = StyleSheet.create({
         alignItems: "center",
         backgroundColor: "#FFF",
         padding: 18,
-        borderRadius: 24,
+        borderRadius: 18,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: "#F1F5F9",
-        elevation: 2,
+        borderColor: "#E7F0F3",
+        elevation: 1,
     },
     agencyCardLogo: {
         width: 54,
@@ -496,26 +512,33 @@ const styles = StyleSheet.create({
     cardPhone: { fontSize: 11, color: "#94A3B8" },
     cardActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 10 },
     iconButton: { padding: 4 },
-    modalOverlay: { flex: 1, justifyContent: "flex-end" },
+    modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(15, 23, 42, 0.24)" },
+    modalKeyboard: { width: "100%", justifyContent: "flex-end" },
     modalContent: {
         backgroundColor: "#FFF",
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
         padding: 24,
-        maxHeight: "90%",
+        maxHeight: "88%",
+        borderWidth: 1,
+        borderColor: "#E7F0F3",
     },
+    modalFormScroll: { flexGrow: 0 },
+    modalFormContent: { paddingBottom: 24 },
     modalHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
     modalTitle: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
     inputLabel: { fontSize: 13, fontWeight: "700", color: "#334155", marginBottom: 8 },
     input: {
-        backgroundColor: "#F8FAFC",
-        borderRadius: 16,
-        padding: 16,
+        backgroundColor: "#FBFEFF",
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 13,
         borderWidth: 1,
-        borderColor: "#E2E8F0",
-        marginBottom: 20,
+        borderColor: "#D9EAF0",
+        marginBottom: 16,
         fontSize: 14,
         color: "#0F172A",
+        minHeight: 50,
     },
     submitButton: {
         backgroundColor: ACCENT,
@@ -606,5 +629,3 @@ const styles = StyleSheet.create({
 });
 
 export default AdminPanelScreen;
-
-

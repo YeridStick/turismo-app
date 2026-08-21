@@ -1,8 +1,13 @@
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Modal,
+  ActivityIndicator,
   Platform,
   ScrollView,
   StyleSheet,
@@ -11,11 +16,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import WebViewMap from "../components/WebViewMap";
 import { ENDPOINTS } from "../config/api.config";
-import api from "../services/api";
+import api, { createCategory, deletePlaceMedia, updateCategory, uploadPlaceMedia } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING, PLACE_SERVICES } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
+import { getCachedPlaceMedia, invalidatePlaceMediaCache } from "../utils/placeMediaCache";
+import {
+  MAX_SITE_IMAGE_COUNT,
+  toLocalSiteMedia,
+  validateSiteMedia,
+} from "../utils/siteMedia";
 
 const ACCENT = "#0E7490";
 const MAX_GEOCODE_LIMIT = 100;
@@ -29,6 +41,16 @@ const parseList = (value) =>
 
 const formatListValue = (value) =>
   parseList(value).join(", ");
+
+const slugifyCategory = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 
 const CreatePlaceScreen = ({ navigation, route }) => {
   const editPlace = route.params?.place || null;
@@ -48,6 +70,17 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     services: editPlace?.services || [],
   });
   const [customService, setCustomService] = useState("");
+  const [localImages, setLocalImages] = useState([]);
+  const [persistedMedia, setPersistedMedia] = useState([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaProgress, setMediaProgress] = useState(null);
+  const [mediaAccordion, setMediaAccordion] = useState({ images: true, videos: false, models: false, external: false });
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [cameraMode, setCameraMode] = useState("picture");
+  const [cameraRecording, setCameraRecording] = useState(false);
+  const cameraRef = React.useRef(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] = useMicrophonePermissions();
   const [loading, setLoading] = useState(false);
   const [geocodeResults, setGeocodeResults] = useState([]);
   const [geocodeLoading, setGeocodeLoading] = useState(false);
@@ -55,6 +88,11 @@ const CreatePlaceScreen = ({ navigation, route }) => {
   const [categories, setCategories] = useState([]);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [createCategoryVisible, setCreateCategoryVisible] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategorySlug, setNewCategorySlug] = useState("");
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [currentLocationLoading, setCurrentLocationLoading] = useState(false);
   const [addressParts, setAddressParts] = useState({
@@ -73,6 +111,60 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     setAddressParts((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    const slug = slugifyCategory(newCategorySlug);
+    if (!name) {
+      setModal({ visible: true, type: "warning", title: "Nombre requerido", message: "Escribe un nombre para la categoría." });
+      return;
+    }
+    if (!slug) {
+      setModal({ visible: true, type: "warning", title: "Slug requerido", message: "Escribe un slug válido para la categoría." });
+      return;
+    }
+    const existing = categories.find((item) =>
+      String(item.name || "").trim().toLowerCase() === name.toLowerCase() &&
+      String(item.id) !== String(editingCategory?.id)
+    );
+    if (existing) {
+      updateField("categoryId", String(existing.id));
+      setCreateCategoryVisible(false);
+      setNewCategoryName("");
+      setNewCategorySlug("");
+      setEditingCategory(null);
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      if (editingCategory) {
+        const response = await updateCategory(editingCategory.id, { slug, name });
+        const updated = response.data?.data || response.data || { ...editingCategory, name };
+        const normalized = { ...editingCategory, ...updated, id: editingCategory.id, name: updated.name || name };
+        setCategories((previous) => previous.map((item) => String(item.id) === String(editingCategory.id) ? normalized : item));
+      } else {
+        const response = await createCategory({ slug, name });
+        const created = response.data?.data || response.data;
+        if (!created?.id) throw new Error("La respuesta no contiene el id de la categoría.");
+        setCategories((previous) => [...previous, created]);
+        updateField("categoryId", String(created.id));
+      }
+      setCreateCategoryVisible(false);
+      setNewCategoryName("");
+      setNewCategorySlug("");
+      setEditingCategory(null);
+    } catch (error) {
+      setModal({
+        visible: true,
+        type: "error",
+        title: editingCategory ? "No se pudo actualizar la categoría" : "No se pudo crear la categoría",
+        message: error?.response?.data?.message || error?.message || "Revisa los datos e intenta de nuevo.",
+      });
+    } finally {
+      setCreatingCategory(false);
+    }
+  };
+
   useEffect(() => {
     const loadCategories = async () => {
       setCategoriesLoading(true);
@@ -88,6 +180,24 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     };
     loadCategories();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!editPlace?.id) return undefined;
+    setMediaLoading(true);
+    getCachedPlaceMedia(editPlace.id, { force: true })
+      .then((items) => {
+        if (!active) return;
+        setPersistedMedia(Array.isArray(items) ? items : []);
+      })
+      .catch((error) => {
+        if (active) {
+          setModal({ visible: true, type: "error", title: "No se pudo cargar multimedia", message: getApiErrorMessage(error) });
+        }
+      })
+      .finally(() => active && setMediaLoading(false));
+    return () => { active = false; };
+  }, [editPlace?.id]);
 
   const selectedCoords = useMemo(() => {
     const lat = Number(form.lat);
@@ -308,6 +418,180 @@ const CreatePlaceScreen = ({ navigation, route }) => {
     updateField("services", form.services.filter(s => s !== service));
   };
 
+  const getApiErrorMessage = (error, fallback = "No se pudo completar la operación.") =>
+    error?.response?.data?.message || error?.message || fallback;
+
+  const pickMedia = async (category) => {
+    if (localImages.length + persistedMedia.length >= MAX_SITE_IMAGE_COUNT) {
+      setModal({
+        visible: true,
+        type: "warning",
+        title: "Límite de imágenes",
+        message: `Puedes seleccionar hasta ${MAX_SITE_IMAGE_COUNT} imágenes.`,
+      });
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setModal({
+        visible: true,
+        type: "warning",
+        title: "Permiso de galería requerido",
+        message: "Activa el permiso de fotos para seleccionar imágenes del sitio.",
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: category === "videos" ? ["videos"] : ["images"],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_SITE_IMAGE_COUNT - localImages.length - persistedMedia.length,
+      quality: 0.85,
+    });
+    if (result.canceled) return;
+
+    const invalid = (result.assets || []).find((asset) => validateSiteMedia(asset, category));
+    if (invalid) {
+      setModal({
+        visible: true,
+        type: "warning",
+        title: "Archivo no válido",
+        message: category === "videos"
+          ? "Usa videos MP4, WebM o MOV de máximo 100 MB."
+          : "Usa imágenes JPG o PNG de máximo 10 MB.",
+      });
+      return;
+    }
+    const candidates = (result.assets || []).map((asset, index) => toLocalSiteMedia(asset, category, index));
+    setLocalImages((previous) => [...previous, ...candidates].slice(0, MAX_SITE_IMAGE_COUNT));
+  };
+
+  const pickImages = () => pickMedia("images");
+  const pickVideos = () => pickMedia("videos");
+
+  const pickModel = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["model/gltf-binary", "application/octet-stream"],
+      multiple: true,
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled) return;
+    const invalid = (result.assets || []).find((asset) => validateSiteMedia({ ...asset, fileName: asset.name }, "models-3d"));
+    if (invalid) {
+      setModal({ visible: true, type: "warning", title: "Modelo no válido", message: "Usa archivos GLB de máximo 25 MB." });
+      return;
+    }
+    const candidates = (result.assets || []).map((asset, index) =>
+      toLocalSiteMedia({ ...asset, fileName: asset.name, mimeType: asset.mimeType || "application/octet-stream" }, "models-3d", index)
+    );
+    setLocalImages((previous) => [...previous, ...candidates].slice(0, MAX_SITE_IMAGE_COUNT));
+  };
+
+  const addCapturedMedia = (asset, category) => {
+    const validationError = validateSiteMedia(asset, category);
+    if (validationError) {
+      setModal({ visible: true, type: "warning", title: "Archivo no válido", message: "El archivo capturado no cumple los límites del backend." });
+      return;
+    }
+    setLocalImages((previous) => [...previous, toLocalSiteMedia(asset, category, previous.length)].slice(0, MAX_SITE_IMAGE_COUNT));
+  };
+
+  const openCamera = async (mode) => {
+    const permission = cameraPermission?.granted ? cameraPermission : await requestCameraPermission();
+    if (!permission?.granted) {
+      setModal({ visible: true, type: "warning", title: "Permiso de cámara requerido", message: "Activa el permiso de cámara para capturar multimedia." });
+      return;
+    }
+    if (mode === "video") {
+      const microphone = microphonePermission?.granted ? microphonePermission : await requestMicrophonePermission();
+      if (!microphone?.granted) {
+        setModal({ visible: true, type: "warning", title: "Permiso de micrófono requerido", message: "Activa el micrófono para grabar videos con sonido." });
+        return;
+      }
+    }
+    setCameraMode(mode);
+    setCameraVisible(true);
+  };
+
+  const takePhoto = async () => {
+    if (!cameraRef.current) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+      if (photo?.uri) {
+        addCapturedMedia({ ...photo, fileName: `site-photo-${Date.now()}.jpg`, mimeType: "image/jpeg" }, "images");
+        setCameraVisible(false);
+      }
+    } catch (error) {
+      setModal({ visible: true, type: "error", title: "No se pudo tomar la foto", message: error?.message || "Intenta de nuevo." });
+    }
+  };
+
+  const recordVideo = async () => {
+    if (!cameraRef.current || cameraRecording) return;
+    setCameraRecording(true);
+    try {
+      const video = await cameraRef.current.recordAsync({ maxDuration: 120 });
+      if (video?.uri) {
+        addCapturedMedia({ ...video, fileName: `site-video-${Date.now()}.mp4`, mimeType: "video/mp4" }, "videos");
+        setCameraVisible(false);
+      }
+    } catch (error) {
+      setModal({ visible: true, type: "error", title: "No se pudo grabar el video", message: error?.message || "Intenta de nuevo." });
+    } finally {
+      setCameraRecording(false);
+    }
+  };
+
+  const closeCamera = () => {
+    if (cameraRecording) cameraRef.current?.stopRecording?.();
+    setCameraVisible(false);
+  };
+
+  const removeLocalImage = (imageId) => {
+    setLocalImages((previous) => {
+      const removed = previous.find((image) => image.id === imageId);
+      if (removed?.uri?.startsWith?.("blob:") && typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(removed.uri);
+      return previous.filter((image) => image.id !== imageId);
+    });
+  };
+
+  const removePersistedMedia = async (media) => {
+    if (!editPlace?.id || !media?.id) return;
+    try {
+      const response = await deletePlaceMedia(editPlace.id, media.id);
+      if (response.status !== 200 || response.data?.data !== true) throw new Error("El backend no confirmó la eliminación.");
+      invalidatePlaceMediaCache(editPlace.id);
+      setPersistedMedia((previous) => previous.filter((item) => item.id !== media.id));
+    } catch (error) {
+      setModal({ visible: true, type: "error", title: "No se pudo eliminar", message: getApiErrorMessage(error) });
+    }
+  };
+
+  const uploadPendingMedia = async (siteId) => {
+    if (!siteId || localImages.length === 0) return [];
+    const uploaded = [];
+    for (let index = 0; index < localImages.length; index += 1) {
+      const media = localImages[index];
+      setMediaProgress({ current: index + 1, total: localImages.length, name: media.name });
+      try {
+        const response = await uploadPlaceMedia(siteId, {
+          uri: media.uri,
+          name: media.name,
+          type: media.mimeType,
+        }, media.category);
+        if (response.status !== 201 || !response.data?.data) throw new Error("La carga no fue confirmada por el backend.");
+        uploaded.push(response.data.data);
+        invalidatePlaceMediaCache(siteId);
+        setPersistedMedia((previous) => [...previous, response.data.data]);
+        removeLocalImage(media.id);
+      } catch (error) {
+        throw new Error(`No se pudo cargar ${media.name}: ${getApiErrorMessage(error)}`);
+      }
+    }
+    return uploaded;
+  };
+
   const handleSubmit = async () => {
     if (!form.name || !form.description || !form.categoryId || !form.lat || !form.lng) {
       setModal({
@@ -340,6 +624,7 @@ const CreatePlaceScreen = ({ navigation, route }) => {
 
       if (editPlace) {
         await api.patch(ENDPOINTS.PLACE_UPDATE(editPlace.id), payload);
+        await uploadPendingMedia(editPlace.id);
         setModal({
           visible: true,
           type: 'success',
@@ -348,7 +633,11 @@ const CreatePlaceScreen = ({ navigation, route }) => {
           onConfirm: () => navigation.goBack()
         });
       } else {
-        await api.post(ENDPOINTS.PLACES_CREATE, payload);
+        const placeResponse = await api.post(ENDPOINTS.PLACES_CREATE, payload);
+        const createdPlace = placeResponse.data?.data || placeResponse.data;
+        const siteId = createdPlace?.id;
+        if (!siteId && localImages.length > 0) throw new Error("El backend no devolvió el id del lugar creado.");
+        await uploadPendingMedia(siteId);
         setModal({
           visible: true,
           type: 'success',
@@ -376,26 +665,30 @@ const CreatePlaceScreen = ({ navigation, route }) => {
                plateNumber: "",
                extraDetail: "",
              });
+             setLocalImages([]);
+             setPersistedMedia([]);
              setModal(prev => ({ ...prev, visible: false }));
           }
         });
       }
-    } catch (_err) {
+    } catch (error) {
       setModal({
         visible: true,
         type: 'error',
         title: 'Error al guardar',
-        message: `No logramos ${editPlace ? 'actualizar' : 'crear'} el lugar en este momento. Revisa tu conexión.`
+        message: getApiErrorMessage(error, `No logramos ${editPlace ? 'actualizar' : 'crear'} el lugar en este momento.`)
       });
     } finally {
       setLoading(false);
+      setMediaProgress(null);
     }
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 72 : 0}
     >
       <View style={styles.header}>
         <TouchableOpacity
@@ -410,7 +703,14 @@ const CreatePlaceScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.formScroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
 
         {/* INFO GENERAL CARD */}
         <View style={styles.card}>
@@ -468,16 +768,33 @@ const CreatePlaceScreen = ({ navigation, route }) => {
                         nestedScrollEnabled
                       >
                         {categories.map((item) => (
-                          <TouchableOpacity
+                          <View
                             key={`cat-${item.id}`}
-                            style={styles.dropdownItem}
-                            onPress={() => {
-                              updateField("categoryId", String(item.id));
-                              setCategoriesOpen(false);
-                            }}
+                            style={styles.categoryOption}
                           >
-                            <Text style={styles.dropdownItemText}>{item.name}</Text>
-                          </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.categorySelectOption}
+                              onPress={() => {
+                                updateField("categoryId", String(item.id));
+                                setCategoriesOpen(false);
+                              }}
+                            >
+                              <Text style={styles.dropdownItemText}>{item.name}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.categoryEditButton}
+                              onPress={() => {
+                                setEditingCategory(item);
+                                setNewCategoryName(item.name || "");
+                                setNewCategorySlug(item.slug || slugifyCategory(item.name));
+                                setCategoriesOpen(false);
+                                setCreateCategoryVisible(true);
+                              }}
+                              accessibilityLabel={`Editar categoría ${item.name}`}
+                            >
+                              <FontAwesome name="pencil" size={14} color={ACCENT} />
+                            </TouchableOpacity>
+                          </View>
                         ))}
                       </ScrollView>
                     </View>
@@ -492,6 +809,18 @@ const CreatePlaceScreen = ({ navigation, route }) => {
                   keyboardType="numeric"
                 />
               )}
+              <TouchableOpacity
+                style={styles.createCategoryButton}
+                onPress={() => {
+                  setEditingCategory(null);
+                  setNewCategoryName("");
+                  setNewCategorySlug("");
+                  setCreateCategoryVisible(true);
+                }}
+              >
+                <FontAwesome name="plus-circle" size={15} color={ACCENT} />
+                <Text style={styles.createCategoryText}>Crear categoría nueva</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.col}>
               <Text style={styles.sectionLabel}>Teléfono</Text>
@@ -762,38 +1091,122 @@ const CreatePlaceScreen = ({ navigation, route }) => {
             <Text style={styles.cardTitle}>Contenido Multimedia</Text>
           </View>
 
-          <Text style={styles.sectionLabel}>Galería de Imágenes (URLs separadas por coma)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea, { minHeight: 70 }]}
-            value={form.imageUrls}
-            onChangeText={(value) => updateField("imageUrls", value)}
-            placeholder="https://img1.jpg, https://img2.jpg"
-            placeholderTextColor={COLORS.textLight}
-            autoCapitalize="none"
-            multiline
-          />
+          <Text style={styles.sectionSubLabel}>
+            Guarda primero el sitio; después enviaremos cada archivo al backend y conservaremos la respuesta confirmada.
+          </Text>
+          <TouchableOpacity style={styles.mediaAccordionHeader} onPress={() => setMediaAccordion((previous) => ({ ...previous, images: !previous.images }))}>
+            <View style={styles.mediaAccordionTitleRow}><FontAwesome name="photo" size={16} color={ACCENT} /><Text style={styles.mediaAccordionTitle}>Cargar imágenes</Text></View>
+            <FontAwesome name={mediaAccordion.images ? "chevron-up" : "chevron-down"} size={13} color={COLORS.textLight} />
+          </TouchableOpacity>
+          {mediaAccordion.images ? (
+            <View style={styles.mediaAccordionContent}>
+              <View style={styles.mediaActionRow}>
+                <TouchableOpacity style={styles.mediaActionButton} onPress={pickImages}>
+                  <FontAwesome name="photo" size={15} color={ACCENT} /><Text style={styles.mediaActionText}>Galería</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mediaActionButton} onPress={() => openCamera("picture")}>
+                  <FontAwesome name="camera" size={15} color={ACCENT} /><Text style={styles.mediaActionText}>Tomar foto</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+          <TouchableOpacity style={styles.mediaAccordionHeader} onPress={() => setMediaAccordion((previous) => ({ ...previous, videos: !previous.videos }))}>
+            <View style={styles.mediaAccordionTitleRow}><FontAwesome name="video-camera" size={16} color={ACCENT} /><Text style={styles.mediaAccordionTitle}>Cargar videos</Text></View>
+            <FontAwesome name={mediaAccordion.videos ? "chevron-up" : "chevron-down"} size={13} color={COLORS.textLight} />
+          </TouchableOpacity>
+          {mediaAccordion.videos ? (
+            <View style={styles.mediaAccordionContent}>
+              <View style={styles.mediaActionRow}>
+                <TouchableOpacity style={styles.mediaActionButton} onPress={pickVideos}>
+                  <FontAwesome name="film" size={15} color={ACCENT} /><Text style={styles.mediaActionText}>Galería</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mediaActionButton} onPress={() => openCamera("video")}>
+                  <FontAwesome name="video-camera" size={15} color={ACCENT} /><Text style={styles.mediaActionText}>Grabar video</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+          <TouchableOpacity style={styles.mediaAccordionHeader} onPress={() => setMediaAccordion((previous) => ({ ...previous, models: !previous.models }))}>
+            <View style={styles.mediaAccordionTitleRow}><FontAwesome name="cube" size={16} color={ACCENT} /><Text style={styles.mediaAccordionTitle}>Cargar modelo GLB</Text></View>
+            <FontAwesome name={mediaAccordion.models ? "chevron-up" : "chevron-down"} size={13} color={COLORS.textLight} />
+          </TouchableOpacity>
+          {mediaAccordion.models ? (
+            <View style={styles.mediaAccordionContent}>
+              <TouchableOpacity style={styles.mediaActionButton} onPress={pickModel}>
+                <FontAwesome name="folder-open" size={15} color={ACCENT} /><Text style={styles.mediaActionText}>Seleccionar archivo GLB</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <TouchableOpacity style={styles.mediaAccordionHeader} onPress={() => setMediaAccordion((previous) => ({ ...previous, external: !previous.external }))}>
+            <View style={styles.mediaAccordionTitleRow}><FontAwesome name="link" size={16} color={ACCENT} /><Text style={styles.mediaAccordionTitle}>Usar enlaces externos</Text></View>
+            <FontAwesome name={mediaAccordion.external ? "chevron-up" : "chevron-down"} size={13} color={COLORS.textLight} />
+          </TouchableOpacity>
+          {mediaAccordion.external ? (
+            <View style={styles.mediaAccordionContent}>
+              <Text style={styles.sectionLabel}>Imágenes (URLs separadas por coma)</Text>
+              <TextInput style={styles.input} value={form.imageUrls} onChangeText={(value) => updateField("imageUrls", value)} placeholder="https://.../imagen.jpg" placeholderTextColor={COLORS.textLight} autoCapitalize="none" />
+              <Text style={styles.sectionLabel}>Videos (URLs separadas por coma)</Text>
+              <TextInput style={[styles.input, styles.textArea, { minHeight: 70 }]} value={form.videoUrls} onChangeText={(value) => updateField("videoUrls", value)} placeholder="https://.../video.mp4" placeholderTextColor={COLORS.textLight} autoCapitalize="none" multiline />
+              <Text style={styles.sectionLabel}>Modelos 3D (URLs separadas por coma)</Text>
+              <TextInput style={[styles.input, styles.textArea, { minHeight: 70 }]} value={form.model3dUrls} onChangeText={(value) => updateField("model3dUrls", value)} placeholder="https://.../modelo.glb" placeholderTextColor={COLORS.textLight} autoCapitalize="none" multiline />
+            </View>
+          ) : null}
+          {mediaLoading ? <Text style={styles.sectionSubLabel}>Consultando multimedia guardada...</Text> : null}
+          {mediaProgress ? (
+            <Text style={styles.sectionSubLabel}>
+              Cargando {mediaProgress.current}/{mediaProgress.total}: {mediaProgress.name}
+            </Text>
+          ) : null}
+          {parseList(editPlace?.imageUrls || editPlace?.image_urls).length > 0 ? (
+            <View style={styles.mediaNotice}>
+              <FontAwesome name="lock" size={13} color={ACCENT} />
+              <Text style={styles.mediaNoticeText}>
+                Las imágenes ya guardadas vienen del backend y no se ocultan localmente.
+              </Text>
+            </View>
+          ) : null}
+          {localImages.length > 0 ? (
+            <View style={styles.mediaGrid}>
+              {localImages.map((image) => (
+                <View key={image.id} style={styles.mediaItem}>
+                  {image.category === "images" ? (
+                    <Image source={{ uri: image.uri }} style={styles.mediaPreview} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.mediaPreview, styles.mediaFilePreview]}>
+                      <FontAwesome name={image.category === "videos" ? "video-camera" : "cube"} size={24} color={COLORS.white} />
+                    </View>
+                  )}
+                  <View style={styles.mediaStatus}>
+                    <Text style={styles.mediaStatusText}>{image.category === "images" ? "Imagen" : image.category === "videos" ? "Video" : "GLB"} · {image.status}</Text>
+                    <TouchableOpacity onPress={() => removeLocalImage(image.id)}>
+                      <FontAwesome name="times-circle" size={16} color={COLORS.white} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {persistedMedia.length > 0 ? (
+            <View style={styles.persistedMediaList}>
+              <Text style={styles.sectionSubLabel}>Multimedia guardada</Text>
+              {persistedMedia.map((media) => (
+                <View key={String(media.id)} style={styles.persistedMediaRow}>
+                  {media.category === "images" && media.url ? (
+                    <Image source={{ uri: media.url }} style={styles.persistedMediaThumb} contentFit="cover" />
+                  ) : null}
+                  <View style={styles.persistedMediaInfo}>
+                    <FontAwesome name={media.category === "images" ? "image" : media.category === "videos" ? "video-camera" : "cube"} size={16} color={ACCENT} />
+                    <Text style={styles.persistedMediaName} numberOfLines={1}>{media.originalFilename || media.objectKey}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removePersistedMedia(media)}>
+                    <FontAwesome name="trash" size={16} color={COLORS.error || "#B91C1C"} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <Text style={styles.mediaNoticeText}>Las miniaturas usan URLs prefirmadas temporales; se renuevan al volver a abrir la pantalla.</Text>
+            </View>
+          ) : null}
 
-          <Text style={styles.sectionLabel}>Videos (URLs separadas por coma)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea, { minHeight: 70 }]}
-            value={form.videoUrls}
-            onChangeText={(value) => updateField("videoUrls", value)}
-            placeholder="https://video.mp4"
-            placeholderTextColor={COLORS.textLight}
-            autoCapitalize="none"
-            multiline
-          />
-
-          <Text style={styles.sectionLabel}>Google Modelos 3D (URLs separadas por coma)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea, { minHeight: 70 }]}
-            value={form.model3dUrls}
-            onChangeText={(value) => updateField("model3dUrls", value)}
-            placeholder="https://...glb"
-            placeholderTextColor={COLORS.textLight}
-            autoCapitalize="none"
-            multiline
-          />
         </View>
 
         <TouchableOpacity
@@ -813,6 +1226,36 @@ const CreatePlaceScreen = ({ navigation, route }) => {
         <View style={{ height: 40 }} />
       </ScrollView>
 
+      <Modal visible={cameraVisible} animationType="slide" onRequestClose={closeCamera}>
+        <View style={styles.cameraScreen}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.cameraPreview}
+            facing="back"
+            mode={cameraMode}
+          />
+          <View style={styles.cameraTopBar}>
+            <TouchableOpacity style={styles.cameraCloseButton} onPress={closeCamera} disabled={cameraRecording}>
+              <FontAwesome name="times" size={20} color={COLORS.white} />
+            </TouchableOpacity>
+            <Text style={styles.cameraTitle}>{cameraMode === "picture" ? "Tomar foto" : "Grabar video"}</Text>
+            <View style={styles.cameraTopSpacer} />
+          </View>
+          <View style={styles.cameraControls}>
+            {cameraMode === "picture" ? (
+              <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
+                <View style={styles.captureButtonInner} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[styles.captureButton, cameraRecording && styles.captureButtonRecording]} onPress={cameraRecording ? closeCamera : recordVideo}>
+                <View style={[styles.videoCaptureInner, cameraRecording && styles.videoCaptureInnerRecording]} />
+              </TouchableOpacity>
+            )}
+            <Text style={styles.cameraHint}>{cameraRecording ? "Grabando... toca para detener" : "La captura se cargará al guardar el sitio"}</Text>
+          </View>
+        </View>
+      </Modal>
+
       <PremiumModal
         visible={modal.visible}
         type={modal.type}
@@ -821,6 +1264,81 @@ const CreatePlaceScreen = ({ navigation, route }) => {
         onConfirm={modal.onConfirm || (() => setModal(prev => ({ ...prev, visible: false })))}
         onClose={() => setModal(prev => ({ ...prev, visible: false }))}
       />
+
+      <Modal
+        visible={createCategoryVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !creatingCategory && setCreateCategoryVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.categoryModalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <View style={styles.categoryModalCard}>
+            <View style={styles.categoryModalHeader}>
+              <View style={styles.categoryModalIcon}>
+                <FontAwesome name="tags" size={18} color={ACCENT} />
+              </View>
+              <TouchableOpacity
+                onPress={() => !creatingCategory && setCreateCategoryVisible(false)}
+                disabled={creatingCategory}
+              >
+                <FontAwesome name="times" size={18} color={COLORS.textLight} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.categoryModalTitle}>{editingCategory ? "Editar categoría" : "Nueva categoría"}</Text>
+            <Text style={styles.categoryModalSubtitle}>
+              {editingCategory ? "Actualiza el nombre para todos los lugares que usan esta categoría." : "Crea una categoría para clasificar tu lugar turístico."}
+            </Text>
+            <Text style={styles.sectionLabel}>Nombre</Text>
+            <TextInput
+              style={styles.input}
+              value={newCategoryName}
+              onChangeText={(value) => {
+                setNewCategoryName(value);
+                if (!editingCategory) setNewCategorySlug(slugifyCategory(value));
+              }}
+              placeholder="Ej. Naturaleza"
+              placeholderTextColor={COLORS.textLight}
+              autoFocus
+              maxLength={60}
+              returnKeyType="done"
+              onSubmitEditing={handleCreateCategory}
+              editable={!creatingCategory}
+            />
+            <Text style={styles.sectionLabel}>Slug</Text>
+            <TextInput
+              style={styles.input}
+              value={newCategorySlug}
+              onChangeText={(value) => setNewCategorySlug(slugifyCategory(value))}
+              placeholder="ej. naturaleza"
+              placeholderTextColor={COLORS.textLight}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={80}
+              editable={!creatingCategory}
+            />
+            <Text style={styles.categorySlugHint}>Solo letras minúsculas, números y guiones.</Text>
+            <View style={styles.categoryModalActions}>
+              <TouchableOpacity
+                style={styles.categoryCancelButton}
+                onPress={() => setCreateCategoryVisible(false)}
+                disabled={creatingCategory}
+              >
+                <Text style={styles.categoryCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.categorySaveButton, creatingCategory && styles.buttonDisabled]}
+                onPress={handleCreateCategory}
+                disabled={creatingCategory}
+              >
+                {creatingCategory ? <ActivityIndicator color={COLORS.white} size="small" /> : <Text style={styles.categorySaveText}>{editingCategory ? "Guardar cambios" : "Crear y usar"}</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -828,17 +1346,18 @@ const CreatePlaceScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F4F6F9", // Slightly softer blueish background
+    backgroundColor: COLORS.background,
   },
+  formScroll: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl * 1.5,
-    paddingBottom: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: "#E7F0F3",
   },
   backButton: {
     width: 40,
@@ -846,7 +1365,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.md,
-    backgroundColor: "#F4F6F9",
+    backgroundColor: "#EAF4F6",
     borderRadius: 20,
   },
   title: {
@@ -866,14 +1385,14 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.white,
-    borderRadius: 24,
+    borderRadius: 18,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: "row",
@@ -903,14 +1422,15 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   input: {
-    backgroundColor: "#F9FAFf",
-    borderRadius: 14,
+    backgroundColor: "#FBFEFF",
+    borderRadius: 12,
     paddingHorizontal: SPACING.md,
     paddingVertical: 14,
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     borderWidth: 1,
-    borderColor: "#E5E9F2",
+    borderColor: "#D9EAF0",
+    minHeight: 52,
   },
   textArea: {
     minHeight: 110,
@@ -1101,6 +1621,99 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textLight,
   },
+  createCategoryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    marginTop: SPACING.sm,
+    paddingVertical: 6,
+  },
+  createCategoryText: {
+    color: ACCENT,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+  },
+  categoryModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    padding: SPACING.lg,
+    backgroundColor: "rgba(15, 23, 42, 0.36)",
+  },
+  categoryModalCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: "#E7F0F3",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  categoryModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  categoryModalIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EAF4F6",
+  },
+  categoryModalTitle: {
+    marginTop: SPACING.md,
+    color: COLORS.text,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "800",
+  },
+  categoryModalSubtitle: {
+    marginTop: 4,
+    marginBottom: SPACING.sm,
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+  },
+  categorySlugHint: {
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.sm,
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.xs,
+  },
+  categoryModalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  categoryCancelButton: {
+    minHeight: 46,
+    paddingHorizontal: SPACING.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoryCancelText: {
+    color: COLORS.textLight,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+  },
+  categorySaveButton: {
+    minHeight: 46,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 12,
+    backgroundColor: ACCENT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categorySaveText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+  },
   dropdown: {
     position: "absolute",
     top: "100%",
@@ -1129,10 +1742,250 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
   },
+  categoryOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF5F7",
+  },
+  categorySelectOption: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  categoryEditButton: {
+    width: 42,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   dropdownItemText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     fontWeight: "500",
+  },
+  mediaPickerButton: {
+    marginTop: SPACING.sm,
+    backgroundColor: ACCENT,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  mediaPickerButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+  },
+  mediaAccordionHeader: {
+    minHeight: 52,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D9EAF0",
+    backgroundColor: "#FBFEFF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mediaAccordionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  mediaAccordionTitle: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+  },
+  mediaAccordionContent: {
+    paddingTop: SPACING.sm,
+    paddingHorizontal: 2,
+  },
+  mediaActionRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  mediaActionButton: {
+    flex: 1,
+    minHeight: 46,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "rgba(14, 116, 144, 0.24)",
+    backgroundColor: "#EAF4F6",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  mediaActionText: {
+    color: ACCENT,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+  },
+  mediaNotice: {
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: 10,
+    backgroundColor: "#ECFEFF",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  mediaNoticeText: {
+    flex: 1,
+    color: ACCENT,
+    fontSize: FONT_SIZES.xs,
+  },
+  mediaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: SPACING.md,
+  },
+  mediaItem: {
+    width: 94,
+    height: 94,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#CBD5E1",
+  },
+  mediaPreview: {
+    width: "100%",
+    height: "100%",
+  },
+  mediaFilePreview: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#334155",
+  },
+  persistedMediaList: {
+    marginTop: SPACING.md,
+    gap: 8,
+  },
+  persistedMediaRow: {
+    minHeight: 42,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: "#F8FAFC",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  persistedMediaThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    marginRight: 8,
+    backgroundColor: "#E2E8F0",
+  },
+  persistedMediaInfo: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginRight: 8,
+  },
+  persistedMediaName: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: FONT_SIZES.xs,
+  },
+  mediaStatus: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mediaStatusText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  cameraScreen: {
+    flex: 1,
+    backgroundColor: "#020617",
+  },
+  cameraPreview: {
+    flex: 1,
+  },
+  cameraTopBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 54,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(2, 6, 23, 0.32)",
+  },
+  cameraCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+  },
+  cameraTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: "800",
+  },
+  cameraTopSpacer: { width: 40 },
+  cameraControls: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingBottom: 42,
+    alignItems: "center",
+    backgroundColor: "rgba(2, 6, 23, 0.28)",
+  },
+  captureButton: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 5,
+    borderColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captureButtonInner: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: COLORS.white,
+  },
+  videoCaptureInner: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#EF4444",
+  },
+  captureButtonRecording: { borderColor: "#FCA5A5" },
+  videoCaptureInnerRecording: { borderRadius: 8, width: 30, height: 30 },
+  cameraHint: {
+    marginTop: SPACING.sm,
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    textAlign: "center",
   },
   submitButton: {
     marginTop: SPACING.sm,

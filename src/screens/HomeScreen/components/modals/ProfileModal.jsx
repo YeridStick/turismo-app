@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as ImagePicker from "expo-image-picker";
 import {
   Modal,
   View,
@@ -14,7 +15,7 @@ import { Image } from "expo-image";
 import { FontAwesome, Feather } from "@expo/vector-icons";
 import { SPACING } from "../../../../utils/constants";
 import styles from "../../styles";
-import api from "../../../../services/api";
+import api, { deleteProfileImage, getProfileImage, uploadProfileImage } from "../../../../services/api";
 import { ENDPOINTS } from "../../../../config/api.config";
 import { useAuth } from "../../../../context/AuthContext";
 import { PremiumModal } from "../../../../components/ui/PremiumModal";
@@ -44,7 +45,7 @@ const ProfileModal = ({
 
   // Perfil Form State
   const [fullName, setFullName] = useState(user?.fullName || "");
-  const [urlAvatar, setUrlAvatar] = useState(user?.urlAvatar || "");
+  const [urlAvatar, setUrlAvatar] = useState(user?.profileImageUrl || user?.urlAvatar || "");
   const [idType, setIdType] = useState(user?.identificationType || "CC");
   const [idNumber, setIdNumber] = useState(user?.identificationNumber || "");
 
@@ -59,11 +60,12 @@ const ProfileModal = ({
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingPassword, setLoadingPassword] = useState(false);
   const [switchingEmail, setSwitchingEmail] = useState("");
+  const [profileImageLoading, setProfileImageLoading] = useState(false);
 
   useEffect(() => {
     if (visible && user) {
       setFullName(user.fullName || "");
-      setUrlAvatar(user.urlAvatar || "");
+      setUrlAvatar(user.profileImageUrl || user.urlAvatar || "");
       setIdType(user.identificationType || "CC");
       setIdNumber(user.identificationNumber || "");
       setCurrentView('summary'); // Reset a summary al abrir
@@ -79,6 +81,86 @@ const ProfileModal = ({
         .catch(() => setAutoVisitEnabled(true));
     }
   }, [visible, user]);
+
+  useEffect(() => {
+    if (!visible || !user) return undefined;
+    let active = true;
+
+    getProfileImage()
+      .then(async (response) => {
+        const imageUrl = response?.data?.url || response?.data?.data?.url;
+        const urlExpiresAt = response?.data?.urlExpiresAt || response?.data?.data?.urlExpiresAt;
+        if (!active || !imageUrl) return;
+        setUrlAvatar(imageUrl);
+        if (imageUrl !== user.profileImageUrl || urlExpiresAt !== user.profileImageUrlExpiresAt) {
+          await updateUser(
+            { profileImageUrl: imageUrl, profileImageUrlExpiresAt: urlExpiresAt, urlAvatar: imageUrl },
+            { persist: false },
+          );
+        }
+      })
+      .catch(() => {
+        // 404 significa que el usuario todavía no tiene foto de perfil.
+      });
+
+    return () => {
+      active = false;
+    };
+    // Se consulta una vez al abrir el modal para obtener una URL prefirmada fresca.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, user?.email]);
+
+  const handlePickProfileImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setStatusModal({ visible: true, type: "warning", title: "Permiso requerido", message: "Activa el permiso de fotos para cambiar tu imagen de perfil." });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const type = asset.mimeType === "image/png" ? "image/png" : "image/jpeg";
+    setProfileImageLoading(true);
+    try {
+      const response = await uploadProfileImage({
+        uri: asset.uri,
+        name: asset.fileName || `profile-${Date.now()}.${type === "image/png" ? "png" : "jpg"}`,
+        type,
+      });
+      const imageUrl = response.data?.url || response.data?.data?.url;
+      if (!imageUrl) throw new Error("El backend no devolvió la URL de la imagen.");
+      let freshImageUrl = imageUrl;
+      let urlExpiresAt = response.data?.urlExpiresAt || response.data?.data?.urlExpiresAt;
+      try {
+        const freshResponse = await getProfileImage();
+        freshImageUrl = freshResponse?.data?.url || freshResponse?.data?.data?.url || imageUrl;
+        urlExpiresAt = freshResponse?.data?.urlExpiresAt || freshResponse?.data?.data?.urlExpiresAt || urlExpiresAt;
+      } catch (_error) {
+        // La URL devuelta por POST sigue siendo válida como fallback inmediato.
+      }
+      setUrlAvatar(freshImageUrl);
+      await updateUser({ profileImageUrl: freshImageUrl, profileImageUrlExpiresAt: urlExpiresAt, urlAvatar: freshImageUrl }, { persist: false });
+      setStatusModal({ visible: true, type: "success", title: "Imagen actualizada", message: "Tu imagen de perfil se actualizó correctamente." });
+    } catch (error) {
+      setStatusModal({ visible: true, type: "error", title: "No se pudo actualizar", message: error?.response?.data?.message || error?.message || "Intenta de nuevo." });
+    } finally {
+      setProfileImageLoading(false);
+    }
+  };
+
+  const handleDeleteProfileImage = async () => {
+    setProfileImageLoading(true);
+    try {
+      await deleteProfileImage();
+      setUrlAvatar("");
+      await updateUser({ profileImageUrl: null, profileImageUrlExpiresAt: null, urlAvatar: null }, { persist: false });
+      setStatusModal({ visible: true, type: "success", title: "Imagen eliminada", message: "Se eliminó tu imagen de perfil." });
+    } catch (error) {
+      setStatusModal({ visible: true, type: "error", title: "No se pudo eliminar", message: error?.response?.data?.message || error?.message || "Intenta de nuevo." });
+    } finally {
+      setProfileImageLoading(false);
+    }
+  };
 
   const persistAutoVisitPreference = async (nextValue) => {
     setSavingAutoVisit(true);
@@ -299,7 +381,7 @@ const ProfileModal = ({
                 )}
 
                 <View style={styles.profileAvatarWrapper}>
-                  <Image source={{ uri: avatar }} style={styles.profileAvatar} contentFit="cover" transition={200} />
+                  <Image source={{ uri: avatar }} style={styles.profileAvatar} contentFit="cover" cachePolicy="disk" transition={200} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.profileName} numberOfLines={1}>{fullDisplayName}</Text>
                     <Text style={styles.profileEmail} numberOfLines={1}>{user.email}</Text>
@@ -452,10 +534,20 @@ const ProfileModal = ({
               <View style={{ paddingVertical: 10, gap: SPACING.lg }}>
                 <View style={{ alignItems: 'center', marginBottom: 10 }}>
                    <View style={{ position: 'relative' }}>
-                      <Image source={{ uri: urlAvatar || avatar }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+                      <Image source={{ uri: urlAvatar || avatar }} style={{ width: 80, height: 80, borderRadius: 40 }} cachePolicy="disk" />
                       <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#0E7490', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' }}>
                          <Feather name="camera" size={12} color="#fff" />
                       </View>
+                   </View>
+                   <View style={styles.profileImageActions}>
+                     <TouchableOpacity style={styles.profileImageButton} onPress={handlePickProfileImage} disabled={profileImageLoading}>
+                       {profileImageLoading ? <ActivityIndicator size="small" color="#0E7490" /> : <><Feather name="camera" size={14} color="#0E7490" /><Text style={styles.profileImageButtonText}>Cambiar foto</Text></>}
+                     </TouchableOpacity>
+                     {!!urlAvatar && !profileImageLoading ? (
+                       <TouchableOpacity onPress={handleDeleteProfileImage} style={styles.profileImageDeleteButton}>
+                         <Text style={styles.profileImageDeleteText}>Eliminar</Text>
+                       </TouchableOpacity>
+                     ) : null}
                    </View>
                 </View>
 

@@ -199,8 +199,10 @@ const HomeScreen = ({ navigation }) => {
   } = useVerification();
 
   const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const [openChatReservationId, setOpenChatReservationId] = useState(null);
   const openNotificationPanelRef = useRef(null);
-  const requestOpenNotificationPanel = useCallback(() => {
+  const requestOpenNotificationPanel = useCallback((reservation) => {
+    setOpenChatReservationId(reservation?.id || null);
     openNotificationPanelRef.current?.();
   }, []);
 
@@ -1376,7 +1378,8 @@ const HomeScreen = ({ navigation }) => {
 	        onRefresh={loadNotifications}
 	        onMarkRead={markAsRead}
 	        onMarkAllRead={markAllAsRead}
-	        onOpenReservations={handleNotificationOpenReservations}
+        onOpenReservations={handleNotificationOpenReservations}
+        openChatReservationId={openChatReservationId}
 	        onOpenFavoritePlace={handleNotificationOpenFavoritePlace}
 	        panelWidth={PANEL_WIDTH}
 	      />
@@ -1399,6 +1402,10 @@ const HomeScreen = ({ navigation }) => {
         message={reservationStatusModal.message}
         confirmText={reservationStatusModal.confirmText}
         onConfirm={reservationStatusModal.onConfirm}
+        confirmIcon={reservationStatusModal.confirmIcon}
+        secondaryText={reservationStatusModal.secondaryText}
+        onSecondary={reservationStatusModal.onSecondary}
+        secondaryIcon={reservationStatusModal.secondaryIcon}
         onClose={closeReservationStatusModal}
       />
 

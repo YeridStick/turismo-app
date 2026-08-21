@@ -1,5 +1,5 @@
 {
-  "name": "turismo-app",
+  "name": "ecoturismo-360",
   "main": "expo/AppEntry",
   "version": "1.0.0",
   "scripts": {
@@ -31,6 +31,7 @@
     "expo-camera": "~17.0.9",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.10",
+    "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.19",
     "expo-font": "~14.0.9",
     "expo-haptics": "~15.0.7",

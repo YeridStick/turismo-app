@@ -1,4 +1,5 @@
 import { FontAwesome } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -16,7 +17,7 @@ import {
 import { useRoute } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { ENDPOINTS } from "../config/api.config";
-import api, { getAgencies, getPackageById, updatePackage } from "../services/api";
+import api, { deletePackageCoverImage, getAgencies, getPackageById, getPackageCover, getPackageCoverImage, updatePackage, uploadPackageCoverImage } from "../services/api";
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
@@ -28,7 +29,7 @@ const parseList = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const getPackageCoverImage = (pkg) =>
+const resolvePackageCoverImage = (pkg) =>
   pkg?.coverImageUrl ||
   pkg?.cover_image_url ||
   pkg?.coverImage ||
@@ -92,6 +93,8 @@ const CreatePackageScreen = ({ navigation }) => {
   });
   const [loading, setLoading] = useState(false);
   const [creationCompleted, setCreationCompleted] = useState(false);
+  const [coverAsset, setCoverAsset] = useState(null);
+  const [hasPackageCover, setHasPackageCover] = useState(false);
   const [modal, setModal] = useState({ visible: false, type: 'error', title: '', message: '', onConfirm: null });
 
   React.useEffect(() => {
@@ -110,8 +113,22 @@ const CreatePackageScreen = ({ navigation }) => {
     setLoading(true);
     try {
       const res = await getPackageById(id);
-      const pkg = res.data?.data || res.data;
+      let pkg = res.data?.data || res.data;
       if (pkg) {
+        if (!resolvePackageCoverImage(pkg)) {
+          try {
+            const cover = await getPackageCoverImage(id);
+            if (cover?.url) {
+              pkg = {
+                ...pkg,
+                coverImageUrl: cover.url,
+                coverImageUrlExpiresAt: cover.urlExpiresAt,
+              };
+            }
+          } catch (_error) {
+            // El paquete sigue siendo editable aunque no tenga portada.
+          }
+        }
         setForm({
           title: pkg.title || "",
           description: pkg.description || "",
@@ -126,8 +143,9 @@ const CreatePackageScreen = ({ navigation }) => {
           discount: pkg.discount || "",
           tag: pkg.tag || "",
           includes: pkg.includes ? pkg.includes.join(", ") : "",
-          image: getPackageCoverImage(pkg),
+          image: resolvePackageCoverImage(pkg),
         });
+        setHasPackageCover(Boolean(resolvePackageCoverImage(pkg)));
         if (pkg.places) {
           setSelectedPlaceIds(pkg.places.map((p) => p.place_id || p.id));
         }
@@ -231,6 +249,39 @@ const CreatePackageScreen = ({ navigation }) => {
 
   const selectedAgency = agenciesLoader.data.find((item) => item.id === selectedAgencyId);
 
+  const pickCoverImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setModal({ visible: true, type: "warning", title: "Permiso requerido", message: "Activa el permiso de fotos para seleccionar una portada." });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [16, 9], quality: 0.85 });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const mimeType = asset.mimeType === "image/png" ? "image/png" : "image/jpeg";
+    setCoverAsset({
+      uri: asset.uri,
+      name: asset.fileName || `package-cover-${Date.now()}.${mimeType === "image/png" ? "png" : "jpg"}`,
+      type: mimeType,
+    });
+  };
+
+  const removePackageCover = async () => {
+    if (!packageId || !hasPackageCover) return;
+    setLoading(true);
+    try {
+      await deletePackageCoverImage(packageId);
+      setHasPackageCover(false);
+      setCoverAsset(null);
+      updateField("image", "");
+      setModal({ visible: true, type: "success", title: "Portada eliminada", message: "La portada del paquete fue eliminada." });
+    } catch (error) {
+      setModal({ visible: true, type: "error", title: "No se pudo eliminar", message: error?.response?.data?.message || error?.message || "Intenta de nuevo." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenAgencyModal = async () => {
     setAgencyModalVisible(true);
     if (!agenciesLoader.loaded && !agenciesLoader.loading) {
@@ -292,10 +343,35 @@ const CreatePackageScreen = ({ navigation }) => {
         createdPackage = createRes?.data?.data || createRes?.data || null;
       }
 
+      const packageIdForCover = packageId || createdPackage?.id || createdPackage?.package_id;
+      let uploadedCover = null;
+      let refreshedPackage = null;
+      if (coverAsset && packageIdForCover) {
+        const coverResponse = await uploadPackageCoverImage(packageIdForCover, coverAsset);
+        uploadedCover = coverResponse.data?.url || coverResponse.data?.data?.url;
+        if (!uploadedCover) throw new Error("El backend no devolvió la URL de la portada.");
+
+        // La respuesta de la subida confirma la operación, pero la URL que debe
+        // consumir la app se obtiene del GET del paquete (URL prefirmada vigente).
+        refreshedPackage = await getPackageCover(packageIdForCover);
+        let refreshedCover = resolvePackageCoverImage(refreshedPackage);
+        if (!refreshedCover) {
+          const cover = await getPackageCoverImage(packageIdForCover);
+          refreshedCover = cover?.url || null;
+        }
+        if (refreshedCover) {
+          uploadedCover = refreshedCover;
+          updateField("image", refreshedCover);
+          setHasPackageCover(true);
+        }
+      }
+
       const packageForList = !packageId
         ? {
-            ...(createdPackage && typeof createdPackage === "object" ? createdPackage : {}),
             ...payload,
+            ...(createdPackage && typeof createdPackage === "object" ? createdPackage : {}),
+            ...(refreshedPackage && typeof refreshedPackage === "object" ? refreshedPackage : {}),
+            ...(uploadedCover ? { coverImageUrl: uploadedCover } : {}),
             id: createdPackage?.id || createdPackage?.package_id || `tmp-${Date.now()}`,
             placeIds: selectedPlaceIds,
             places: Array.isArray(createdPackage?.places) ? createdPackage.places : [],
@@ -356,8 +432,8 @@ const CreatePackageScreen = ({ navigation }) => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 72 : 0}
     >
       <View style={styles.header}>
         <TouchableOpacity
@@ -372,7 +448,14 @@ const CreatePackageScreen = ({ navigation }) => {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.formScroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
 
         {isAdmin && !packageId && (
           <View style={styles.card}>
@@ -573,6 +656,22 @@ const CreatePackageScreen = ({ navigation }) => {
           />
 
           <Text style={styles.sectionLabel}>Imagen de portada (URL)</Text>
+          <TouchableOpacity style={styles.coverPickerButton} onPress={pickCoverImage}>
+            <FontAwesome name="photo" size={15} color={ACCENT} />
+            <Text style={styles.coverPickerText}>{coverAsset ? "Cambiar portada seleccionada" : "Seleccionar portada desde galería"}</Text>
+          </TouchableOpacity>
+          {coverAsset ? (
+            <View style={styles.coverSelectedRow}>
+              <FontAwesome name="check-circle" size={15} color="#059669" />
+              <Text style={styles.coverSelectedText} numberOfLines={1}>{coverAsset.name}</Text>
+            </View>
+          ) : null}
+          {packageId && hasPackageCover && !coverAsset ? (
+            <TouchableOpacity style={styles.coverDeleteButton} onPress={removePackageCover} disabled={loading}>
+              <FontAwesome name="trash-o" size={14} color="#B91C1C" />
+              <Text style={styles.coverDeleteText}>Eliminar portada actual</Text>
+            </TouchableOpacity>
+          ) : null}
           <TextInput
             style={styles.input}
             value={form.image}
@@ -744,17 +843,18 @@ const CreatePackageScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F4F6F9",
+    backgroundColor: COLORS.background,
   },
+  formScroll: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl * 1.5,
-    paddingBottom: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: "#E7F0F3",
   },
   backButton: {
     width: 40,
@@ -782,14 +882,14 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.white,
-    borderRadius: 24,
+    borderRadius: 18,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: "row",
@@ -812,14 +912,64 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: "#F9FAFf",
-    borderRadius: 14,
+    backgroundColor: "#FBFEFF",
+    borderRadius: 12,
     paddingHorizontal: SPACING.md,
     paddingVertical: 14,
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     borderWidth: 1,
-    borderColor: "#E5E9F2",
+    borderColor: "#D9EAF0",
+    minHeight: 52,
+  },
+  coverPickerButton: {
+    minHeight: 48,
+    marginBottom: SPACING.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(14, 116, 144, 0.24)",
+    backgroundColor: "#EAF4F6",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  coverPickerText: {
+    color: ACCENT,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+  },
+  coverSelectedRow: {
+    minHeight: 34,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: 8,
+    backgroundColor: "#ECFDF5",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  coverSelectedText: {
+    flex: 1,
+    color: "#047857",
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+  },
+  coverDeleteButton: {
+    alignSelf: "flex-start",
+    marginBottom: SPACING.sm,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+  },
+  coverDeleteText: {
+    color: "#B91C1C",
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
   },
   textArea: {
     minHeight: 110,

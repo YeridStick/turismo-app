@@ -118,6 +118,8 @@ export const sendReservationMessage = (id, message) =>
   api.post(ENDPOINTS.RESERVATION_MESSAGES(id), { message });
 export const initiateReservationPayment = (id, data = { provider: "wompi" }) =>
   api.post(ENDPOINTS.RESERVATION_PAYMENT_CHECKOUT(id), data);
+export const selectReservationPaymentMode = (id, mode) =>
+  api.post(ENDPOINTS.RESERVATION_PAYMENT_CHOICE(id), { mode });
 export const getReservationPaymentStatus = (id) =>
   api.get(ENDPOINTS.RESERVATION_PAYMENT_STATUS(id));
 export const getAgencyReservations = (params = {}, options = {}) => {

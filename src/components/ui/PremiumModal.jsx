@@ -36,6 +36,10 @@ export const PremiumModal = ({
   onConfirm,
   cancelText,
   onCancel,
+  secondaryText,
+  onSecondary,
+  confirmIcon,
+  secondaryIcon,
 }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -129,7 +133,7 @@ export const PremiumModal = ({
             <Text style={styles.message}>{message}</Text>
           </View>
 
-          <View style={styles.actions}>
+          <View style={[styles.actions, secondaryText && styles.actionsColumn]}>
             {showCancel && (
               <PremiumButton
                 title={cancelText || 'Cancelar'}
@@ -142,9 +146,20 @@ export const PremiumModal = ({
             <PremiumButton
               title={confirmText}
               onPress={onConfirm || onClose}
-              style={showCancel ? styles.confirmButton : styles.fullButton}
+              icon={confirmIcon ? <Ionicons name={confirmIcon} size={18} color={theme.colors.textInverted} /> : undefined}
+              style={secondaryText ? styles.actionsColumnButton : showCancel ? styles.confirmButton : styles.fullButton}
               size="md"
             />
+            {secondaryText ? (
+              <PremiumButton
+                title={secondaryText}
+                onPress={onSecondary || onClose}
+                icon={secondaryIcon ? <Ionicons name={secondaryIcon} size={18} color={theme.colors.primary} /> : undefined}
+                variant="outline"
+                style={styles.actionsColumnButton}
+                size="md"
+              />
+            ) : null}
           </View>
         </Animated.View>
       </View>
@@ -200,6 +215,14 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     flexDirection: 'row',
     gap: 12,
+  },
+  actionsColumn: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  actionsColumnButton: {
+    width: '100%',
+    minHeight: 46,
   },
   fullButton: {
     width: '100%',

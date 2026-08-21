@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, {
   clearAuthTokenCache,
+  getUserInfo,
   getAuthToken,
   setAuthTokenCache,
 } from '../services/api';
@@ -93,6 +94,15 @@ const sortSavedAccounts = (accounts) => {
 
 const MAX_SAVED_ACCOUNTS = 2;
 
+const normalizeEmailVerification = (userData) => {
+  if (!userData) return userData;
+
+  return {
+    ...userData,
+    emailVerified: userData.emailVerified ?? userData.email_verified ?? false,
+  };
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [roles, setRoles] = useState([]);
@@ -122,11 +132,21 @@ export const AuthProvider = ({ children }) => {
           await AsyncStorage.setItem(ACTIVE_TOKEN_KEY, token);
         }
         setAuthTokenCache(token);
-        const parsedUser = JSON.parse(userString);
+        const parsedUser = normalizeEmailVerification(JSON.parse(userString));
         setUser(parsedUser);
         const payload = decodeJwtPayload(token);
         setRoles(Array.isArray(payload?.roles) ? payload.roles : []);
-        await rememberAccount({ token, userData: parsedUser, email: parsedUser.email });
+
+        // El estado de verificación puede cambiar fuera de la aplicación.
+        // Refrescamos una vez al restaurar la sesión para no depender de un
+        // valor antiguo guardado en AsyncStorage.
+        const freshUser = parsedUser?.email
+          ? await fetchUserInfo(parsedUser.email)
+          : null;
+        const currentUser = normalizeEmailVerification(freshUser || parsedUser);
+        await AsyncStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(currentUser));
+        setUser(currentUser);
+        await rememberAccount({ token, userData: currentUser, email: currentUser.email });
       }
     } catch (error) {
       console.error('Error loading user:', error);
@@ -231,7 +251,7 @@ export const AuthProvider = ({ children }) => {
   const fetchUserInfo = async (email) => {
     try {
       console.log('[Auth] Fetching info for:', email);
-      const response = await api.get('/api/info/user', { params: { userEmail: email } });
+      const response = await getUserInfo(email);
       
       const payload = response.data?.data || response.data || null;
       if (!payload) {
@@ -241,18 +261,22 @@ export const AuthProvider = ({ children }) => {
 
       if (payload.user) {
         console.log('[Auth] User found:', payload.user.fullName);
-        return {
+        return normalizeEmailVerification({
           ...payload.user,
-          emailVerified: payload.emailVerified,
+          emailVerified: payload.emailVerified
+            ?? payload.user.emailVerified
+            ?? payload.user.email_verified,
           passwordEnabled: payload.passwordEnabled,
           identificationType: payload.user.identificationType || '',
           identificationNumber: payload.user.identificationNumber || '',
-          urlAvatar: payload.user.urlAvatar || payload.user.avatar || null,
+          profileImageUrl: payload.profileImageUrl || payload.user.profileImageUrl || payload.user.urlAvatar || payload.user.avatar || null,
+          profileImageUrlExpiresAt: payload.profileImageUrlExpiresAt || payload.user.profileImageUrlExpiresAt || null,
+          urlAvatar: payload.profileImageUrl || payload.user.profileImageUrl || payload.user.urlAvatar || payload.user.avatar || null,
           fullName: payload.user.fullName || payload.user.name || '',
           createdAt: payload.user.createdAt || null,
-        };
+        });
       }
-      return payload;
+      return normalizeEmailVerification(payload);
     } catch (err) {
       console.error('[Auth] Error fetching user info:', err.message);
       return null;
@@ -441,20 +465,30 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateUser = async (newUserData) => {
+  const updateUser = async (newUserData, options = {}) => {
     try {
       const updatedUser = { ...user, ...newUserData };
-      await AsyncStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(updatedUser)); 
-      setUser(updatedUser); 
-      const token = await getAuthToken();
-      if (token) {
-        await rememberAccount({ token, userData: updatedUser, email: updatedUser.email });
+      setUser(updatedUser);
+      if (options.persist !== false) {
+        await AsyncStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(updatedUser));
+        const token = await getAuthToken();
+        if (token) {
+          await rememberAccount({ token, userData: updatedUser, email: updatedUser.email });
+        }
       }
       return { success: true };
     } catch (error) {
       console.error('Error updating user in context:', error);
       return { success: false, error: 'Error al actualizar el estado local' };
     }
+  };
+
+  const refreshUserInfo = async (email = user?.email) => {
+    if (!email) return null;
+    const freshUser = await fetchUserInfo(email);
+    if (!freshUser) return null;
+    await updateUser(freshUser);
+    return freshUser;
   };
 
   return (
@@ -471,6 +505,7 @@ export const AuthProvider = ({ children }) => {
         switchAccount,
         removeSavedAccount,
         updateUser,
+        refreshUserInfo,
         setupTotp: setupTotpService,
         confirmTotp: confirmTotpService,
         totpStatus: totpStatusService,

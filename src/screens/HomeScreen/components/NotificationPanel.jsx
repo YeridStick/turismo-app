@@ -1,8 +1,11 @@
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -19,6 +22,7 @@ import {
   getMyReservations,
   getReservationMessages,
   getReservationPaymentStatus,
+  getPackageCoverImage,
   initiateReservationPayment,
   requestAgencyInPersonPayment,
   sendAgencyReservationMessage,
@@ -32,12 +36,6 @@ import { isPaymentPending } from "../../../utils/paymentState";
 
 const FINAL_STATUSES = ["confirmed", "rejected", "cancelled"];
 const ACTIVE_CHAT_STATUSES = ["requested", "contacted", "awaiting_payment"];
-const PAYABLE_PAYMENT_STATUSES = [
-  "pending",
-  "checkout_created",
-  "failed",
-  "expired",
-];
 const PAYMENT_POLL_INTERVAL_MS = 3000;
 const PAYMENT_MAX_POLLS = 8;
 
@@ -114,6 +112,36 @@ const orderChatMessages = (messages = []) => {
     }
   }
   return ordered;
+};
+
+const PAYMENT_CODE_PATTERN = /\bTRM-[A-Z0-9]+-[A-Z0-9]+\b/i;
+const extractPaymentCode = (value) => {
+  const match = String(value || "").match(PAYMENT_CODE_PATTERN);
+  return match?.[0]?.toUpperCase() || null;
+};
+
+const extractCheckoutUrl = (payload) => {
+  const data = payload?.data?.data || payload?.data || payload || {};
+  return (
+    data.checkoutUrl ||
+    data.checkout_url ||
+    data.paymentUrl ||
+    data.payment_url ||
+    data.redirectUrl ||
+    data.redirect_url ||
+    data.url ||
+    data.checkout?.url ||
+    data.checkout?.checkoutUrl ||
+    data.checkout?.checkout_url ||
+    data.payment?.checkoutUrl ||
+    data.payment?.checkout_url ||
+    data.payment?.paymentUrl ||
+    data.payment?.payment_url ||
+    data.payment?.redirectUrl ||
+    data.payment?.redirect_url ||
+    data.payment?.url ||
+    null
+  );
 };
 
 const formatDate = (value) => {
@@ -195,6 +223,7 @@ const NotificationPanel = ({
   onMarkRead,
   onMarkAllRead,
   onOpenReservations,
+  openChatReservationId,
   onOpenFavoritePlace,
   panelWidth,
   onMotionStart,
@@ -215,6 +244,8 @@ const NotificationPanel = ({
   const [updatingChatStatus, setUpdatingChatStatus] = useState(false);
   const [inPersonRequests, setInPersonRequests] = useState({});
   const [startingPayment, setStartingPayment] = useState(false);
+  const [paymentSectionExpanded, setPaymentSectionExpanded] = useState(false);
+  const [reservationPackageImage, setReservationPackageImage] = useState(null);
   const [historyPackages, setHistoryPackages] = useState([]);
   const [favoritePlaces, setFavoritePlaces] = useState([]);
   const [activeHistorySection, setActiveHistorySection] = useState("purchases");
@@ -229,6 +260,7 @@ const NotificationPanel = ({
   const chatsLoadedRef = useRef(false);
   const historyLoadedRef = useRef(false);
   const favoritesLoadedRef = useRef(false);
+  const paymentSectionAnimation = useRef(new Animated.Value(0)).current;
   const normalizedRoles = useMemo(() => roles.map(normalizeRole), [roles]);
   const isAdmin = normalizedRoles.includes("admin");
   const usesAgencyInbox =
@@ -247,15 +279,40 @@ const NotificationPanel = ({
       ),
     [chatReservations, selectedChatId],
   );
-  const selectedPaymentStatus = selectedReservation?.paymentStatus || "pending";
+
+  useEffect(() => {
+    let active = true;
+    const packageId = selectedReservation?.tourPackageId;
+    setReservationPackageImage(null);
+    if (!packageId) return undefined;
+
+    getPackageCoverImage(packageId)
+      .then((payload) => {
+        if (active) setReservationPackageImage(payload?.url || payload?.coverImageUrl || null);
+      })
+      .catch(() => {
+        if (active) setReservationPackageImage(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedReservation?.tourPackageId]);
+  const selectedPaymentStatus = String(selectedReservation?.paymentStatus || "pending").toLowerCase();
   const selectedInPersonRequest = selectedReservation?.id
     ? inPersonRequests[selectedReservation.id]
     : null;
+  const selectedPaymentCode =
+    selectedInPersonRequest?.code ||
+    chatMessages.map((item) => extractPaymentCode(item?.message)).find(Boolean) ||
+    null;
   const canStartClientPayment =
     !usesAgencyInbox &&
     selectedReservation?.id &&
-    selectedReservation?.status === "awaiting_payment" &&
-    PAYABLE_PAYMENT_STATUSES.includes(selectedPaymentStatus);
+    !["confirmed", "rejected", "cancelled"].includes(String(selectedReservation?.status || "").toLowerCase()) &&
+    !["paid", "verified_by_agency", "cancelled"].includes(selectedPaymentStatus) &&
+    (ACTIVE_CHAT_STATUSES.includes(String(selectedReservation?.status || "").toLowerCase()) ||
+      Boolean(selectedPaymentCode));
 
   const updateSelectedChatId = useCallback((chatId) => {
     selectedChatIdRef.current = chatId || null;
@@ -413,6 +470,12 @@ const NotificationPanel = ({
     }
   }, [activeView, loadChats, visible]);
 
+  useEffect(() => {
+    if (!visible || !openChatReservationId) return;
+    preferredChatRef.current = { reservationId: openChatReservationId };
+    setActiveView("chats");
+  }, [openChatReservationId, visible]);
+
   const loadHistory = useCallback(async (options = {}) => {
     const showLoader = options.forceLoader || !historyLoadedRef.current;
     if (showLoader) {
@@ -508,6 +571,12 @@ const NotificationPanel = ({
     setMessageDraft("");
     setChatMessages(cachedMessages || []);
     loadMessages(reservation, { forceLoader: !cachedMessages });
+  };
+
+  const copyPaymentCode = async (code) => {
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    setChatActionError(`Código ${code} copiado.`);
   };
 
   const handleSendMessage = async () => {
@@ -620,9 +689,10 @@ const NotificationPanel = ({
     setChatActionError("");
 
     try {
-      const response = await initiateReservationPayment(selectedReservation.id);
-      const data = response?.data?.data || response?.data || {};
-      const checkoutUrl = data.checkoutUrl;
+      const response = await initiateReservationPayment(selectedReservation.id, {
+        provider: "wompi",
+      });
+      const checkoutUrl = extractCheckoutUrl(response);
 
       if (!checkoutUrl) {
         setChatActionError("El backend no entregó una URL de checkout.");
@@ -653,6 +723,16 @@ const NotificationPanel = ({
     } finally {
       setStartingPayment(false);
     }
+  };
+
+  const togglePaymentSection = () => {
+    const nextExpanded = !paymentSectionExpanded;
+    setPaymentSectionExpanded(nextExpanded);
+    Animated.timing(paymentSectionAnimation, {
+      toValue: nextExpanded ? 1 : 0,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
   };
 
   const renderSegment = (id, label, icon, highlight = false) => {
@@ -870,6 +950,16 @@ const NotificationPanel = ({
 
           <View style={panelStyles.chatSurface}>
             <View style={panelStyles.chatHeader}>
+              {usesAgencyInbox && selectedPaymentCode ? (
+                <TouchableOpacity
+                  style={panelStyles.adminPaymentCodeBadge}
+                  onPress={() => copyPaymentCode(selectedPaymentCode)}
+                  activeOpacity={0.84}
+                >
+                  <Text style={panelStyles.adminPaymentCodeLabel}>CÓDIGO</Text>
+                  <Text style={panelStyles.adminPaymentCodeValue}>{selectedPaymentCode}</Text>
+                </TouchableOpacity>
+              ) : null}
               <View style={panelStyles.chatHeaderIcon}>
                 <Ionicons name="briefcase-outline" size={17} color="#0E7490" />
               </View>
@@ -941,36 +1031,65 @@ const NotificationPanel = ({
             ) : canStartClientPayment ? (
               <View style={panelStyles.clientPaymentWrap}>
                 <TouchableOpacity
-                  style={[
-                    panelStyles.clientPaymentButton,
-                    startingPayment && panelStyles.disabled,
-                  ]}
-                  onPress={handleStartClientPayment}
-                  disabled={startingPayment}
-                  activeOpacity={0.88}
+                  style={panelStyles.clientPaymentHeader}
+                  onPress={togglePaymentSection}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mostrar opciones de pago"
                 >
-                  <View style={panelStyles.clientPaymentIcon}>
-                    {startingPayment ? (
-                      <ActivityIndicator size="small" color="#FB923C" />
-                    ) : (
-                      <Ionicons name="card-outline" size={16} color="#FB923C" />
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={panelStyles.clientPaymentTitle}>
-                      {startingPayment ? "Abriendo Wompi..." : "Pagar con Wompi"}
-                    </Text>
-                    <Text style={panelStyles.clientPaymentText}>
+                  <View style={panelStyles.clientPaymentHeaderCopy}>
+                    <Text style={panelStyles.clientPaymentTitle}>Pago en línea disponible</Text>
+                    <Text style={panelStyles.clientPaymentHeaderHint}>
                       {PAYMENT_STATUS_LABELS[selectedPaymentStatus] || "Pago solicitado"}
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+                  <Animated.View
+                    style={{
+                      transform: [{
+                        rotate: paymentSectionAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ["0deg", "180deg"],
+                        }),
+                      }],
+                    }}
+                  >
+                    <Ionicons name="chevron-down" size={17} color="#64748B" />
+                  </Animated.View>
                 </TouchableOpacity>
-                {chatActionError ? (
-                  <Text style={panelStyles.clientPaymentError}>
-                    {chatActionError}
-                  </Text>
-                ) : null}
+                <Animated.View
+                  style={{
+                    maxHeight: paymentSectionAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, selectedPaymentCode ? 145 : 78],
+                    }),
+                    opacity: paymentSectionAnimation,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View style={panelStyles.clientPaymentExpandableContent}>
+                    <Text style={panelStyles.clientPaymentNotice}>
+                      Puedes pagar ahora. Si necesitas confirmar detalles o hacer cambios, escríbele a la agencia antes de continuar.
+                    </Text>
+                    <TouchableOpacity
+                      style={[panelStyles.clientPaymentButton, startingPayment && panelStyles.disabled]}
+                      onPress={handleStartClientPayment}
+                      disabled={startingPayment}
+                      activeOpacity={0.88}
+                    >
+                      {startingPayment ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="card-outline" size={15} color="#FFFFFF" />}
+                      <Text style={panelStyles.clientPaymentButtonText}>{startingPayment ? "Abriendo..." : "Pagar en línea"}</Text>
+                    </TouchableOpacity>
+                    {chatActionError ? (
+                      <Text style={panelStyles.clientPaymentError}>{chatActionError}</Text>
+                    ) : null}
+                    {selectedPaymentCode ? (
+                      <View style={panelStyles.clientInPersonBox}>
+                        <Text style={panelStyles.clientPaymentText}>Pago presencial pendiente · {selectedPaymentCode}</Text>
+                        <Text style={panelStyles.clientPaymentText}>Código entregado por la agencia.</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </Animated.View>
               </View>
             ) : null}
 
@@ -999,6 +1118,47 @@ const NotificationPanel = ({
                 contentContainerStyle={panelStyles.messagesList}
                 keyboardShouldPersistTaps="handled"
               >
+                {selectedReservation ? (
+                  <View style={panelStyles.reservationPackageCard}>
+                    {reservationPackageImage ? (
+                      <Image
+                        source={{ uri: reservationPackageImage }}
+                        style={panelStyles.reservationPackageImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={panelStyles.reservationPackageImageFallback}>
+                        <Ionicons name="map-outline" size={24} color="#0E7490" />
+                      </View>
+                    )}
+                    <View style={panelStyles.reservationPackageContent}>
+                      <Text style={panelStyles.reservationPackageEyebrow}>Solicitud de reserva</Text>
+                      <Text style={panelStyles.reservationPackageTitle} numberOfLines={2}>
+                        {selectedReservation.packageTitle || "Paquete turístico"}
+                      </Text>
+                      <View style={panelStyles.reservationPackageFacts}>
+                        <View style={panelStyles.reservationPackageFactRow}>
+                          <Ionicons name="calendar-outline" size={12} color="#64748B" />
+                          <Text style={panelStyles.reservationPackageFact}>{selectedReservation.startDate || "Fecha por confirmar"}</Text>
+                        </View>
+                        <View style={panelStyles.reservationPackageFactRow}>
+                          <Ionicons name="people-outline" size={12} color="#64748B" />
+                          <Text style={panelStyles.reservationPackageFact}>{selectedReservation.travelers || 1} viajero(s)</Text>
+                        </View>
+                      </View>
+                      {selectedReservation.totalAmount ? (
+                        <Text style={panelStyles.reservationPackagePrice}>
+                          {formatCurrency(selectedReservation.totalAmount, selectedReservation.currency || "COP")}
+                        </Text>
+                      ) : null}
+                      {selectedReservation.message || selectedReservation.customerMessage ? (
+                        <Text style={panelStyles.reservationPackageMessage} numberOfLines={3}>
+                          “{selectedReservation.message || selectedReservation.customerMessage}”
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
                 {chatMessages.length === 0 ? (
                   <View style={panelStyles.chatEmptyState}>
                     <View style={panelStyles.chatEmptyIcon}>
@@ -1015,6 +1175,30 @@ const NotificationPanel = ({
                     const mine = usesAgencyInbox
                       ? message.senderType === "AGENCY"
                       : message.senderType === "CUSTOMER";
+                    if (system && String(message.message || "").startsWith("Solicitud de reserva creada.")) {
+                      return null;
+                    }
+                    const messagePaymentCode = system ? extractPaymentCode(message.message) : null;
+                    if (messagePaymentCode) {
+                      return (
+                        <View key={String(message.id || index)} style={panelStyles.paymentCodeMessageCard}>
+                          <View style={panelStyles.paymentCodeMessageHeader}>
+                            <Ionicons name="card-outline" size={17} color="#B91C1C" />
+                            <Text style={panelStyles.paymentCodeMessageTitle}>Pago presencial</Text>
+                          </View>
+                          <Text style={panelStyles.paymentCodeMessageHint}>Presenta este código en la agencia</Text>
+                          <TouchableOpacity
+                            style={panelStyles.paymentCodeCopyButton}
+                            onPress={() => copyPaymentCode(messagePaymentCode)}
+                            activeOpacity={0.84}
+                          >
+                            <Text style={panelStyles.paymentCodeCopyText}>{messagePaymentCode}</Text>
+                            <Ionicons name="copy-outline" size={18} color="#B91C1C" />
+                          </TouchableOpacity>
+                          <Text style={panelStyles.paymentCodeMessageText}>{String(message.message || "").replace(messagePaymentCode, "").trim()}</Text>
+                        </View>
+                      );
+                    }
                     return (
                       <View
                         key={String(message.id || index)}
@@ -1376,6 +1560,7 @@ const NotificationPanel = ({
             ? renderChats()
             : renderHistory()}
       </KeyboardAvoidingView>
+
     </EdgeDrawer>
   );
 };
@@ -1856,6 +2041,27 @@ const panelStyles = StyleSheet.create({
     borderBottomColor: "#E2E8F0",
     backgroundColor: "rgba(248,250,252,0.72)",
   },
+  adminPaymentCodeBadge: {
+    minWidth: 86,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  adminPaymentCodeLabel: {
+    color: "#B91C1C",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  adminPaymentCodeValue: {
+    marginTop: 1,
+    color: "#B91C1C",
+    fontSize: 11,
+    fontWeight: "900",
+  },
   chatHeaderIcon: {
     width: 34,
     height: 34,
@@ -1941,26 +2147,49 @@ const panelStyles = StyleSheet.create({
     fontWeight: "900",
   },
   clientPaymentWrap: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#FED7AA",
-    backgroundColor: "#FFF7ED",
+    borderBottomColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
   },
-  clientPaymentButton: {
-    minHeight: 58,
+  clientPaymentHeader: {
+    minHeight: 34,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 9,
-    borderRadius: 18,
-    backgroundColor: "#FB923C",
-    shadowColor: "#FB923C",
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    justifyContent: "space-between",
+  },
+  clientPaymentHeaderCopy: {
+    flex: 1,
+  },
+  clientPaymentHeaderHint: {
+    marginTop: 1,
+    color: "#94A3B8",
+    fontSize: 9,
+    fontWeight: "600",
+  },
+  clientPaymentExpandableContent: {
+    paddingTop: 5,
+  },
+  clientPaymentButton: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 9,
+    backgroundColor: "#0E7490",
+  },
+  clientPaymentButtonText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  clientPaymentInPersonText: {
+    color: "#047857",
+    fontSize: 11,
+    fontWeight: "900",
   },
   clientPaymentIcon: {
     width: 34,
@@ -1971,16 +2200,16 @@ const panelStyles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   clientPaymentTitle: {
-    color: "#FFFFFF",
-    fontSize: 13,
+    color: "#334155",
+    fontSize: 11,
     fontWeight: "900",
   },
   clientPaymentText: {
     marginTop: 2,
-    color: "rgba(255,255,255,0.88)",
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "700",
+    color: "#64748B",
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "600",
   },
   clientPaymentError: {
     marginTop: 6,
@@ -1989,6 +2218,53 @@ const panelStyles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "800",
   },
+  clientPaymentNotice: {
+    marginBottom: 6,
+    color: "#475569",
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  clientInPersonBox: {
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  clientPaymentCode: {
+    marginVertical: 2,
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  clientPaymentLink: {
+    marginTop: 5,
+    color: COLORS.primary,
+    fontWeight: "800",
+  },
+  choiceBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: SPACING.lg,
+    backgroundColor: "rgba(15, 23, 42, 0.48)",
+  },
+  choiceCard: {
+    width: "100%",
+    maxWidth: 420,
+    padding: SPACING.lg,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+  },
+  choiceTitle: { color: COLORS.text, fontSize: FONT_SIZES.lg, fontWeight: "900" },
+  choiceText: { marginTop: 6, marginBottom: SPACING.md, color: COLORS.textLight },
+  choicePrimary: { minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 999, backgroundColor: COLORS.primary },
+  choicePrimaryText: { color: "#FFFFFF", fontWeight: "900" },
+  choiceSecondary: { minHeight: 46, marginTop: SPACING.sm, alignItems: "center", justifyContent: "center", borderRadius: 999, backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#A7F3D0" },
+  choiceSecondaryText: { color: "#047857", fontWeight: "900" },
+  choiceCancelText: { marginTop: SPACING.md, textAlign: "center", color: COLORS.textLight, fontWeight: "800" },
   messagesLoading: {
     flex: 1,
     alignItems: "center",
@@ -2001,11 +2277,130 @@ const panelStyles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     flexGrow: 1,
   },
+  reservationPackageCard: {
+    flexDirection: "row",
+    overflow: "hidden",
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DDE7EC",
+    shadowColor: "#0E7490",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  reservationPackageImage: {
+    width: 94,
+    minHeight: 142,
+    backgroundColor: "#E6F6F7",
+  },
+  reservationPackageImageFallback: {
+    width: 94,
+    minHeight: 142,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E6F6F7",
+  },
+  reservationPackageContent: {
+    flex: 1,
+    padding: 11,
+  },
+  reservationPackageEyebrow: {
+    color: "#0E7490",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  reservationPackageTitle: {
+    marginTop: 3,
+    color: "#0F172A",
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+  reservationPackageFacts: {
+    marginTop: 8,
+    gap: 3,
+  },
+  reservationPackageFactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  reservationPackageFact: {
+    color: "#64748B",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  reservationPackagePrice: {
+    marginTop: 7,
+    color: "#0E7490",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  reservationPackageMessage: {
+    marginTop: 7,
+    color: "#475569",
+    fontSize: 10,
+    fontStyle: "italic",
+    lineHeight: 14,
+  },
   messageBubble: {
     maxWidth: "88%",
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 16,
+  },
+  paymentCodeMessageCard: {
+    alignSelf: "center",
+    width: "94%",
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#FFF7F7",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  paymentCodeMessageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  paymentCodeMessageTitle: {
+    color: "#B91C1C",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  paymentCodeMessageHint: {
+    marginTop: 6,
+    color: "#7F1D1D",
+    fontSize: 10,
+  },
+  paymentCodeCopyButton: {
+    minHeight: 46,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  paymentCodeCopyText: {
+    color: "#B91C1C",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  paymentCodeMessageText: {
+    marginTop: 7,
+    color: "#7F1D1D",
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: "center",
   },
   messageMine: {
     alignSelf: "flex-end",

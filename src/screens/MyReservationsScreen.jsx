@@ -30,6 +30,13 @@ import {
   buildRequestKey,
   createInFlightDeduper,
 } from "../utils/requestHelpers";
+import {
+  extractPaymentStatus,
+  isPaymentPending,
+  mergePaymentSnapshot,
+  shouldAcceptPaymentSnapshot,
+} from "../utils/paymentState";
+import { validateReservationInput } from "../utils/reservationValidation";
 
 const STATUS_LABELS = {
   requested: "Solicitada",
@@ -75,13 +82,14 @@ const PAYMENT_PROVIDER_LABELS = {
 
 const FINAL_STATUSES = ["confirmed", "rejected", "cancelled"];
 const EDIT_WINDOW_MS = 2 * 60 * 1000;
-const PAYABLE_STATUSES = ["awaiting_payment"];
 const PAYABLE_PAYMENT_STATUSES = [
   "pending",
   "checkout_created",
   "failed",
   "expired",
 ];
+const PAYMENT_POLL_INTERVAL_MS = 3000;
+const PAYMENT_MAX_POLLS = 8;
 
 const extractItems = (payload) => {
   const data = payload?.data?.data ?? payload?.data ?? payload;
@@ -301,11 +309,14 @@ const MyReservationsScreen = ({ navigation }) => {
   const [messageText, setMessageText] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [inPersonPayment, setInPersonPayment] = useState(null);
   const requestDeduper = useMemo(() => createInFlightDeduper(), []);
   const selectedReservationRef = useRef(null);
   const listRequestSeqRef = useRef(0);
   const detailRequestSeqRef = useRef(0);
   const messagesRequestSeqRef = useRef(0);
+  const paymentRequestSeqRef = useRef(0);
+  const paymentCancelledRef = useRef(false);
 
   useEffect(() => {
     selectedReservationRef.current = selectedReservation;
@@ -436,6 +447,7 @@ const MyReservationsScreen = ({ navigation }) => {
         selectedReservationRef.current = reservation;
         setSelectedReservation(reservation);
         setEditForm(buildEditForm(reservation));
+        setInPersonPayment(reservation.inPersonPayment || reservation.paymentRequest || null);
         upsertReservation(reservation);
       }
     } catch (err) {
@@ -459,6 +471,7 @@ const MyReservationsScreen = ({ navigation }) => {
     messagesRequestSeqRef.current = requestSeq;
     setMessagesLoading(true);
     setMessagesError("");
+    setInPersonPayment(null);
 
     try {
       const params = {
@@ -508,6 +521,8 @@ const MyReservationsScreen = ({ navigation }) => {
   const closeModal = () => {
     detailRequestSeqRef.current += 1;
     messagesRequestSeqRef.current += 1;
+    paymentRequestSeqRef.current += 1;
+    paymentCancelledRef.current = true;
     setModalVisible(false);
     selectedReservationRef.current = null;
     setSelectedReservation(null);
@@ -529,19 +544,32 @@ const MyReservationsScreen = ({ navigation }) => {
     if (!selectedReservation?.id || !canEditReservation(selectedReservation)) return;
 
     const travelers = Number(editForm.travelers);
+    const validationError = validateReservationInput({
+      packageId: selectedReservation.packageId || selectedReservation.tourPackageId || selectedReservation.package?.id || "edit",
+      startDate: editForm.startDate?.trim(),
+      endDate: editForm.endDate?.trim(),
+      travelers,
+      contactPreference: editForm.contactPreference,
+      consentAccepted: true,
+    });
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(editForm.startDate || "")) {
+    if (validationError === "startDate") {
       Alert.alert("Fecha invalida", "Usa el formato AAAA-MM-DD para la fecha de inicio.");
       return;
     }
 
-    if (editForm.endDate && !/^\d{4}-\d{2}-\d{2}$/.test(editForm.endDate)) {
+    if (validationError === "endDate") {
       Alert.alert("Fecha invalida", "Usa el formato AAAA-MM-DD para la fecha final.");
       return;
     }
 
-    if (!Number.isInteger(travelers) || travelers < 1) {
+    if (validationError === "travelers") {
       Alert.alert("Viajeros invalidos", "Ingresa al menos 1 viajero.");
+      return;
+    }
+
+    if (validationError === "contactPreference") {
+      Alert.alert("Canal invalido", "Selecciona una preferencia de contacto valida.");
       return;
     }
 
@@ -658,57 +686,22 @@ const MyReservationsScreen = ({ navigation }) => {
       const data = response.data?.data || response.data || {};
       const checkoutUrl =
         data.checkoutUrl ||
+        data.checkout_url ||
         data.paymentUrl ||
+        data.payment_url ||
         data.url ||
-        data.redirectUrl;
+        data.redirectUrl ||
+        data.redirect_url ||
+        data.checkout?.url ||
+        data.checkout?.checkoutUrl ||
+        data.checkout?.checkout_url ||
+        data.payment?.checkoutUrl ||
+        data.payment?.checkout_url ||
+        data.payment?.url;
 
       if (checkoutUrl) {
         await WebBrowser.openBrowserAsync(checkoutUrl);
-        const paymentStatusKey = buildRequestKey({
-          endpoint: ENDPOINTS.RESERVATION_PAYMENT_STATUS(selectedReservation.id),
-          scope: { screen: "MyReservations" },
-        });
-        requestDeduper.clear(getReservationsListKey());
-        requestDeduper.clear(getReservationDetailKey(selectedReservation.id));
-        requestDeduper.clear(paymentStatusKey);
-        const [statusResult, detailResult] = await Promise.allSettled([
-          requestDeduper.run(paymentStatusKey, () =>
-            getReservationPaymentStatus(selectedReservation.id),
-          ),
-          fetchReservationDetail(selectedReservation.id),
-        ]);
-        if (detailResult.status === "fulfilled") {
-          const reservation = extractReservation(detailResult.value);
-          if (reservation) {
-            selectedReservationRef.current = reservation;
-            setSelectedReservation(reservation);
-            listRequestSeqRef.current += 1;
-            upsertReservation(reservation);
-          }
-        } else if (statusResult.status === "fulfilled") {
-          const statusData = statusResult.value?.data?.data || statusResult.value?.data;
-          const currentReservation = selectedReservationRef.current;
-          const reservation = currentReservation
-            ? {
-                ...currentReservation,
-                status: statusData?.reservationStatus || currentReservation.status,
-                paymentProvider:
-                  statusData?.paymentProvider || currentReservation.paymentProvider,
-                paymentStatus:
-                  statusData?.paymentStatus || currentReservation.paymentStatus,
-                paymentId:
-                  statusData?.providerTransactionId || currentReservation.paymentId,
-                paidAt: statusData?.paidAt || currentReservation.paidAt,
-              }
-            : currentReservation;
-
-          if (reservation) {
-            selectedReservationRef.current = reservation;
-            setSelectedReservation(reservation);
-            listRequestSeqRef.current += 1;
-            upsertReservation(reservation);
-          }
-        }
+        await reconcilePayment(selectedReservation.id);
         return;
       }
 
@@ -725,6 +718,85 @@ const MyReservationsScreen = ({ navigation }) => {
       setPaymentLoading(false);
     }
   };
+
+  const reconcilePayment = useCallback(async (reservationId) => {
+    const requestSeq = paymentRequestSeqRef.current + 1;
+    paymentRequestSeqRef.current = requestSeq;
+    paymentCancelledRef.current = false;
+    let lastStatus = selectedReservationRef.current?.paymentStatus;
+
+    for (let attempt = 0; attempt < PAYMENT_MAX_POLLS; attempt += 1) {
+      if (paymentCancelledRef.current || requestSeq !== paymentRequestSeqRef.current) return;
+
+      const paymentStatusKey = buildRequestKey({
+        endpoint: ENDPOINTS.RESERVATION_PAYMENT_STATUS(reservationId),
+        scope: { screen: "MyReservations" },
+      });
+      try {
+        requestDeduper.clear(paymentStatusKey);
+        const response = await requestDeduper.run(paymentStatusKey, () =>
+          getReservationPaymentStatus(reservationId),
+        );
+        const snapshot = extractPaymentStatus(response);
+        const nextStatus = snapshot.paymentStatus;
+        if (
+          !nextStatus ||
+          !shouldAcceptPaymentSnapshot(lastStatus, nextStatus) ||
+          paymentCancelledRef.current ||
+          requestSeq !== paymentRequestSeqRef.current
+        ) return;
+
+        const current = selectedReservationRef.current;
+        const merged = mergePaymentSnapshot(current, snapshot);
+        lastStatus = nextStatus;
+        if (merged) {
+          selectedReservationRef.current = merged;
+          setSelectedReservation(merged);
+          upsertReservation(merged);
+        }
+
+        requestDeduper.clear(getReservationsListKey());
+        requestDeduper.clear(getReservationDetailKey(reservationId));
+        const detailResult = await Promise.allSettled([
+          fetchReservationDetail(reservationId),
+          loadReservations(),
+        ]);
+        if (detailResult[0].status === "fulfilled") {
+          const authoritativeReservation = extractReservation(detailResult[0].value);
+          if (authoritativeReservation && requestSeq === paymentRequestSeqRef.current) {
+            selectedReservationRef.current = authoritativeReservation;
+            setSelectedReservation(authoritativeReservation);
+            upsertReservation(authoritativeReservation);
+          }
+        }
+        if (!isPaymentPending(nextStatus)) {
+          requestDeduper.clear(getReservationMessagesKey(reservationId));
+          await loadMessages(reservationId);
+          return;
+        }
+      } catch (_error) {
+        // Un fallo transitorio no convierte el pago en rechazado.
+      }
+
+      if (attempt < PAYMENT_MAX_POLLS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, PAYMENT_POLL_INTERVAL_MS));
+      }
+    }
+  }, [
+    fetchReservationDetail,
+    getReservationDetailKey,
+    getReservationMessagesKey,
+    getReservationsListKey,
+    loadMessages,
+    loadReservations,
+    requestDeduper,
+    upsertReservation,
+  ]);
+
+  useEffect(() => () => {
+    paymentCancelledRef.current = true;
+    paymentRequestSeqRef.current += 1;
+  }, []);
 
   const statusColor =
     STATUS_COLORS[selectedReservation?.status] ||
@@ -750,7 +822,7 @@ const MyReservationsScreen = ({ navigation }) => {
     selectedReservation?.paymentStatus || "pending";
   const canPayReservation =
     selectedReservation?.id &&
-    PAYABLE_STATUSES.includes(selectedReservation?.status) &&
+    !FINAL_STATUSES.includes(String(selectedReservation?.status || "").toLowerCase()) &&
     PAYABLE_PAYMENT_STATUSES.includes(normalizedPaymentStatus);
 
   return (
@@ -1238,15 +1310,21 @@ const MyReservationsScreen = ({ navigation }) => {
                               color="#FFFFFF"
                             />
                             <Text style={styles.directPaymentButtonText}>
-                              Pagar con Wompi
+                              Pagar en línea
                             </Text>
                           </>
                         )}
                       </TouchableOpacity>
 
-                      <Text style={styles.paymentHintText}>
-                        Se abrirá el checkout seguro enviado por la pasarela.
-                      </Text>
+                      {inPersonPayment?.code ? (
+                        <View style={styles.inPersonPaymentBox}>
+                          <Text style={styles.paymentHintText}>Pago presencial pendiente</Text>
+                          <Text style={styles.inPersonPaymentCode}>{inPersonPayment.code}</Text>
+                          {!!inPersonPayment.agencyName && <Text style={styles.paymentHintText}>{inPersonPayment.agencyName}</Text>}
+                          {!!inPersonPayment.agencyAddress && <Text style={styles.paymentHintText}>{inPersonPayment.agencyAddress}</Text>}
+                          {!!inPersonPayment.locationUrl && <TouchableOpacity onPress={() => WebBrowser.openBrowserAsync(inPersonPayment.locationUrl)}><Text style={styles.paymentLinkText}>Cómo llegar</Text></TouchableOpacity>}
+                        </View>
+                      ) : null}
                     </>
                   ) : null}
                 </View>
@@ -1563,6 +1641,7 @@ const MyReservationsScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
     </View>
   );
 };
@@ -2015,26 +2094,50 @@ const styles = StyleSheet.create({
   },
 
   directPaymentButton: {
-    minHeight: 44,
-    marginTop: SPACING.md,
-    borderRadius: 999,
+    minHeight: 38,
+    marginTop: 10,
+    borderRadius: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     backgroundColor: COLORS.primary,
   },
 
   directPaymentButtonText: {
     color: "#FFFFFF",
+    fontSize: 11,
     fontWeight: "900",
   },
 
   paymentHintText: {
-    marginTop: 8,
+    marginTop: 5,
     color: COLORS.textLight,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
+  },
+
+  inPersonPaymentBox: {
+    marginTop: 9,
+    padding: 9,
+    borderRadius: 9,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+
+  inPersonPaymentCode: {
+    marginVertical: 3,
+    color: COLORS.primary,
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  paymentLinkText: {
+    marginTop: 6,
+    color: COLORS.primary,
+    fontWeight: "800",
   },
 
   modalSeparator: {

@@ -1,5 +1,6 @@
 import React from "react";
 import { ImageBackground, View, Text, TouchableOpacity } from "react-native";
+import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { FontAwesome } from "@expo/vector-icons";
 import { COLORS } from "../../../utils/constants";
@@ -29,10 +30,14 @@ const HomeFooter = ({ imageUris = [] }) => {
       >
         <View style={styles.footerHeader}>
           <View style={styles.footerLogoBox}>
-            <FontAwesome name="globe" size={16} color={COLORS.white} />
+            <Image
+              source={require("../../../../assets/images/ecoturismo-iso-fondo-transparente.svg")}
+              style={styles.footerLogoImage}
+              contentFit="contain"
+            />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.footerTitle}>Turismo Huila</Text>
+            <Text style={styles.footerTitle}>Ecoturismo 360</Text>
             <Text style={styles.footerSubtitle}>Neiva, Huila · Colombia</Text>
           </View>
           <View style={styles.footerSocialRow}>
@@ -75,7 +80,7 @@ const HomeFooter = ({ imageUris = [] }) => {
 
         <View style={styles.footerBottomRow}>
           <Text style={styles.footerBottomText}>
-            © 2025 Turismo Huila
+            © 2025 Ecoturismo 360
           </Text>
           <View style={styles.footerLegalRow}>
             <Text style={styles.footerLegalText}>Términos</Text>

@@ -96,7 +96,7 @@ const HomeHeader = ({
     <View>
       <BlurView intensity={54} tint="light" style={styles.heroOverlay}>
         <View style={styles.topBar}>
-          <Text style={styles.locationValue}>Turismo App</Text>
+          <Text style={styles.locationValue}>Ecoturismo 360</Text>
           {user ? (
             <View style={styles.headerActions}>
               <TouchableOpacity
@@ -119,9 +119,9 @@ const HomeHeader = ({
                 onPress={onOpenProfile}
               >
                 <View style={styles.profileAvatarSmall}>
-                  {user.urlAvatar || user.avatar ? (
+                  {user.profileImageUrl || user.urlAvatar || user.avatar ? (
                     <Image
-                      source={{ uri: user.urlAvatar || user.avatar }}
+                      source={{ uri: user.profileImageUrl || user.urlAvatar || user.avatar }}
                       style={{ width: "100%", height: "100%", borderRadius: 14 }}
                     />
                   ) : (

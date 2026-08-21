@@ -59,6 +59,7 @@ export const ENDPOINTS = {
   RESERVATION_MESSAGES: (id) => `/api/reservations/${id}/messages`,
   RESERVATION_PAYMENT_CHECKOUT: (id) => `/api/reservations/${id}/payment/checkout`,
   RESERVATION_PAYMENT_STATUS: (id) => `/api/reservations/${id}/payment/status`,
+  RESERVATION_PAYMENT_CHOICE: (id) => `/api/reservations/${id}/payment-choice`,
   AGENCY_RESERVATIONS: "/api/agencies/me/reservations",
   AGENCY_RESERVATION_DETAIL: (id) => `/api/agencies/me/reservations/${id}`,
   AGENCY_RESERVATION_STATUS: (id) => `/api/agencies/me/reservations/${id}/status`,

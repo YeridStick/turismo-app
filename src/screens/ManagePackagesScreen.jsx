@@ -13,7 +13,7 @@ import {
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { getPackages, deletePackage, getAgencyPackages } from '../services/api';
+import { getPackages, deletePackage, getAgencyPackages, getPackageCoverImage } from '../services/api';
 import { useRoute } from '@react-navigation/native';
 import { PremiumModal } from '../components/ui/PremiumModal';
 import { getPackageImage } from './HomeScreen/utils/helpers';
@@ -47,6 +47,30 @@ const normalizePackage = (pkg) => {
         reviews: toNumber(pkg?.reviews, 0),
         places: Array.isArray(pkg?.places) ? pkg.places : [],
     };
+};
+
+const hasPackageCover = (pkg) => {
+    const url = pkg?.coverImageUrl || pkg?.cover_image_url || pkg?.coverImage || pkg?.cover_image;
+    if (!url) return false;
+    const expiresAt = pkg?.coverImageUrlExpiresAt || pkg?.cover_image_url_expires_at;
+    if (!expiresAt) return true;
+    const expiry = Date.parse(expiresAt);
+    return !Number.isFinite(expiry) || expiry > Date.now();
+};
+
+const hydratePackageCovers = async (items) => {
+    const refreshed = await Promise.all(items.map(async (pkg) => {
+        if (pkg?.id == null || hasPackageCover(pkg)) return pkg;
+        try {
+            const cover = await getPackageCoverImage(pkg.id);
+            return cover?.url
+                ? { ...pkg, coverImageUrl: cover.url, coverImageUrlExpiresAt: cover.urlExpiresAt }
+                : pkg;
+        } catch (_error) {
+            return pkg;
+        }
+    }));
+    return refreshed;
 };
 
 const packageFingerprint = (pkg) => {
@@ -94,7 +118,7 @@ const ManagePackagesScreen = ({ navigation }) => {
             }
             
             const allPkgs = response.data?.data || response.data || [];
-            const normalizedPkgs = allPkgs.map(normalizePackage);
+            const normalizedPkgs = await hydratePackageCovers(allPkgs.map(normalizePackage));
             
             // Si no es admin y no hay agencyId, podrias filtrar o mostrar vacio
             // Pero con los nuevos endpoints, getMyAgencies + getAgencyPackages es el flujo ideal
@@ -223,6 +247,7 @@ const ManagePackagesScreen = ({ navigation }) => {
                     source={{ uri: coverImage }}
                     style={styles.pkgCoverImage}
                     resizeMode="cover"
+                    cachePolicy="disk"
                 />
             ) : null}
 

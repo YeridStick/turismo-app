@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENDPOINTS } from "../../../config/api.config";
-import api from "../../../services/api";
+import api, { getPackageCoverImage } from "../../../services/api";
 import {
   buildRequestKey,
   createInFlightDeduper,
   extractArrayPayload,
 } from "../../../utils/requestHelpers";
 import { recordRequestInstrumentation } from "../../../utils/performanceInstrumentation";
+import { getCachedPlaceImages } from "../../../utils/placeMediaCache";
 import { distanceBetweenMeters, getCategoryLabel, isSameCoords, normalizePlace, normalizeTopPlace } from "../utils/helpers";
 import useLocation from "./useLocation";
 
@@ -49,6 +50,39 @@ const buildNearbyKeyParams = (params) => ({
   lat: roundCoordinate(params.lat),
   lng: roundCoordinate(params.lng),
 });
+
+const packageHasCoverUrl = (pkg) => {
+  const url = pkg?.coverImageUrl || pkg?.cover_image_url || pkg?.coverImage || pkg?.cover_image;
+  if (!url) return false;
+  const expiresAt = pkg?.coverImageUrlExpiresAt || pkg?.cover_image_url_expires_at;
+  if (!expiresAt) return true;
+  const expiry = Date.parse(expiresAt);
+  return !Number.isFinite(expiry) || expiry > Date.now();
+};
+
+const hydratePackageCovers = async (items) => {
+  const missing = items.filter((pkg) => pkg?.id != null && !packageHasCoverUrl(pkg));
+  if (!missing.length) return items;
+
+  const refreshed = await Promise.all(
+    missing.map(async (pkg) => {
+      try {
+        const cover = await getPackageCoverImage(pkg.id);
+        return cover?.url
+          ? {
+              ...pkg,
+              coverImageUrl: cover.url,
+              coverImageUrlExpiresAt: cover.urlExpiresAt,
+            }
+          : pkg;
+      } catch (_error) {
+        return pkg;
+      }
+    }),
+  );
+  const refreshedById = new Map(refreshed.map((pkg) => [String(pkg.id), pkg]));
+  return items.map((pkg) => refreshedById.get(String(pkg.id)) || pkg);
+};
 
 const useHomeData = (user) => {
   const { coords, setCoords, ensureLocation, error: locationError } = useLocation();
@@ -126,6 +160,53 @@ const useHomeData = (user) => {
   });
   const didMountAgencySearchRef = useRef(false);
   const didMountPackageFilterRef = useRef(false);
+
+  // Hidrata las tarjetas/carruseles con la URL prefirmada una sola vez por sitio.
+  // getCachedPlaceImages deduplica solicitudes y renueva el resultado antes de 30 minutos.
+  const hydrateMediaCollections = useCallback(async () => {
+    const collections = [
+      [places, setPlaces],
+      [nearby, setNearby],
+      [popular, setPopular],
+      [recommended, setRecommended],
+      [searchResults, setSearchResults],
+      [topPlaces, setTopPlaces],
+      [bestRatedPlaces, setBestRatedPlaces],
+    ];
+    const pendingIds = new Set();
+    collections.forEach(([items]) => {
+      items.forEach((item) => {
+        if (item?.id != null && !item.mediaImagesLoaded) pendingIds.add(String(item.id));
+      });
+    });
+    if (pendingIds.size === 0) return;
+
+    const mediaEntries = await Promise.all([...pendingIds].map(async (id) => {
+      try {
+        return [id, await getCachedPlaceImages(id)];
+      } catch (_error) {
+        return [id, []];
+      }
+    }));
+    const mediaById = new Map(mediaEntries);
+
+    collections.forEach(([, setter]) => {
+      setter((current) => current.map((item) => {
+        const id = item?.id != null ? String(item.id) : null;
+        if (!id || item.mediaImagesLoaded) return item;
+        return {
+          ...item,
+          mediaImages: mediaById.get(id) || [],
+          image: mediaById.get(id)?.[0]?.url || item.image,
+          mediaImagesLoaded: true,
+        };
+      }));
+    });
+  }, [bestRatedPlaces, nearby, places, popular, recommended, searchResults, topPlaces]);
+
+  useEffect(() => {
+    hydrateMediaCollections();
+  }, [hydrateMediaCollections]);
 
   const requestDeduper = useMemo(() => createInFlightDeduper(), []);
 
@@ -425,7 +506,7 @@ const useHomeData = (user) => {
         scope: agency?.id ? { agencyId: agency.id } : undefined,
       });
       const response = await promise;
-      const data = extractArrayPayload(response);
+      const data = await hydratePackageCovers(extractArrayPayload(response));
       if (!(append && reused)) {
         setPackages((prev) => (append ? [...prev, ...data] : data));
         setPackagesOffset(offset);

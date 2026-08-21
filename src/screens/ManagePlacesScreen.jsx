@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { COLORS, SPACING, FONT_SIZES } from '../utils/constants';
-import { getMyPlaces } from '../services/api';
+import { COLORS, SPACING } from '../utils/constants';
+import { deletePlace, getMyPlaces } from '../services/api';
+import { getCachedPlaceImages, invalidatePlaceMediaCache } from '../utils/placeMediaCache';
 import { PremiumModal } from '../components/ui/PremiumModal';
 
 const ManagePlacesScreen = ({ navigation }) => {
@@ -20,13 +21,27 @@ const ManagePlacesScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modal, setModal] = useState({ visible: false, type: 'success', title: '', message: '' });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingPlaceId, setDeletingPlaceId] = useState(null);
 
   const fetchPlaces = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
       const response = await getMyPlaces();
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPlaces(data);
+      const placesWithMedia = await Promise.all(data.map(async (place) => {
+        if (!place?.id) return place;
+        try {
+          const media = await getCachedPlaceImages(place.id);
+          return {
+            ...place,
+            mediaImages: media,
+          };
+        } catch (_mediaError) {
+          return place;
+        }
+      }));
+      setPlaces(placesWithMedia);
     } catch (error) {
       console.error("Error fetching my places:", error);
       setModal({
@@ -57,10 +72,36 @@ const ManagePlacesScreen = ({ navigation }) => {
     navigation.navigate('CreatePlace', { place });
   };
 
+  const confirmDeletePlace = async () => {
+    if (!deleteTarget?.id || deletingPlaceId) return;
+    const siteId = deleteTarget.id;
+    setDeletingPlaceId(siteId);
+    try {
+      const response = await deletePlace(siteId);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error('El backend no confirmó la eliminación del sitio.');
+      }
+      invalidatePlaceMediaCache(siteId);
+      setPlaces((previous) => previous.filter((place) => String(place.id) !== String(siteId)));
+      setDeleteTarget(null);
+      setModal({ visible: true, type: 'success', title: 'Lugar eliminado', message: 'El sitio y sus referencias multimedia fueron eliminados correctamente.' });
+    } catch (error) {
+      setDeleteTarget(null);
+      setModal({
+        visible: true,
+        type: 'error',
+        title: 'No se pudo eliminar',
+        message: error?.response?.data?.message || error?.message || 'Intenta de nuevo más tarde.',
+      });
+    } finally {
+      setDeletingPlaceId(null);
+    }
+  };
+
   const renderPlaceItem = ({ item }) => (
     <View style={styles.placeCard}>
       <Image
-        source={{ uri: (item.imageUrls?.[0]) || 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=500' }}
+        source={{ uri: item.mediaImages?.[0]?.url || item.imageUrls?.[0] || 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=500' }}
         style={styles.placeImage}
         contentFit="cover"
         transition={300}
@@ -84,6 +125,18 @@ const ManagePlacesScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id })}
           >
             <Ionicons name="eye-outline" size={16} color="#0E7490" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => setDeleteTarget(item)}
+            disabled={deletingPlaceId === item.id}
+            accessibilityLabel={`Eliminar ${item.name}`}
+          >
+            {deletingPlaceId === item.id ? (
+              <ActivityIndicator size="small" color="#B91C1C" />
+            ) : (
+              <MaterialIcons name="delete-outline" size={18} color="#B91C1C" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -141,10 +194,21 @@ const ManagePlacesScreen = ({ navigation }) => {
       )}
 
       <PremiumModal
+        visible={!!deleteTarget}
+        type="warning"
+        title="Eliminar sitio"
+        message={`¿Seguro que deseas eliminar “${deleteTarget?.name || 'este sitio'}”? Esta acción también eliminará sus referencias multimedia.`}
+        confirmText="Eliminar"
+        onConfirm={confirmDeletePlace}
+        onClose={() => !deletingPlaceId && setDeleteTarget(null)}
+      />
+
+      <PremiumModal
         visible={modal.visible}
         type={modal.type}
         title={modal.title}
         message={modal.message}
+        onConfirm={() => setModal(prev => ({ ...prev, visible: false }))}
         onClose={() => setModal(prev => ({ ...prev, visible: false }))}
       />
     </SafeAreaView>
@@ -273,6 +337,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E0E7FF',
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   emptyContainer: {
     flex: 1,

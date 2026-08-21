@@ -35,6 +35,7 @@ const {
   getAuthToken,
   resetAuthTokenCache,
   setAuthTokenCache,
+  uploadPlaceMedia,
 } = require("../api");
 
 const requestInterceptor = mockRequestUse.mock.calls[0][0];
@@ -102,5 +103,40 @@ describe("api token cache", () => {
     const config = await requestInterceptor({ headers: {} });
     expect(config.headers.Authorization).toBeUndefined();
     expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("site media multipart contract", () => {
+  it("sends exactly category and an RN file object through fetch", async () => {
+    const append = jest.fn();
+    const previousFormData = global.FormData;
+    const previousFetch = global.fetch;
+    global.FormData = class MockFormData {
+      append(...args) {
+        append(...args);
+      }
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: jest.fn().mockResolvedValue({ status: 201, data: { id: 7 } }),
+    });
+    setAuthTokenCache("test-token");
+
+    const file = { uri: "file:///photo.jpg", name: "photo.jpg", type: "image/jpeg" };
+    await uploadPlaceMedia(3, file, "images");
+
+    expect(append).toHaveBeenNthCalledWith(1, "category", "images");
+    expect(append).toHaveBeenNthCalledWith(2, "file", file);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://3.211.84.105/api/places/3/media",
+      expect.objectContaining({
+        method: "POST",
+        headers: { Accept: "application/json", Authorization: "Bearer test-token" },
+        body: expect.anything(),
+      })
+    );
+    global.FormData = previousFormData;
+    global.fetch = previousFetch;
   });
 });

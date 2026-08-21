@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { createReservation } from "../../../services/api";
+import { validateReservationInput } from "../../../utils/reservationValidation";
 
 const CONSENT_VERSION = "2026-07-04";
 
@@ -137,7 +138,16 @@ const useReservation = ({
     const startDate = reservationForm.startDate?.trim();
     const endDate = reservationForm.endDate?.trim();
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || "")) {
+    const validationError = validateReservationInput({
+      packageId: selectedPackage.id,
+      startDate,
+      endDate,
+      travelers,
+      contactPreference: reservationForm.contactPreference,
+      consentAccepted: reservationForm.consentAccepted,
+    });
+
+    if (validationError === "startDate") {
       showReservationStatusModal({
         type: "warning",
         title: "Fecha requerida",
@@ -145,7 +155,7 @@ const useReservation = ({
       });
       return;
     }
-    if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    if (validationError === "endDate") {
       showReservationStatusModal({
         type: "warning",
         title: "Fecha final invalida",
@@ -153,7 +163,7 @@ const useReservation = ({
       });
       return;
     }
-    if (!Number.isInteger(travelers) || travelers < 1) {
+    if (validationError === "travelers") {
       showReservationStatusModal({
         type: "warning",
         title: "Viajeros requeridos",
@@ -161,7 +171,7 @@ const useReservation = ({
       });
       return;
     }
-    if (!["EMAIL", "IN_APP"].includes(reservationForm.contactPreference)) {
+    if (validationError === "contactPreference") {
       showReservationStatusModal({
         type: "warning",
         title: "Canal invalido",
@@ -169,7 +179,7 @@ const useReservation = ({
       });
       return;
     }
-    if (!reservationForm.consentAccepted) {
+    if (validationError === "consent") {
       showReservationStatusModal({
         type: "warning",
         title: "Consentimiento requerido",
@@ -205,10 +215,14 @@ const useReservation = ({
           ? `La agencia recibio tu solicitud. Puedes verla en Mis reservas para seguir el estado. Codigo: ${reservation.id}`
           : "La agencia recibio tu solicitud. Puedes verla en Mis reservas para seguir el estado.",
         confirmText: "Ver mis reservas",
+        confirmIcon: "card-outline",
         onConfirm: () => {
           closeReservationStatusModal();
           onOpenReservations?.(reservation);
         },
+        secondaryText: "Abrir chat",
+        secondaryIcon: "chatbubble-ellipses-outline",
+        onSecondary: closeReservationStatusModal,
       });
       onReservationCreated?.(reservation);
     } catch (error) {

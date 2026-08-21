@@ -66,6 +66,7 @@ export const getRoutePlacePresentation = (place, index, packageKey = "package") 
     place?.location ||
     place?.address;
   const imageUri =
+    place?.mediaImages?.[0]?.url ||
     place?.imageUrls?.[0] ||
     place?.imageUrl ||
     place?.image ||

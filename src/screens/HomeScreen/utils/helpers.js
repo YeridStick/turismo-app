@@ -31,6 +31,7 @@ export const getPlaceImage = (place) => {
     : parseUrlList(nestedPlace?.imageUrls || nestedPlace?.image_urls);
 
   return (
+    place.mediaImages?.[0]?.url ||
     imageUrls[0] ||
     place.imageUrl ||
     place.image_url ||
@@ -54,6 +55,7 @@ export const getPlaceImages = (place) => {
     : parseUrlList(nestedPlace?.imageUrls || nestedPlace?.image_urls);
 
   return [
+    ...(Array.isArray(place.mediaImages) ? place.mediaImages.map((item) => item?.url).filter(Boolean) : []),
     ...imageUrls,
     place.imageUrl,
     place.image_url,
