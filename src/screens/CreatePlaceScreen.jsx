@@ -29,7 +29,7 @@ import {
   validateSiteMedia,
 } from "../utils/siteMedia";
 
-const ACCENT = "#0E7490";
+const ACCENT = "#156436";
 const MAX_GEOCODE_LIMIT = 100;
 const COOLDOWN_MS = 3000;
 const FALLBACK_CENTER = { latitude: 2.9386, longitude: -75.2811 };

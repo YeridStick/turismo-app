@@ -218,7 +218,7 @@ const ReviewItem = ({ item }) => {
         <Text style={styles.reviewStars}>{"\u2605".repeat(stars)}</Text>
         {item?.verified ? (
           <View style={styles.verifiedPill}>
-            <Ionicons name="checkmark-circle" size={12} color="#0E7490" />
+            <Ionicons name="checkmark-circle" size={12} color="#156436" />
             <Text style={styles.verifiedPillText}>Visita verificada</Text>
           </View>
         ) : null}
@@ -236,7 +236,7 @@ const GradientParticleButton = ({
   loading = false,
   iconName,
   iconSet = "ionicons",
-  backgroundColor = "#0E7490",
+  backgroundColor = "#156436",
   borderColor,
   textColor = "#FFFFFF",
   iconColor = "#FFFFFF",
@@ -1330,14 +1330,14 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
 
                 {place.address && (
                   <View style={styles.infoRow}>
-                    <Ionicons name="location-outline" size={18} color="#0E7490" />
+                    <Ionicons name="location-outline" size={18} color="#156436" />
                     <Text style={styles.infoText}>{place.address}</Text>
                   </View>
                 )}
               </View>
 
               <View style={styles.detailRatingBadge}>
-                <Ionicons name="star" size={13} color="#F59E0B" />
+                <Ionicons name="star" size={13} color="#FED201" />
                 <Text style={styles.detailRatingValue}>
                   {ratingSummary.avgRating != null ? ratingSummary.avgRating.toFixed(1) : "0.0"}
                 </Text>
@@ -1371,7 +1371,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                       });
                     }}
                   >
-                    <Ionicons name="cube-outline" size={15} color="#0E7490" />
+                    <Ionicons name="cube-outline" size={15} color="#156436" />
                     <Text style={styles.detailCtaSecondaryText}>Realidad aumentada</Text>
                   </TouchableOpacity>
                 )}
@@ -1389,7 +1389,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
             <View style={styles.detailsSection}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderIcon}>
-                  <Ionicons name="information-circle-outline" size={16} color="#0E7490" />
+                  <Ionicons name="information-circle-outline" size={16} color="#156436" />
                 </View>
                 <Text style={styles.sectionTitle}>Detalles del sitio</Text>
               </View>
@@ -1397,7 +1397,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                 {infoDetails.map((detail, idx) => (
                   <View key={idx} style={styles.detailItem}>
                     <View style={styles.detailIconWrapper}>
-                      <FontAwesome name={detail.icon} size={15} color="#0E7490" />
+                      <FontAwesome name={detail.icon} size={15} color="#156436" />
                     </View>
                     <View style={styles.detailTextWrapper}>
                       <Text style={styles.detailLabel}>{detail.label}</Text>
@@ -1412,7 +1412,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
             <View style={styles.amenitiesSection}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderIcon}>
-                  <Ionicons name="sparkles-outline" size={16} color="#0E7490" />
+                  <Ionicons name="sparkles-outline" size={16} color="#156436" />
                 </View>
                 <Text style={styles.sectionTitle}>Servicios y Comodidades</Text>
               </View>
@@ -1424,7 +1424,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                       <MaterialIcons 
                         name={serviceInfo?.icon || 'check-circle'} 
                         size={18} 
-                        color="#0E7490" 
+                        color="#156436"
                       />
                       <Text style={styles.amenityText}>{service}</Text>
                     </View>
@@ -1485,9 +1485,9 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                     label={visitStartLoading ? "Iniciando..." : "Iniciar"}
                     iconName="play-outline"
                     backgroundColor="#FFFFFF"
-                    borderColor="#0E7490"
-                    textColor="#0E7490"
-                    iconColor="#0E7490"
+                    borderColor="#156436"
+                    textColor="#156436"
+                    iconColor="#156436"
                     particleColors={["rgba(14,116,144,0.24)", "rgba(20,184,166,0.2)", "rgba(251,146,60,0.16)"]}
                   />
                   <GradientParticleButton
@@ -1504,7 +1504,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                         : (visitCountdown > 0 ? `En ${visitCountdown}s` : "Confirmar")
                     }
                     iconName="checkmark-outline"
-                    backgroundColor="#0E7490"
+                    backgroundColor="#156436"
                     particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
                   />
                 </View>
@@ -1520,15 +1520,15 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
             <View style={styles.reviewHeaderRow}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderIcon}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={16} color="#0E7490" />
+                  <Ionicons name="chatbubble-ellipses-outline" size={16} color="#156436" />
                 </View>
                 <Text style={styles.sectionTitle}>Reseñas del sitio</Text>
               </View>
-              {loadingReviews ? <ActivityIndicator size="small" color="#0E7490" /> : null}
+              {loadingReviews ? <ActivityIndicator size="small" color="#156436" /> : null}
             </View>
             <View style={styles.reviewSummaryCard}>
               <View style={styles.reviewScoreCircle}>
-                <Ionicons name="star" size={16} color="#F59E0B" />
+                <Ionicons name="star" size={16} color="#FED201" />
                 <Text style={styles.reviewScoreText}>
                   {ratingSummary.avgRating != null ? ratingSummary.avgRating.toFixed(1) : "0.0"}
                 </Text>
@@ -1564,7 +1564,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                 onPress={() => setReviewModalVisible(true)}
                 label="Escribir reseña"
                 iconName="create-outline"
-                backgroundColor="#0E7490"
+                backgroundColor="#156436"
                 particleColors={["rgba(255,255,255,0.34)", "rgba(20,184,166,0.22)", "rgba(251,146,60,0.2)"]}
               />
             ) : (
@@ -1579,7 +1579,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                   })
                 }
               >
-                <Ionicons name="information-circle-outline" size={14} color="#0E7490" />
+                <Ionicons name="information-circle-outline" size={14} color="#156436" />
                 <Text style={styles.infoMiniButtonText}>Solo en sitio</Text>
               </TouchableOpacity>
             )}
@@ -1607,7 +1607,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
             <View style={styles.locationSection}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderIcon}>
-                  <Ionicons name="map-outline" size={16} color="#0E7490" />
+                  <Ionicons name="map-outline" size={16} color="#156436" />
                 </View>
                 <Text style={styles.sectionTitle}>Ubicacion</Text>
               </View>
@@ -1638,7 +1638,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
                 />
                   <View style={styles.locationMapScrim} pointerEvents="none" />
                   <View style={styles.locationExactPill}>
-                    <Ionicons name="navigate-circle-outline" size={13} color="#0E7490" />
+                    <Ionicons name="navigate-circle-outline" size={13} color="#156436" />
                     <Text style={styles.locationExactText}>Localizacion exacta</Text>
                   </View>
               </TouchableOpacity>
@@ -1663,7 +1663,7 @@ const PlaceDetailContent = React.memo(({ initialPlace, navigation }) => {
           <View style={styles.formModalCard}>
             <View style={styles.formModalHeader}>
               <View style={styles.formModalIcon}>
-                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#0E7490" />
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color="#156436" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.formModalTitle}>Escribir reseña</Text>
@@ -2039,7 +2039,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     borderWidth: 1,
     borderColor: "rgba(14, 116, 144, 0.12)",
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.09,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 10 },
@@ -2150,10 +2150,10 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   detailCtaPrimary: {
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
     borderWidth: 1,
     borderColor: "rgba(20,184,166,0.5)",
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.22,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -2170,7 +2170,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   detailCtaSecondaryText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -2299,7 +2299,7 @@ const styles = StyleSheet.create({
   },
   amenityText: {
     fontSize: 11,
-    color: '#0E7490',
+    color: '#156436',
     fontWeight: '800',
   },
   visitSection: {
@@ -2324,14 +2324,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 46,
     borderRadius: 14,
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.18,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
   visitManualStartText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 13,
     fontWeight: "800",
   },
@@ -2355,14 +2355,14 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#0E7490",
+    borderColor: "#156436",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: SPACING.sm,
     backgroundColor: "#ECFEFF",
   },
   secondaryButtonText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 13,
     fontWeight: "700",
   },
@@ -2370,7 +2370,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     minHeight: 42,
     borderRadius: 12,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: SPACING.md,
@@ -2386,7 +2386,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignSelf: "flex-start",
     minWidth: 156,
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.16,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -2522,7 +2522,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   reviewStars: {
-    color: "#F59E0B",
+    color: "#FED201",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -2547,7 +2547,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   verifiedPillText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -2616,7 +2616,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   infoMiniButtonText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -2736,7 +2736,7 @@ const styles = StyleSheet.create({
   ratingSliderLevelText: {
     position: "absolute",
     alignSelf: "center",
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 12,
     fontWeight: "800",
     zIndex: 2,
@@ -2751,7 +2751,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#A5E4EC",
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.20,
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 3 },
@@ -2793,7 +2793,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 999,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2815,7 +2815,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   feedbackTypeChipActive: {
-    borderColor: "#0E7490",
+    borderColor: "#156436",
     backgroundColor: "#ECFEFF",
   },
   feedbackTypeText: {
@@ -2824,7 +2824,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   feedbackTypeTextActive: {
-    color: "#0E7490",
+    color: "#156436",
   },
   // ESTILOS MODAL HD
   modalBg: {

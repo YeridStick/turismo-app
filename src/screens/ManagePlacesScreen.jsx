@@ -124,7 +124,7 @@ const ManagePlacesScreen = ({ navigation }) => {
             style={styles.viewButton}
             onPress={() => navigation.navigate('PlaceDetail', { placeId: item.id })}
           >
-            <Ionicons name="eye-outline" size={16} color="#0E7490" />
+            <Ionicons name="eye-outline" size={16} color="#156436" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.deleteButton}
@@ -166,7 +166,7 @@ const ManagePlacesScreen = ({ navigation }) => {
 
       {loading && !refreshing ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#0E7490" />
+          <ActivityIndicator size="large" color="#156436" />
           <Text style={styles.loadingText}>Cargando tus sitios...</Text>
         </View>
       ) : (
@@ -250,11 +250,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#0E7490',
+    backgroundColor: '#156436',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,
-    shadowColor: '#0E7490',
+    shadowColor: '#156436',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0E7490',
+    backgroundColor: '#156436',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   emptyButton: {
-    backgroundColor: '#0E7490',
+    backgroundColor: '#156436',
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 16,

@@ -180,7 +180,7 @@ const PlaceCard = React.memo(
             </View>
             {distance ? (
               <View style={styles.popularDistancePill}>
-                <FontAwesome name="location-arrow" size={10} color="#0E7490" />
+                <FontAwesome name="location-arrow" size={10} color="#156436" />
                 <Text style={styles.popularDistanceText}>{distance}</Text>
               </View>
             ) : null}
@@ -220,7 +220,7 @@ const PlaceCard = React.memo(
                         onArPress?.();
                       }}
                     >
-                      <FontAwesome name="cube" size={12} color="#0E7490" />
+                      <FontAwesome name="cube" size={12} color="#156436" />
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -288,7 +288,7 @@ const PlaceCard = React.memo(
                   <FontAwesome
                     name="location-arrow"
                     size={FONT_SIZES.sm}
-                    color="#0E7490"
+                    color="#156436"
                   />
                   <Text style={styles.cardDistance}>{distance}</Text>
                 </View>

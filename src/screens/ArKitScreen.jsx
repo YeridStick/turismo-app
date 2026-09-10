@@ -43,7 +43,7 @@ const ArKitScreen = ({ route, navigation }) => {
           <ARKitModule.Box
             position={{ x: 0, y: 0, z: -0.5 }}
             shape={{ width: 0.1, height: 0.1, length: 0.1 }}
-            material={{ color: '#14B8A6' }}
+            material={{ color: '#4E9A5F' }}
           />
         )}
       </ARKitModule>

@@ -171,7 +171,7 @@ const HomeHeader = ({
         >
           {travelMood.map((item) => (
             <View key={item.id} style={styles.heroMoodChip}>
-              <FontAwesome name={item.icon} size={11} color="#FB923C" />
+              <FontAwesome name={item.icon} size={11} color="#FE6C01" />
               <Text style={styles.heroMoodText}>{item.label}</Text>
             </View>
           ))}

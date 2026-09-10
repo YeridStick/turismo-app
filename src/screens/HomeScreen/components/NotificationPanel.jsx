@@ -76,12 +76,12 @@ const PAYMENT_STATUS_LABELS = {
 const TYPE_META = {
   RESERVATION_REQUEST_CREATED: {
     icon: "calendar-outline",
-    color: "#F97316",
+    color: "#FE6C01",
     label: "Solicitud",
   },
   RESERVATION_MESSAGE: {
     icon: "chatbubble-ellipses-outline",
-    color: "#0E7490",
+    color: "#156436",
     label: "Mensaje",
   },
   RESERVATION_STATUS_CHANGED: {
@@ -748,7 +748,7 @@ const NotificationPanel = ({
           <Ionicons
             name={icon}
             size={16}
-            color={active ? "#FFFFFF" : "#0E7490"}
+            color={active ? "#FFFFFF" : "#156436"}
           />
           {highlight ? <View style={panelStyles.segmentDot} /> : null}
         </View>
@@ -768,7 +768,7 @@ const NotificationPanel = ({
     <>
       <View style={panelStyles.summaryCompact}>
         <View style={panelStyles.summaryCompactIcon}>
-          <Ionicons name="pulse-outline" size={15} color="#0E7490" />
+          <Ionicons name="pulse-outline" size={15} color="#156436" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={panelStyles.summaryCompactLabel}>Seguimiento</Text>
@@ -783,14 +783,14 @@ const NotificationPanel = ({
           onPress={() => setActiveView("chats")}
           activeOpacity={0.84}
         >
-          <Ionicons name="chatbubbles-outline" size={15} color="#0E7490" />
+          <Ionicons name="chatbubbles-outline" size={15} color="#156436" />
         </TouchableOpacity>
         <TouchableOpacity
           style={panelStyles.compactIconButton}
           onPress={onRefresh}
           activeOpacity={0.84}
         >
-          <Ionicons name="refresh" size={15} color="#0E7490" />
+          <Ionicons name="refresh" size={15} color="#156436" />
         </TouchableOpacity>
       </View>
 
@@ -810,7 +810,7 @@ const NotificationPanel = ({
         </View>
       ) : error ? (
         <View style={panelStyles.centerState}>
-          <Ionicons name="alert-circle-outline" size={28} color="#F97316" />
+          <Ionicons name="alert-circle-outline" size={28} color="#FE6C01" />
           <Text style={panelStyles.centerText}>{error}</Text>
         </View>
       ) : notifications.length === 0 ? (
@@ -876,7 +876,7 @@ const NotificationPanel = ({
   const renderChats = () => (
     <View style={panelStyles.viewFill}>
       <View style={panelStyles.chatIntroCompact}>
-        <Ionicons name="chatbubbles-outline" size={16} color="#0E7490" />
+        <Ionicons name="chatbubbles-outline" size={16} color="#156436" />
         <Text style={panelStyles.chatIntroCompactTitle}>Chats activos</Text>
         {chatReservations.length > 0 ? (
           <View style={panelStyles.chatCountPill}>
@@ -892,7 +892,7 @@ const NotificationPanel = ({
         </View>
       ) : chatError ? (
         <View style={panelStyles.centerState}>
-          <Ionicons name="alert-circle-outline" size={28} color="#F97316" />
+          <Ionicons name="alert-circle-outline" size={28} color="#FE6C01" />
           <Text style={panelStyles.centerText}>{chatError}</Text>
           <TouchableOpacity style={panelStyles.primaryButtonWide} onPress={loadChats}>
             <Text style={panelStyles.primaryButtonText}>Reintentar</Text>
@@ -961,7 +961,7 @@ const NotificationPanel = ({
                 </TouchableOpacity>
               ) : null}
               <View style={panelStyles.chatHeaderIcon}>
-                <Ionicons name="briefcase-outline" size={17} color="#0E7490" />
+                <Ionicons name="briefcase-outline" size={17} color="#156436" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={panelStyles.chatTitle} numberOfLines={1}>
@@ -977,7 +977,7 @@ const NotificationPanel = ({
                 style={panelStyles.ghostButton}
                 onPress={() => loadMessages(selectedReservation || selectedChatId)}
               >
-                <Ionicons name="refresh" size={15} color="#0E7490" />
+                <Ionicons name="refresh" size={15} color="#156436" />
               </TouchableOpacity>
             </View>
 
@@ -1021,7 +1021,7 @@ const NotificationPanel = ({
                   </TouchableOpacity>
                 ) : selectedReservation.status === "requested" ? (
                   <View style={panelStyles.chatStatusHint}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={13} color="#0E7490" />
+                    <Ionicons name="chatbubble-ellipses-outline" size={13} color="#156436" />
                     <Text style={panelStyles.chatStatusHintText}>
                       Responde para contactar
                     </Text>
@@ -1101,7 +1101,7 @@ const NotificationPanel = ({
             ) : messagesError && chatMessages.length === 0 ? (
               <View style={panelStyles.chatEmptyState}>
                 <View style={panelStyles.chatEmptyIcon}>
-                  <Ionicons name="cloud-offline-outline" size={24} color="#F97316" />
+                  <Ionicons name="cloud-offline-outline" size={24} color="#FE6C01" />
                 </View>
                 <Text style={panelStyles.chatEmptyTitle}>No se pudo cargar el chat</Text>
                 <Text style={panelStyles.chatEmptyText}>{messagesError}</Text>
@@ -1128,7 +1128,7 @@ const NotificationPanel = ({
                       />
                     ) : (
                       <View style={panelStyles.reservationPackageImageFallback}>
-                        <Ionicons name="map-outline" size={24} color="#0E7490" />
+                        <Ionicons name="map-outline" size={24} color="#156436" />
                       </View>
                     )}
                     <View style={panelStyles.reservationPackageContent}>
@@ -1279,7 +1279,7 @@ const NotificationPanel = ({
         <Ionicons
           name={activeHistorySection === "favorites" ? "heart-outline" : "bag-check-outline"}
           size={16}
-          color="#0E7490"
+          color="#156436"
         />
         <Text style={panelStyles.historyHeroCompactTitle} numberOfLines={1}>
           {activeHistorySection === "favorites"
@@ -1307,7 +1307,7 @@ const NotificationPanel = ({
           <Ionicons
             name="bag-check-outline"
             size={14}
-            color={activeHistorySection === "purchases" ? "#FFFFFF" : "#0E7490"}
+            color={activeHistorySection === "purchases" ? "#FFFFFF" : "#156436"}
           />
           <Text
             style={[
@@ -1329,7 +1329,7 @@ const NotificationPanel = ({
           <Ionicons
             name="heart-outline"
             size={14}
-            color={activeHistorySection === "favorites" ? "#FFFFFF" : "#0E7490"}
+            color={activeHistorySection === "favorites" ? "#FFFFFF" : "#156436"}
           />
           <Text
             style={[
@@ -1350,7 +1350,7 @@ const NotificationPanel = ({
           </View>
         ) : favoritesError ? (
           <View style={panelStyles.centerState}>
-            <Ionicons name="alert-circle-outline" size={28} color="#F97316" />
+            <Ionicons name="alert-circle-outline" size={28} color="#FE6C01" />
             <Text style={panelStyles.centerText}>{favoritesError}</Text>
             <TouchableOpacity
               style={panelStyles.primaryButtonWide}
@@ -1381,7 +1381,7 @@ const NotificationPanel = ({
                   onPress={() => onOpenFavoritePlace?.(place)}
                 >
                   <View style={panelStyles.favoritePlaceIcon}>
-                    <Ionicons name="location-outline" size={17} color="#0E7490" />
+                    <Ionicons name="location-outline" size={17} color="#156436" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={panelStyles.historyTitle} numberOfLines={2}>
@@ -1407,7 +1407,7 @@ const NotificationPanel = ({
         </View>
       ) : historyError ? (
         <View style={panelStyles.centerState}>
-          <Ionicons name="alert-circle-outline" size={28} color="#F97316" />
+          <Ionicons name="alert-circle-outline" size={28} color="#FE6C01" />
           <Text style={panelStyles.centerText}>{historyError}</Text>
           <TouchableOpacity
             style={panelStyles.primaryButtonWide}
@@ -1432,7 +1432,7 @@ const NotificationPanel = ({
             <View key={String(reservation.id)} style={panelStyles.historyPackageCard}>
               <View style={panelStyles.historyPackageTop}>
                 <View style={panelStyles.historyPackageIcon}>
-                  <FontAwesome name="suitcase" size={16} color="#0E7490" />
+                  <FontAwesome name="suitcase" size={16} color="#156436" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={panelStyles.historyTitle} numberOfLines={2}>
@@ -1530,7 +1530,7 @@ const NotificationPanel = ({
                     : "notifications-outline"
               }
               size={20}
-              color="#0E7490"
+              color="#156436"
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -1605,7 +1605,7 @@ const panelStyles = StyleSheet.create({
     backgroundColor: "rgba(251, 146, 60, 0.62)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.64)",
-    shadowColor: "#FB923C",
+    shadowColor: "#FE6C01",
     shadowOpacity: 0.18,
     shadowRadius: 10,
     shadowOffset: {
@@ -1624,7 +1624,7 @@ const panelStyles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FB923C",
+    backgroundColor: "#FE6C01",
     borderWidth: 2,
     borderColor: "#FFFFFF",
   },
@@ -1683,11 +1683,11 @@ const panelStyles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   segmentButtonActive: {
-    backgroundColor: "#0E7490",
-    borderColor: "#0E7490",
+    backgroundColor: "#156436",
+    borderColor: "#156436",
   },
   segmentText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 11,
     fontWeight: "900",
   },
@@ -1701,7 +1701,7 @@ const panelStyles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#FB923C",
+    backgroundColor: "#FE6C01",
   },
   summaryCard: {
     padding: SPACING.md,
@@ -1733,7 +1733,7 @@ const panelStyles = StyleSheet.create({
     backgroundColor: "#ECFEFF",
   },
   summaryCompactLabel: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -1755,7 +1755,7 @@ const panelStyles = StyleSheet.create({
     borderColor: "rgba(14,116,144,0.12)",
   },
   summaryKicker: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -1786,7 +1786,7 @@ const panelStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   primaryButtonWide: {
     minHeight: 40,
@@ -1794,7 +1794,7 @@ const panelStyles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   primaryButtonText: {
     color: "#FFFFFF",
@@ -1819,7 +1819,7 @@ const panelStyles = StyleSheet.create({
     fontWeight: "900",
   },
   markAllText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: FONT_SIZES.xs,
     fontWeight: "900",
   },
@@ -1865,7 +1865,7 @@ const panelStyles = StyleSheet.create({
     gap: 8,
   },
   notificationType: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -1891,7 +1891,7 @@ const panelStyles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 999,
-    backgroundColor: "#FB923C",
+    backgroundColor: "#FE6C01",
     marginTop: 4,
   },
   viewFill: {
@@ -1945,7 +1945,7 @@ const panelStyles = StyleSheet.create({
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   chatCountText: {
     color: "#FFFFFF",
@@ -1982,8 +1982,8 @@ const panelStyles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.92)",
   },
   chatTabActive: {
-    borderColor: "#0E7490",
-    backgroundColor: "#0E7490",
+    borderColor: "#156436",
+    backgroundColor: "#156436",
   },
   chatTabTopRow: {
     flexDirection: "row",
@@ -2004,7 +2004,7 @@ const panelStyles = StyleSheet.create({
     backgroundColor: "#CCFBF1",
   },
   chatStatusDotActive: {
-    backgroundColor: "#FB923C",
+    backgroundColor: "#FE6C01",
   },
   chatTabTitle: {
     color: COLORS.text,
@@ -2120,7 +2120,7 @@ const panelStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   chatStatusButtonText: {
     color: "#FFFFFF",
@@ -2142,7 +2142,7 @@ const panelStyles = StyleSheet.create({
   },
   chatStatusHintText: {
     flexShrink: 1,
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 10,
     fontWeight: "900",
   },
@@ -2179,7 +2179,7 @@ const panelStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 9,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   clientPaymentButtonText: {
     color: "#FFFFFF",
@@ -2284,7 +2284,7 @@ const panelStyles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#DDE7EC",
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -2307,7 +2307,7 @@ const panelStyles = StyleSheet.create({
     padding: 11,
   },
   reservationPackageEyebrow: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 0.5,
@@ -2336,7 +2336,7 @@ const panelStyles = StyleSheet.create({
   },
   reservationPackagePrice: {
     marginTop: 7,
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 12,
     fontWeight: "900",
   },
@@ -2404,7 +2404,7 @@ const panelStyles = StyleSheet.create({
   },
   messageMine: {
     alignSelf: "flex-end",
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   messageAgency: {
     alignSelf: "flex-start",
@@ -2507,7 +2507,7 @@ const panelStyles = StyleSheet.create({
     borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   disabled: {
     opacity: 0.58,
@@ -2572,11 +2572,11 @@ const panelStyles = StyleSheet.create({
     borderColor: "rgba(14,116,144,0.12)",
   },
   historySwitchButtonActive: {
-    backgroundColor: "#0E7490",
-    borderColor: "#0E7490",
+    backgroundColor: "#156436",
+    borderColor: "#156436",
   },
   historySwitchText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 11,
     fontWeight: "900",
   },
@@ -2608,7 +2608,7 @@ const panelStyles = StyleSheet.create({
   },
   favoritePlaceDate: {
     marginTop: 5,
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 10,
     fontWeight: "900",
   },

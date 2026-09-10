@@ -100,7 +100,7 @@ const PackageDetailModalContent = ({
             <Text style={styles.packageDetailTitle}>{pkg.title || "Paquete turístico"}</Text>
 
             <View style={styles.packageRatingRow}>
-              <FontAwesome name="star" size={12} color="#F59E0B" />
+              <FontAwesome name="star" size={12} color="#FED201" />
               <Text style={styles.packageRatingText}>{pkg.rating ?? 4.8}</Text>
               {pkg.agencyName ? (
                 <Text style={styles.packageAgency}>· {pkg.agencyName}</Text>
@@ -138,7 +138,7 @@ const PackageDetailModalContent = ({
             <View style={styles.packageDetailRouteSection}>
               <View style={styles.packageDetailSectionHeader}>
                 <View style={styles.packageDetailSectionIcon}>
-                  <FontAwesome name="map-signs" size={13} color="#0E7490" />
+                  <FontAwesome name="map-signs" size={13} color="#156436" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.packageDetailSectionTitle}>
@@ -181,7 +181,7 @@ const PackageDetailModalContent = ({
                             />
                           ) : (
                             <LinearGradient
-                              colors={["#0E7490", "#14B8A6"]}
+                              colors={["#156436", "#4E9A5F"]}
                               style={styles.packageDetailRouteImageFallback}
                             >
                               <FontAwesome
@@ -274,7 +274,7 @@ const PackageDetailModalContent = ({
                 onPress={onReserve}
               >
                 <LinearGradient
-                  colors={["#14B8A6", "#FB923C"]}
+                  colors={["#4E9A5F", "#FE6C01"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.packageDetailReserveGradient}

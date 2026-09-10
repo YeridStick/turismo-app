@@ -345,15 +345,15 @@ const ProfileModal = ({
           <View style={styles.profileHeaderRow}>
             {currentView === 'summary' ? (
               <View style={styles.profileHeaderTitle}>
-                <FontAwesome name="user-circle" size={20} color="#0E7490" />
+                <FontAwesome name="user-circle" size={20} color="#156436" />
                 <Text style={styles.profileTitleText}>Mi perfil</Text>
                 <TouchableOpacity onPress={() => setCurrentView('settings')} style={{ marginLeft: 10 }}>
-                   <Feather name="settings" size={18} color="#0E7490" />
+                   <Feather name="settings" size={18} color="#156436" />
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity onPress={() => setCurrentView('summary')} style={styles.profileHeaderTitle}>
-                <Feather name="arrow-left" size={20} color="#0E7490" />
+                <Feather name="arrow-left" size={20} color="#156436" />
                 <Text style={styles.profileTitleText}>Configuracion</Text>
               </TouchableOpacity>
             )}
@@ -395,11 +395,11 @@ const ProfileModal = ({
                 <View style={styles.profileInfoGroup}>
                   <Text style={styles.profileItemLabel}>Informacion personal</Text>
                   <View style={styles.profileItem}>
-                    <FontAwesome name="id-card" size={13} color="#0E7490" style={{ width: 20 }} />
+                    <FontAwesome name="id-card" size={13} color="#156436" style={{ width: 20 }} />
                     <Text style={styles.profileItemText}><Text style={{ fontWeight: "bold" }}>Documento: </Text>{user.identificationType || "CC"} {user.identificationNumber || "No registrado"}</Text>
                   </View>
                   <View style={styles.profileItem}>
-                    <FontAwesome name="calendar" size={13} color="#0E7490" style={{ width: 20 }} />
+                    <FontAwesome name="calendar" size={13} color="#156436" style={{ width: 20 }} />
                     <Text style={styles.profileItemText}><Text style={{ fontWeight: "bold" }}>Miembro desde: </Text>{formatDate(user.createdAt)}</Text>
                   </View>
                 </View>
@@ -464,9 +464,9 @@ const ProfileModal = ({
                               </Text>
                             </View>
                             {switching ? (
-                              <ActivityIndicator size="small" color="#0E7490" />
+                              <ActivityIndicator size="small" color="#156436" />
                             ) : (
-                              <FontAwesome name="exchange" size={15} color="#0E7490" />
+                              <FontAwesome name="exchange" size={15} color="#156436" />
                             )}
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -492,7 +492,7 @@ const ProfileModal = ({
                       onPress={handleAddAccount}
                       activeOpacity={0.86}
                     >
-                      <Feather name="user-plus" size={16} color="#0E7490" />
+                      <Feather name="user-plus" size={16} color="#156436" />
                       <Text style={styles.addAccountButtonText}>
                         Agregar otra cuenta
                       </Text>
@@ -517,12 +517,12 @@ const ProfileModal = ({
                       if (route.id === 'profile-settings') return null; // Ocultamos el viejo boton grande
                       return (
                         <TouchableOpacity key={route.id} style={styles.profileRouteItem} onPress={() => onRoutePress(route.route)}>
-                          <View style={styles.profileRouteIconWrapper}><FontAwesome name={route.icon || "circle-o"} size={16} color="#0E7490" /></View>
+                          <View style={styles.profileRouteIconWrapper}><FontAwesome name={route.icon || "circle-o"} size={16} color="#156436" /></View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.profileRouteTitle}>{route.label}</Text>
                             <Text style={styles.profileRouteDesc}>{route.description}</Text>
                           </View>
-                          <FontAwesome name="angle-right" size={16} color="#0E7490" />
+                          <FontAwesome name="angle-right" size={16} color="#156436" />
                         </TouchableOpacity>
                       );
                     })}
@@ -535,13 +535,13 @@ const ProfileModal = ({
                 <View style={{ alignItems: 'center', marginBottom: 10 }}>
                    <View style={{ position: 'relative' }}>
                       <Image source={{ uri: urlAvatar || avatar }} style={{ width: 80, height: 80, borderRadius: 40 }} cachePolicy="disk" />
-                      <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#0E7490', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' }}>
+                      <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#156436', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' }}>
                          <Feather name="camera" size={12} color="#fff" />
                       </View>
                    </View>
                    <View style={styles.profileImageActions}>
                      <TouchableOpacity style={styles.profileImageButton} onPress={handlePickProfileImage} disabled={profileImageLoading}>
-                       {profileImageLoading ? <ActivityIndicator size="small" color="#0E7490" /> : <><Feather name="camera" size={14} color="#0E7490" /><Text style={styles.profileImageButtonText}>Cambiar foto</Text></>}
+                       {profileImageLoading ? <ActivityIndicator size="small" color="#156436" /> : <><Feather name="camera" size={14} color="#156436" /><Text style={styles.profileImageButtonText}>Cambiar foto</Text></>}
                      </TouchableOpacity>
                      {!!urlAvatar && !profileImageLoading ? (
                        <TouchableOpacity onPress={handleDeleteProfileImage} style={styles.profileImageDeleteButton}>
@@ -573,7 +573,7 @@ const ProfileModal = ({
                 </View>
 
                 <TouchableOpacity 
-                   style={[styles.modalPrimary, { backgroundColor: '#0E7490', width: '100%', marginLeft: 0 }]} 
+                   style={[styles.modalPrimary, { backgroundColor: '#156436', width: '100%', marginLeft: 0 }]}
                    onPress={handleUpdateProfile}
                    disabled={loadingProfile}
                 >
@@ -612,7 +612,7 @@ const ProfileModal = ({
                 </View>
 
                 <TouchableOpacity 
-                   style={[styles.modalPrimary, { backgroundColor: '#0E7490', width: '100%', marginLeft: 0 }]} 
+                   style={[styles.modalPrimary, { backgroundColor: '#156436', width: '100%', marginLeft: 0 }]}
                    onPress={handleUpdatePassword}
                    disabled={loadingPassword}
                 >
@@ -631,12 +631,12 @@ const ProfileModal = ({
                     </Text>
                   </View>
                   {savingAutoVisit ? (
-                    <ActivityIndicator size="small" color="#0E7490" />
+                    <ActivityIndicator size="small" color="#156436" />
                   ) : (
                     <Switch
                       value={autoVisitEnabled}
                       onValueChange={handleToggleAutoVisit}
-                      thumbColor={autoVisitEnabled ? "#0E7490" : "#E2E8F0"}
+                      thumbColor={autoVisitEnabled ? "#156436" : "#E2E8F0"}
                       trackColor={{ false: "#CBD5E1", true: "#A5F3FC" }}
                     />
                   )}
@@ -651,7 +651,7 @@ const ProfileModal = ({
               <Text style={styles.modalSecondaryText}>Cerrar</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.modalPrimary, { backgroundColor: '#0E7490' }]} 
+              style={[styles.modalPrimary, { backgroundColor: '#156436' }]}
               onPress={currentView === 'summary' ? logout : () => setCurrentView('summary')}
             >
               <Text style={styles.modalPrimaryText}>{currentView === 'summary' ? 'Cerrar sesion' : 'Cancelar'}</Text>

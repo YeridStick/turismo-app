@@ -237,7 +237,7 @@ const PackageCard = ({
                 <Text style={styles.packageVibeText}>{vibeTags[0]}</Text>
               </View>
               <View style={styles.packageVibeChip}>
-                <FontAwesome name="leaf" size={10} color="#0F766E" />
+                <FontAwesome name="leaf" size={10} color="#0D4525" />
                 <Text style={styles.packageVibeText}>{vibeTags[1]}</Text>
               </View>
             </View>
@@ -253,7 +253,7 @@ const PackageCard = ({
             ) : null}
 
             <View style={styles.packageRatingRow}>
-              <FontAwesome name="star" size={12} color="#F59E0B" />
+              <FontAwesome name="star" size={12} color="#FED201" />
               <Text style={styles.packageRatingText}>{pkg.rating ?? 4.8}</Text>
               {pkg.agencyName ? (
                 <Text style={styles.packageAgency} numberOfLines={1}>
@@ -281,7 +281,7 @@ const PackageCard = ({
 
             <View style={styles.packageRouteBlock}>
               <View style={styles.packageRouteHeader}>
-                <FontAwesome name="map-signs" size={11} color="#0E7490" />
+                <FontAwesome name="map-signs" size={11} color="#156436" />
                 <Text style={styles.packageRouteTitle}>Sitios del paquete</Text>
               </View>
               <View style={styles.packageRouteVerticalList}>

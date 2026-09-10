@@ -3,7 +3,7 @@ import { Animated, Dimensions, Easing, StyleSheet, View } from "react-native";
 
 const { width, height } = Dimensions.get("window");
 
-const COLORS = ["#14B8A6", "#FB923C", "#38BDF8", "#8B5CF6", "#0EA5A4"];
+const COLORS = ["#156436", "#FED201", "#FE6C01", "#156436", "#FED201"];
 
 const TravelTrail = ({ index, size, top, left, color, progress }) => {
   const phase = (index % 4) * 0.08;
@@ -169,14 +169,14 @@ const styles = StyleSheet.create({
     height: 260,
     top: -90,
     right: -86,
-    backgroundColor: "#14B8A6",
+    backgroundColor: "#156436",
   },
   blobBottom: {
     width: 300,
     height: 300,
     bottom: -120,
     left: -110,
-    backgroundColor: "#FB923C",
+    backgroundColor: "#FE6C01",
   },
   particle: {
     position: "absolute",

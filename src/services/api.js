@@ -87,6 +87,7 @@ export const getTopRatedPlaces = (limit = 8) => api.get(ENDPOINTS.PLACES_TOP_RAT
 export const getPackages = (params = {}) => api.get(ENDPOINTS.PACKAGES, { params });
 export const createPackage = (data) => api.post(ENDPOINTS.PACKAGES, data);
 export const getPackageById = (id) => api.get(`${ENDPOINTS.PACKAGES}/${id}`);
+export const getPackageQuote = (id, data) => api.post(ENDPOINTS.PACKAGE_QUOTE(id), data);
 
 // Los endpoints de lectura son la fuente de la URL prefirmada vigente.
 // No reutilizar cover_image_key ni construir URLs de S3 en el cliente.

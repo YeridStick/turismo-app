@@ -115,7 +115,7 @@ export const cardStyles = {
     gap: 4,
   },
   cardDistance: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "700",
   },
   popularCard: {
@@ -238,7 +238,7 @@ export const cardStyles = {
     borderColor: "rgba(14, 116, 144, 0.14)",
   },
   popularDistanceText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: FONT_SIZES.xs,
     fontWeight: "800",
   },

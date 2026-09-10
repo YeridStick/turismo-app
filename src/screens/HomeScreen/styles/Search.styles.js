@@ -6,7 +6,7 @@ export const searchStyles = {
     borderRadius: 30,
     gap: SPACING.md,
     backgroundColor: "rgba(255,255,255,0.86)",
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.18,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
@@ -95,7 +95,7 @@ export const searchStyles = {
     backgroundColor: "rgba(236, 254, 255, 0.88)",
   },
   filterButtonText: {
-    color: "#0F766E",
+    color: "#0D4525",
     fontWeight: "700",
     fontSize: 14,
   },

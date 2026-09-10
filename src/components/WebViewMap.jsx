@@ -273,13 +273,13 @@ const WebViewMap = ({
                     // and leave only Leaflet's beige base visible.
                     const tileProviders = [
                         {
-                            name: 'CARTO',
-                            url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                        },
-                        {
                             name: 'OpenStreetMap',
                             url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        },
+                        {
+                            name: 'OpenStreetMap DE',
+                            url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
                             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         }
                     ];
@@ -382,8 +382,8 @@ const WebViewMap = ({
                             if (show) {
                                 window.circleLayer = L.circle([lat, lng], {
                                     radius: radius,
-                                    color: '#0E7490',
-                                    fillColor: '#0E7490',
+                                    color: '#156436',
+                                    fillColor: '#156436',
                                     fillOpacity: 0.1,
                                     weight: 2,
                                     opacity: 0.5
@@ -646,7 +646,7 @@ const WebViewMap = ({
                 startInLoadingState={true}
                 renderLoading={() => (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color="#0E7490" />
+                        <ActivityIndicator size="large" color="#156436" />
                         <Text style={styles.loadingText}>Cargando mapa OpenStreetMap...</Text>
                     </View>
                 )}

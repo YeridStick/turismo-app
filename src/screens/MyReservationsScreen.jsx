@@ -48,7 +48,7 @@ const STATUS_LABELS = {
 };
 
 const STATUS_COLORS = {
-  requested: "#0E7490",
+  requested: "#156436",
   contacted: "#2563EB",
   awaiting_payment: "#D97706",
   confirmed: "#059669",
@@ -896,7 +896,7 @@ const MyReservationsScreen = ({ navigation }) => {
                 onPress={refresh}
                 disabled={refreshing}
               >
-                <Ionicons name="alert-circle-outline" size={16} color="#F97316" />
+                <Ionicons name="alert-circle-outline" size={16} color="#FE6C01" />
                 <Text style={styles.inlineErrorText}>{error}</Text>
               </TouchableOpacity>
             ) : null

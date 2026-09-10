@@ -29,7 +29,7 @@ import {
     createInFlightDeduper,
     extractArrayPayload,
 } from "../utils/requestHelpers";
-const ACCENT = "#0E7490";
+const ACCENT = "#156436";
 const ACTIVE_RESERVATION_STATUSES = ["requested", "contacted", "awaiting_payment"];
 
 // --- Sub-componente: Modal de Creación de Agencia ---
@@ -183,8 +183,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
 
         try {
             const now = new Date();
-            const from = new Date(now);
-            from.setDate(now.getDate() - 30);
+            const from = new Date(now.getFullYear(), now.getMonth(), 1);
 
             const dashboardParams = {
                 email: user.email,
@@ -201,7 +200,13 @@ const AgencyDashboardScreen = ({ navigation }) => {
                 api.get(ENDPOINTS.AGENCY_DASHBOARD, { params: dashboardParams }),
             );
 
-            let dData = dResp.data?.data || dResp.data || null;
+            const dashboardPayload = dResp.data?.data || dResp.data || null;
+            const dashboardItems = Array.isArray(dashboardPayload)
+                ? dashboardPayload
+                : [dashboardPayload];
+            let dData = dashboardItems.find((item) =>
+                String(item?.agency?.id ?? item?.agencyId) === String(targetAgency.id),
+            ) || dashboardItems[0] || null;
 
             if (!dData?.packages || dData.packages.length === 0) {
                 try {
@@ -409,7 +414,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
                 </View>
             ) : error && agencies.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                    <Ionicons name="alert-circle-outline" size={64} color="#F97316" />
+                    <Ionicons name="alert-circle-outline" size={64} color="#FE6C01" />
                     <Text style={styles.emptyText}>{error}</Text>
                     <Text style={styles.emptySubtext}>
                         Puedes intentar cargar el panel nuevamente.
@@ -465,7 +470,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                 <Text style={styles.sectionHeader}>Impacto de {activeAgency.name}</Text>
                                 
                                 <LinearGradient 
-                                    colors={[ACCENT, "#14B8A6"]} 
+                                    colors={[ACCENT, "#FED201"]}
                                     start={{ x: 0, y: 0 }} 
                                     end={{ x: 1, y: 1 }} 
                                     style={styles.heroCard}
@@ -529,7 +534,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                         onPress={retryActiveDashboard}
                                         disabled={fetchingDashboard}
                                     >
-                                        <Ionicons name="alert-circle-outline" size={16} color="#F97316" />
+                                        <Ionicons name="alert-circle-outline" size={16} color="#FE6C01" />
                                         <Text style={styles.inlineStatusText}>{dashboardError}</Text>
                                     </TouchableOpacity>
                                 ) : null}
@@ -538,7 +543,7 @@ const AgencyDashboardScreen = ({ navigation }) => {
                                     <ActivityIndicator style={{ marginTop: 40 }} color={ACCENT} />
                                 ) : dashboardError && !dashboardMatchesActiveAgency ? (
                                     <View style={styles.emptyContainer}>
-                                        <Ionicons name="alert-circle-outline" size={48} color="#F97316" />
+                                        <Ionicons name="alert-circle-outline" size={48} color="#FE6C01" />
                                         <Text style={styles.emptyText}>{dashboardError}</Text>
                                         <TouchableOpacity
                                             style={styles.retryButton}
@@ -726,7 +731,7 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#F97316",
+        backgroundColor: "#FE6C01",
         borderWidth: 2,
         borderColor: "#FFFFFF",
     },
@@ -872,7 +877,7 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#F97316",
+        backgroundColor: "#FE6C01",
     },
     reservationsShortcutBadgeText: {
         color: "#FFFFFF",

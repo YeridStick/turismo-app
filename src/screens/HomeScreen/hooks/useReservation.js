@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { createReservation } from "../../../services/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createReservation, getPackageQuote } from "../../../services/api";
 import { validateReservationInput } from "../../../utils/reservationValidation";
 
 const CONSENT_VERSION = "2026-07-04";
@@ -20,6 +20,11 @@ const extractErrorMessage = (error) => {
     if (typeof first?.message === "string") return first.message;
   }
   return "No se pudo crear la solicitud de reserva.";
+};
+
+const firstPackageNumber = (value) => {
+  const match = String(value || "").match(/\d+/);
+  return match ? Number(match[0]) : null;
 };
 
 const initialForm = () => ({
@@ -44,6 +49,7 @@ const useReservation = ({
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [reservationForm, setReservationForm] = useState(initialForm);
   const [reservationLoading, setReservationLoading] = useState(false);
+  const [reservationQuote, setReservationQuote] = useState(null);
   const [reservationStatusModal, setReservationStatusModal] = useState({
     visible: false,
     type: "info",
@@ -113,8 +119,33 @@ const useReservation = ({
     if (!requireReadyUser()) return;
     setSelectedPackage(pkg);
     setReservationForm(initialForm());
+    setReservationQuote(null);
     setReservationVisible(true);
   }, [requireReadyUser]);
+
+  useEffect(() => {
+    if (!reservationVisible || !selectedPackage?.id) return undefined;
+    const travelers = Number(reservationForm.travelers);
+    const startDate = reservationForm.startDate?.trim();
+    const endDate = reservationForm.endDate?.trim();
+    if (!Number.isInteger(travelers) || travelers < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate || "")) {
+      setReservationQuote(null);
+      return undefined;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const response = await getPackageQuote(selectedPackage.id, {
+          travelers,
+          startDate,
+          ...(endDate ? { endDate } : {}),
+        });
+        setReservationQuote(response.data?.data || response.data || null);
+      } catch (_error) {
+        setReservationQuote(null);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [reservationVisible, reservationForm.travelers, reservationForm.startDate, reservationForm.endDate, selectedPackage?.id]);
 
   const closeReservation = useCallback(() => {
     if (reservationLoading) return;
@@ -146,6 +177,26 @@ const useReservation = ({
       contactPreference: reservationForm.contactPreference,
       consentAccepted: reservationForm.consentAccepted,
     });
+
+    const legacyPeopleLimit = selectedPackage.maxPeople == null
+      ? firstPackageNumber(selectedPackage.people)
+      : null;
+    const requestedDays = endDate
+      ? Math.floor((new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000) + 1
+      : Number(selectedPackage.days || 0);
+    const requestedNights = endDate ? Math.max(0, requestedDays - 1) : Number(selectedPackage.nights || 0);
+    if (!validationError && legacyPeopleLimit && travelers > legacyPeopleLimit) {
+      showReservationStatusModal({ type: "warning", title: "Capacidad máxima", message: `Este paquete permite hasta ${legacyPeopleLimit} personas. La agencia debe declarar una capacidad mayor para ampliar el grupo.` });
+      return;
+    }
+    if (!validationError && selectedPackage.maxDays == null && selectedPackage.days && requestedDays > Number(selectedPackage.days)) {
+      showReservationStatusModal({ type: "warning", title: "Duración no disponible", message: `Este paquete está configurado para máximo ${selectedPackage.days} días.` });
+      return;
+    }
+    if (!validationError && selectedPackage.maxNights == null && selectedPackage.nights != null && requestedNights > Number(selectedPackage.nights)) {
+      showReservationStatusModal({ type: "warning", title: "Duración no disponible", message: `Este paquete está configurado para máximo ${selectedPackage.nights} noches.` });
+      return;
+    }
 
     if (validationError === "startDate") {
       showReservationStatusModal({
@@ -266,6 +317,7 @@ const useReservation = ({
       setReservationForm,
       reservationLoading,
       reservationStatusModal,
+      reservationQuote,
       handleReservationChange,
       openReservation,
       closeReservation,
@@ -280,6 +332,7 @@ const useReservation = ({
       reservationForm,
       reservationLoading,
       reservationStatusModal,
+      reservationQuote,
       reservationVisible,
       selectedPackage,
       submitReservation,

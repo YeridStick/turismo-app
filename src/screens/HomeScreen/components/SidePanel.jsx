@@ -261,7 +261,7 @@ const SidePanel = ({
                 <Ionicons
                   name="image-outline"
                   size={16}
-                  color="#0E7490"
+                  color="#156436"
                 />
               )}
             </View>
@@ -456,8 +456,8 @@ const SidePanel = ({
             size={22}
             color={
               tone === "error"
-                ? "#F97316"
-                : "#0E7490"
+                ? "#FE6C01"
+                : "#156436"
             }
           />
         </View>
@@ -479,7 +479,7 @@ const SidePanel = ({
             <Ionicons
               name="reload"
               size={14}
-              color="#0E7490"
+              color="#156436"
             />
 
             <Text style={styles.sidePanelReloadButtonText}>
@@ -687,7 +687,7 @@ const SidePanel = ({
               <Ionicons
                 name="compass-outline"
                 size={18}
-                color="#0E7490"
+                color="#156436"
               />
             </View>
 
@@ -788,7 +788,7 @@ const SidePanel = ({
                           : "sparkles-outline"
                       }
                       size={14}
-                      color="#0E7490"
+                      color="#156436"
                     />
 
                     <Text
@@ -850,7 +850,7 @@ const SidePanel = ({
                       <Ionicons
                         name="image-outline"
                         size={18}
-                        color="#0E7490"
+                        color="#156436"
                       />
                     )}
                   </View>
@@ -915,7 +915,7 @@ const SidePanel = ({
                     <Ionicons
                       name="chevron-forward"
                       size={17}
-                      color="#0E7490"
+                      color="#156436"
                     />
                   </View>
                 </View>

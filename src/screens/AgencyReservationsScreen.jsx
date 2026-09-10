@@ -147,7 +147,7 @@ const AgencyReservationCard = ({ item, onOpen, onStatusPress, updating }) => {
       {item.message ? <Text style={styles.message}>{item.message}</Text> : null}
       {item.status === "requested" ? (
         <View style={styles.contactHint}>
-          <Ionicons name="chatbubble-ellipses-outline" size={14} color="#0E7490" />
+          <Ionicons name="chatbubble-ellipses-outline" size={14} color="#156436" />
           <Text style={styles.contactHintText}>
             Responde por chat para pasarla automáticamente a contactada.
           </Text>
@@ -750,7 +750,7 @@ const AgencyReservationsScreen = ({ navigation, route }) => {
                 onPress={refresh}
                 disabled={refreshing}
               >
-                <Ionicons name="alert-circle-outline" size={16} color="#F97316" />
+                <Ionicons name="alert-circle-outline" size={16} color="#FE6C01" />
                 <Text style={styles.inlineErrorText}>{error}</Text>
               </TouchableOpacity>
             ) : null
@@ -1244,7 +1244,7 @@ const styles = StyleSheet.create({
   },
   contactHintText: {
     flex: 1,
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 11,
     fontWeight: "800",
     lineHeight: 16,

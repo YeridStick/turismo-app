@@ -1,13 +1,16 @@
 export const theme = {
     colors: {
         // Primary brand colors
-        primary: '#0EA5A4',
-        primaryLight: '#2DD4BF',
-        primaryDark: '#0F766E',
+        primary: '#156436',
+        primaryLight: '#4E9A5F',
+        primaryDark: '#0D4525',
 
         // Secondary brand colors
-        secondary: '#FB923C',
-        secondaryLight: '#FDBA74',
+        secondary: '#FE6C01',
+        secondaryLight: '#FF9B4A',
+        brandYellow: '#FED201',
+        brandGreen: '#156436',
+        brandOrange: '#FE6C01',
 
         // Backgrounds
         background: '#f7fcfe',
@@ -30,7 +33,8 @@ export const theme = {
         divider: '#f1f5f9', // Slate 100
 
         // Gradients
-        gradientPrimary: ['#0EA5A4', '#14B8A6', '#FB923C'],
+        gradientPrimary: ['#156436', '#FED201'],
+        gradientOrangeYellow: ['#FE6C01', '#FED201'],
         gradientOverlay: ['transparent', 'rgba(0,0,0,0.8)'],
     },
 
@@ -96,7 +100,7 @@ export const theme = {
             elevation: 8,
         },
         primary: {
-            shadowColor: '#0EA5A4',
+            shadowColor: '#156436',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,

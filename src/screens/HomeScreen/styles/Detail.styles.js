@@ -87,7 +87,7 @@ export const detailStyles = {
     gap: SPACING.xs,
   },
   actionButtonPrimary: {
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
     elevation: 5,
   },
   actionButtonPrimaryText: {
@@ -220,8 +220,8 @@ export const detailStyles = {
     backgroundColor: "#F8F8FD",
   },
   modelChipActive: {
-    backgroundColor: "#0E7490",
-    borderColor: "#0E7490",
+    backgroundColor: "#156436",
+    borderColor: "#156436",
   },
   modelChipText: {
     color: COLORS.text,
@@ -262,7 +262,7 @@ export const detailStyles = {
     alignItems: "center",
   },
   moreInfoText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: FONT_SIZES.md,
     fontWeight: "700",
   },

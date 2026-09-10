@@ -789,7 +789,7 @@ const AuthScreen = () => {
               color={
                 docTypeOpen
                   ? "#EA580C"
-                  : "#0E7490"
+                  : "#156436"
               }
             />
           </TouchableOpacity>
@@ -1006,7 +1006,7 @@ const AuthScreen = () => {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#0E7490" />
+              <ActivityIndicator color="#156436" />
             ) : (
               <Text style={styles.secondaryText}>Reintentar validación</Text>
             )}
@@ -1021,7 +1021,7 @@ const AuthScreen = () => {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#0E7490" />
+            <ActivityIndicator color="#156436" />
           ) : (
             <Text style={styles.secondaryText}>Solicitar recuperación</Text>
           )}
@@ -1258,7 +1258,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   tabButtonActive: {
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   tabButtonText: {
     color: "#64748B",
@@ -1303,7 +1303,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   toggleTextActive: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "700",
   },
 
@@ -1316,7 +1316,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   stepLabel: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: FONT_SIZES.xs,
     fontWeight: "700",
     letterSpacing: 1,
@@ -1335,7 +1335,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     marginBottom: SPACING.sm,
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1391,7 +1391,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   selectInputActive: {
-    borderColor: "#0E7490",
+    borderColor: "#156436",
   },
   selectText: {
     flex: 1,
@@ -1409,7 +1409,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     paddingVertical: SPACING.md,
     borderRadius: 12,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   primaryText: {
     color: "#FFFFFF",
@@ -1426,7 +1426,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   secondaryText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
   },
@@ -1436,7 +1436,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   linkText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 14,
     fontWeight: "600",
   },
@@ -1536,7 +1536,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   selectorOptionTextActive: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "700",
   },
 });

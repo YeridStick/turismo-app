@@ -468,7 +468,7 @@ const AuthModal = ({ visible, onClose }) => {
             <FontAwesome
               name={docTypeOpen ? 'chevron-up' : 'chevron-down'}
               size={12}
-              color="#0E7490"
+              color="#156436"
             />
           </TouchableOpacity>
           {docTypeOpen ? (
@@ -539,7 +539,7 @@ const AuthModal = ({ visible, onClose }) => {
             onPress={handleCopyManualCode}
             activeOpacity={0.9}
           >
-            <FontAwesome name="copy" size={12} color="#0E7490" />
+            <FontAwesome name="copy" size={12} color="#156436" />
             <Text style={styles.copyButtonText}>Copiar código</Text>
           </TouchableOpacity>
         </View>
@@ -677,7 +677,7 @@ const AuthModal = ({ visible, onClose }) => {
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
-            <LinearGradient colors={['#0B4A5F', '#0E7490']} style={styles.header}>
+            <LinearGradient colors={['#156436', '#FED201']} style={styles.header}>
               <View style={styles.headerRow}>
                 <View style={styles.headerTitleRow}>
                   <FontAwesome name="shield" size={18} color="#CCFBF1" />
@@ -817,8 +817,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   toggleButtonActive: {
-    backgroundColor: '#0E7490',
-    borderColor: '#0E7490',
+    backgroundColor: '#156436',
+    borderColor: '#156436',
   },
   toggleText: {
     color: '#6b7280',
@@ -905,7 +905,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
   },
   statusText: {
-    color: '#0E7490',
+    color: '#156436',
     fontWeight: '600',
     marginTop: SPACING.xs,
   },
@@ -914,11 +914,11 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   linkText: {
-    color: '#0E7490',
+    color: '#156436',
     fontWeight: '600',
   },
   primaryButton: {
-    backgroundColor: '#0E7490',
+    backgroundColor: '#156436',
     borderRadius: 12,
     paddingVertical: SPACING.md,
     alignItems: 'center',
@@ -939,7 +939,7 @@ const styles = StyleSheet.create({
     borderColor: '#D9EAF0',
   },
   secondaryText: {
-    color: '#0E7490',
+    color: '#156436',
     fontWeight: '700',
   },
   card: {
@@ -955,7 +955,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   stepLabel: {
-    color: '#FB923C',
+    color: '#FE6C01',
     fontWeight: '700',
   },
   cardTitle: {
@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
   },
   copyButtonText: {
-    color: '#0E7490',
+    color: '#156436',
     fontWeight: '700',
   },
   successIcon: {
@@ -1058,4 +1058,3 @@ const styles = StyleSheet.create({
 });
 
 export default AuthModal;
-

@@ -32,7 +32,7 @@ const AgencyModal = ({
           <View style={styles.agencyModalHeader}>
             <View style={styles.agencyHeaderLeft}>
               <View style={styles.agencyIcon}>
-                <FontAwesome name="building" size={14} color="#0E7490" />
+                <FontAwesome name="building" size={14} color="#156436" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.agencyTitle}>
@@ -76,11 +76,11 @@ const AgencyModal = ({
 
             <View style={styles.agencyContactBox}>
               <View style={styles.agencyContactItem}>
-                <FontAwesome name="phone" size={14} color="#0E7490" />
+                <FontAwesome name="phone" size={14} color="#156436" />
                 <Text style={styles.agencyContactText}>{agency.phone || "No disponible"}</Text>
               </View>
               <View style={styles.agencyContactItem}>
-                <FontAwesome name="map-marker" size={14} color="#0E7490" />
+                <FontAwesome name="map-marker" size={14} color="#156436" />
                 <Text style={styles.agencyContactText}>{agency.address || "Huila, Colombia"}</Text>
               </View>
             </View>

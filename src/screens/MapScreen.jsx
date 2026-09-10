@@ -350,7 +350,7 @@ const MapScreen = ({ route }) => {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0E7490" />
+                <ActivityIndicator size="large" color="#156436" />
                 <Text style={styles.loadingText}>Cargando mapa...</Text>
             </View>
         );
@@ -424,7 +424,7 @@ const MapScreen = ({ route }) => {
 
             {placesLoading && places.length > 0 ? (
                 <View style={styles.mapStatePanel}>
-                    <ActivityIndicator color="#0E7490" />
+                    <ActivityIndicator color="#156436" />
                     <Text style={styles.mapStateText}>Actualizando sitios...</Text>
                 </View>
             ) : null}
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
     },
     retryButton: {
-        backgroundColor: '#0E7490',
+        backgroundColor: '#156436',
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 8,
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#f0f0f0',
     },
     filterButtonActive: {
-        backgroundColor: '#0E7490',
+        backgroundColor: '#156436',
     },
     filterButtonText: {
         fontSize: 14,
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 999,
-        backgroundColor: '#0E7490',
+        backgroundColor: '#156436',
     },
     mapStateButtonText: {
         color: '#FFFFFF',

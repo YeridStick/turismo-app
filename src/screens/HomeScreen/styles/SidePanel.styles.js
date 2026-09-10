@@ -10,7 +10,7 @@ const PANEL_COLORS = {
   surface: "#FFFFFF",
   surfaceSoft: "#F1F5F9",
 
-  primary: "#0E7490",
+  primary: "#156436",
   primaryDark: "#155E75",
   primarySoft: "#ECFEFF",
 
@@ -120,7 +120,7 @@ export default StyleSheet.create({
     width: 76,
     top: 86,
     left: 18,
-    backgroundColor: "#14B8A6",
+    backgroundColor: "#4E9A5F",
     transform: [{ rotate: "-10deg" }],
   },
 
@@ -128,7 +128,7 @@ export default StyleSheet.create({
     width: 58,
     top: 148,
     left: -22,
-    backgroundColor: "#FB923C",
+    backgroundColor: "#FE6C01",
     transform: [{ rotate: "12deg" }],
   },
 
@@ -136,7 +136,7 @@ export default StyleSheet.create({
     width: 86,
     top: "44%",
     left: -44,
-    backgroundColor: "#38BDF8",
+    backgroundColor: "#FED201",
     transform: [{ rotate: "-7deg" }],
   },
 
@@ -152,7 +152,7 @@ export default StyleSheet.create({
     width: 52,
     bottom: 86,
     left: -18,
-    backgroundColor: "#0EA5A4",
+    backgroundColor: "#156436",
     transform: [{ rotate: "-14deg" }],
   },
 
@@ -720,7 +720,7 @@ export default StyleSheet.create({
     lineHeight: 17,
     fontWeight: "700",
 
-    color: "#0E7490",
+    color: "#156436",
   },
 
   sidePanelNearbyMainRow: {

@@ -90,5 +90,6 @@ export const ENDPOINTS = {
   USERS_ME_PROFILE_IMAGE: '/api/users/me/profile-image',
   USERS_ME_PASSWORD: '/api/users/me/password',
   PACKAGE_COVER_IMAGE: (id) => `/api/packages/${id}/cover-image`,
+  PACKAGE_QUOTE: (id) => `/api/packages/${id}/quote`,
   ADMIN_USERS: '/api/admin/all/user',
 };

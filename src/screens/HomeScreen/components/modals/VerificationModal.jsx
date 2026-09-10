@@ -39,7 +39,7 @@ const VerificationModal = ({
         >
           <View style={styles.verificationHeader}>
             <View style={styles.verificationIconBg}>
-              <FontAwesome name="shield" size={20} color="#0E7490" />
+              <FontAwesome name="shield" size={20} color="#156436" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.verificationTitle}>Verificar Correo</Text>
@@ -68,7 +68,7 @@ const VerificationModal = ({
                 onPress={onRequestToken}
                 disabled={loading}
               >
-                <FontAwesome name="paper-plane" size={12} color="#0E7490" />
+                <FontAwesome name="paper-plane" size={12} color="#156436" />
                 <Text style={styles.verificationRequestBtnText}>
                   {loading ? "Enviando..." : "Solicitar código"}
                 </Text>

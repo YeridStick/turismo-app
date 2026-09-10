@@ -35,7 +35,7 @@ export const modalStyles = {
     borderColor: "#99F6E4",
   },
   modalAllButtonText: {
-    color: "#0F766E",
+    color: "#0D4525",
     fontWeight: "700",
   },
   modalTitle: {
@@ -139,7 +139,7 @@ export const modalStyles = {
     gap: 6,
   },
   profileImageButtonText: {
-    color: "#0E7490",
+    color: "#156436",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -262,7 +262,7 @@ export const modalStyles = {
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   currentAccountBadgeText: {
     color: "#FFFFFF",
@@ -288,7 +288,7 @@ export const modalStyles = {
     marginTop: 2,
   },
   addAccountButtonText: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "900",
   },
   profileActions: {
@@ -308,7 +308,7 @@ export const modalStyles = {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#F1F5F9",
-    shadowColor: "#0E7490",
+    shadowColor: "#156436",
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -368,7 +368,7 @@ export const modalStyles = {
     lineHeight: 16,
   },
   unverifiedAlertButton: {
-    backgroundColor: "#F59E0B",
+    backgroundColor: "#FED201",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 10,
@@ -445,7 +445,7 @@ export const modalStyles = {
     backgroundColor: "#ECFEFF",
   },
   verificationRequestBtnText: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "600",
     fontSize: 13,
   },
@@ -497,7 +497,7 @@ export const modalStyles = {
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
   },
   verifyModalConfirmBtnText: {
     color: COLORS.white,
@@ -708,10 +708,10 @@ export const modalStyles = {
   },
   distanceChipActive: {
     backgroundColor: '#E0F7FA',
-    borderColor: '#0E7490',
+    borderColor: '#156436',
   },
   filterApplyButton: {
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
     height: 56,
     borderRadius: 16,
     alignItems: "center",
@@ -849,7 +849,7 @@ export const modalStyles = {
     flex: 1,
   },
   agencyCloseButton: {
-    backgroundColor: "#0E7490",
+    backgroundColor: "#156436",
     paddingVertical: 14,
     margin: 16,
     borderRadius: 14,
@@ -928,7 +928,7 @@ export const modalStyles = {
     gap: 8,
   },
   reservationOptionActive: {
-    borderColor: "#0E7490",
+    borderColor: "#156436",
     backgroundColor: "#ECFEFF",
   },
   reservationOptionText: {
@@ -937,7 +937,7 @@ export const modalStyles = {
     fontSize: 13,
   },
   reservationOptionTextActive: {
-    color: "#0E7490",
+    color: "#156436",
   },
   reservationMessageInput: {
     minHeight: 86,
@@ -964,8 +964,8 @@ export const modalStyles = {
     marginTop: 1,
   },
   reservationCheckboxActive: {
-    borderColor: "#0E7490",
-    backgroundColor: "#0E7490",
+    borderColor: "#156436",
+    backgroundColor: "#156436",
   },
   reservationConsentText: {
     flex: 1,
@@ -1013,7 +1013,7 @@ export const modalStyles = {
   },
   quickChipActive: {
     backgroundColor: "#E0F7FA",
-    borderColor: "#0E7490",
+    borderColor: "#156436",
   },
   quickChipText: {
     color: "#64748B",
@@ -1021,7 +1021,7 @@ export const modalStyles = {
     fontSize: 13,
   },
   quickChipTextActive: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "700",
   },
   distanceChipText: {
@@ -1030,7 +1030,7 @@ export const modalStyles = {
     fontSize: 13,
   },
   distanceChipTextActive: {
-    color: "#0E7490",
+    color: "#156436",
     fontWeight: "700",
   },
   distanceValueBox: {

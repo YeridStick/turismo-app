@@ -21,7 +21,7 @@ import api, { deletePackageCoverImage, getAgencies, getPackageById, getPackageCo
 import { COLORS, FONT_SIZES, SPACING } from "../utils/constants";
 import { PremiumModal } from "../components/ui/PremiumModal";
 
-const ACCENT = "#0E7490";
+const ACCENT = "#156436";
 
 const parseList = (value) =>
   value
@@ -69,6 +69,17 @@ const CreatePackageScreen = ({ navigation }) => {
     days: "",
     nights: "",
     people: "",
+    peopleIncluded: "",
+    minPeople: "",
+    maxPeople: "",
+    minDays: "",
+    maxDays: "",
+    minNights: "",
+    maxNights: "",
+    pricePerAdditionalPerson: "",
+    pricePerAdditionalDay: "",
+    pricePerAdditionalNight: "",
+    discountPercentage: "",
     rating: "",
     reviews: "",
     originalPrice: "",
@@ -137,6 +148,17 @@ const CreatePackageScreen = ({ navigation }) => {
           days: pkg.days?.toString() || "",
           nights: pkg.nights?.toString() || "",
           people: pkg.people || "",
+          peopleIncluded: pkg.peopleIncluded?.toString() || "",
+          minPeople: pkg.minPeople?.toString() || "",
+          maxPeople: pkg.maxPeople?.toString() || "",
+          minDays: pkg.minDays?.toString() || "",
+          maxDays: pkg.maxDays?.toString() || "",
+          minNights: pkg.minNights?.toString() || "",
+          maxNights: pkg.maxNights?.toString() || "",
+          pricePerAdditionalPerson: pkg.pricePerAdditionalPerson?.toString() || "",
+          pricePerAdditionalDay: pkg.pricePerAdditionalDay?.toString() || "",
+          pricePerAdditionalNight: pkg.pricePerAdditionalNight?.toString() || "",
+          discountPercentage: pkg.discountPercentage?.toString() || "",
           rating: pkg.rating?.toString() || "",
           reviews: pkg.reviews?.toString() || "",
           originalPrice: pkg.originalPrice?.toString() || "",
@@ -322,6 +344,17 @@ const CreatePackageScreen = ({ navigation }) => {
         days: form.days ? Number(form.days) : undefined,
         nights: form.nights ? Number(form.nights) : undefined,
         people: form.people.trim() || undefined,
+        peopleIncluded: form.peopleIncluded ? Number(form.peopleIncluded) : undefined,
+        minPeople: form.minPeople ? Number(form.minPeople) : undefined,
+        maxPeople: form.maxPeople ? Number(form.maxPeople) : undefined,
+        minDays: form.minDays ? Number(form.minDays) : undefined,
+        maxDays: form.maxDays ? Number(form.maxDays) : undefined,
+        minNights: form.minNights ? Number(form.minNights) : undefined,
+        maxNights: form.maxNights ? Number(form.maxNights) : undefined,
+        pricePerAdditionalPerson: form.pricePerAdditionalPerson ? Number(form.pricePerAdditionalPerson) : undefined,
+        pricePerAdditionalDay: form.pricePerAdditionalDay ? Number(form.pricePerAdditionalDay) : undefined,
+        pricePerAdditionalNight: form.pricePerAdditionalNight ? Number(form.pricePerAdditionalNight) : undefined,
+        discountPercentage: form.discountPercentage ? Number(form.discountPercentage) : undefined,
         rating: form.rating ? Number(form.rating) : undefined,
         reviews: form.reviews ? Number(form.reviews) : undefined,
         originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
@@ -588,6 +621,61 @@ const CreatePackageScreen = ({ navigation }) => {
             placeholder="Ej. Hasta 8 personas"
             placeholderTextColor={COLORS.textLight}
           />
+
+          <Text style={styles.pricingHint}>Reglas de precio dinámico (opcionales)</Text>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Personas incluidas</Text>
+              <TextInput style={styles.input} value={form.peopleIncluded} onChangeText={(value) => updateField("peopleIncluded", value.replace(/[^0-9]/g, ""))} placeholder="5" keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Mín. personas</Text>
+              <TextInput style={styles.input} value={form.minPeople} onChangeText={(value) => updateField("minPeople", value.replace(/[^0-9]/g, ""))} placeholder="1" keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Máx. personas</Text>
+              <TextInput style={styles.input} value={form.maxPeople} onChangeText={(value) => updateField("maxPeople", value.replace(/[^0-9]/g, ""))} placeholder="5" keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+            <View style={styles.col} />
+          </View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Mín. días</Text>
+              <TextInput style={styles.input} value={form.minDays} onChangeText={(value) => updateField("minDays", value.replace(/[^0-9]/g, ""))} placeholder={form.days || "1"} keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Máx. días</Text>
+              <TextInput style={styles.input} value={form.maxDays} onChangeText={(value) => updateField("maxDays", value.replace(/[^0-9]/g, ""))} placeholder={form.days || "5"} keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Mín. noches</Text>
+              <TextInput style={styles.input} value={form.minNights} onChangeText={(value) => updateField("minNights", value.replace(/[^0-9]/g, ""))} placeholder={form.nights || "0"} keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Máx. noches</Text>
+              <TextInput style={styles.input} value={form.maxNights} onChangeText={(value) => updateField("maxNights", value.replace(/[^0-9]/g, ""))} placeholder={form.nights || "4"} keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Descuento %</Text>
+              <TextInput style={styles.input} value={form.discountPercentage} onChangeText={(value) => updateField("discountPercentage", value.replace(/[^0-9.]/g, ""))} placeholder="0" keyboardType="decimal-pad" placeholderTextColor={COLORS.textLight} />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Valor persona extra</Text>
+              <TextInput style={styles.input} value={form.pricePerAdditionalPerson} onChangeText={(value) => updateField("pricePerAdditionalPerson", value.replace(/[^0-9]/g, ""))} placeholder="0" keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+            <View style={styles.col}>
+              <Text style={styles.sectionLabel}>Valor día extra</Text>
+              <TextInput style={styles.input} value={form.pricePerAdditionalDay} onChangeText={(value) => updateField("pricePerAdditionalDay", value.replace(/[^0-9]/g, ""))} placeholder="0" keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
+            </View>
+          </View>
+          <Text style={styles.sectionLabel}>Valor noche extra</Text>
+          <TextInput style={styles.input} value={form.pricePerAdditionalNight} onChangeText={(value) => updateField("pricePerAdditionalNight", value.replace(/[^0-9]/g, ""))} placeholder="0" keyboardType="numeric" placeholderTextColor={COLORS.textLight} />
         </View>
 
         {/* CARD 3: EXTRA DETAILS */}
@@ -910,6 +998,12 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  pricingHint: {
+    marginTop: SPACING.md,
+    color: ACCENT,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
   },
   input: {
     backgroundColor: "#FBFEFF",

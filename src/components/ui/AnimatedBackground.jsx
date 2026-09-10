@@ -3,10 +3,10 @@ import { View, StyleSheet, Animated, Dimensions, Easing } from "react-native";
 
 const { width, height } = Dimensions.get("window");
 const PARTICLE_COLORS = [
-  "#0EA5A4",
-  "#14B8A6",
-  "#FB923C",
-  "#38BDF8",
+  "#156436",
+  "#4E9A5F",
+  "#FE6C01",
+  "#FED201",
   "#8B5CF6",
   "#A78BFA",
 ];
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   blobTop: {
     width: 240,
     height: 240,
-    backgroundColor: "#0EA5A4",
+    backgroundColor: "#156436",
     top: -90,
     right: -72,
   },

@@ -71,7 +71,7 @@ const LoadingOverlay: React.FC<{ progress: number }> = ({ progress }) => {
         <View style={styles.loadingOverlay}>
             <View style={styles.loadingCard}>
                 <Animated.View style={[styles.loadingIconContainer, { transform: [{ scale: pulse }] }]}>
-                    <Ionicons name="globe-outline" size={25} color="#14B8A6" />
+                    <Ionicons name="globe-outline" size={25} color="#4E9A5F" />
                 </Animated.View>
                 <Text style={styles.loadingTitle}>Realidad Aumentada</Text>
                 <Text style={styles.loadingLabel}>{label}</Text>
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     },
     progressBar: {
         height: '100%',
-        backgroundColor: '#FB923C',
+        backgroundColor: '#FE6C01',
         borderRadius: 3,
     },
     progressPercent: {
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(20, 184, 166, 0.35)',
     },
     controlBtnPrimary: {
-        backgroundColor: '#FB923C',
+        backgroundColor: '#FE6C01',
         borderColor: '#FDBA74',
     },
     controlBtnWide: {

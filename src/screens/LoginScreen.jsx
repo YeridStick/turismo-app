@@ -77,7 +77,7 @@ const LoginScreen = () => {
       <View style={styles.content}>
         <View style={styles.panel}>
           <LinearGradient
-            colors={['#0B4A5F', '#0E7490']}
+            colors={['#156436', '#FED201']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.heroCard}
@@ -86,11 +86,11 @@ const LoginScreen = () => {
             <Text style={styles.heroTitle}>Tu proximo destino empieza aqui</Text>
             <View style={styles.heroTags}>
               <View style={styles.heroTag}>
-                <FontAwesome name="map-marker" size={11} color="#FDBA74" />
+                <FontAwesome name="map-marker" size={11} color="#FED201" />
                 <Text style={styles.heroTagText}>Rutas</Text>
               </View>
               <View style={styles.heroTag}>
-                <FontAwesome name="camera" size={11} color="#A7F3D0" />
+                <FontAwesome name="camera" size={11} color="#FFFFFF" />
                 <Text style={styles.heroTagText}>Postales</Text>
               </View>
             </View>
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
     marginBottom: SPACING.lg,
-    shadowColor: '#0E7490',
+    shadowColor: '#156436',
     shadowOpacity: 0.2,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
-    shadowColor: '#0E7490',
+    shadowColor: '#156436',
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     borderColor: '#D9EAF0',
     borderRadius: 18,
     marginBottom: SPACING.md,
-    shadowColor: '#0E7490',
+    shadowColor: '#156436',
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },

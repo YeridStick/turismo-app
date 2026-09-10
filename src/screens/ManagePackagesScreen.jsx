@@ -19,8 +19,8 @@ import { PremiumModal } from '../components/ui/PremiumModal';
 import { getPackageImage } from './HomeScreen/utils/helpers';
 
 const COLORS = {
-    primary: '#0E7490',
-    accent: '#0E7490',
+    primary: '#156436',
+    accent: '#FE6C01',
     bg: '#FFFFFF',
     text: '#0F172A',
     textLight: '#64748B',
@@ -287,7 +287,7 @@ const ManagePackagesScreen = ({ navigation }) => {
             <View style={styles.pkgFooter}>
                 <View style={styles.pkgStats}>
                     <View style={styles.pkgStat}>
-                        <Ionicons name="star" size={12} color="#F59E0B" />
+                        <Ionicons name="star" size={12} color="#FED201" />
                         <Text style={styles.pkgStatText}>{pkg.rating}</Text>
                     </View>
                     <Text style={styles.pkgStatReviews}>({pkg.reviews} resenas)</Text>
@@ -382,7 +382,7 @@ const ManagePackagesScreen = ({ navigation }) => {
                         onPress={handleCreatePackage}
                     >
                         <LinearGradient
-                            colors={[COLORS.primary, '#14B8A6']}
+                            colors={[COLORS.primary, '#FED201']}
                             style={styles.addBtnGrad}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}

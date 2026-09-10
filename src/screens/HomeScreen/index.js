@@ -226,6 +226,7 @@ const HomeScreen = ({ navigation }) => {
     reservationForm,
     reservationLoading,
     reservationStatusModal,
+    reservationQuote,
     handleReservationChange,
     openReservation,
     closeReservation,
@@ -860,7 +861,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
-              <FontAwesome name="location-arrow" size={11} color="#0E7490" />
+              <FontAwesome name="location-arrow" size={11} color="#156436" />
             </View>
             <Text style={styles.sectionHeroTitle}>Cerca de ti</Text>
           </View>
@@ -912,7 +913,7 @@ const HomeScreen = ({ navigation }) => {
               <FontAwesome
                 name={hasActiveCatalogFilter ? "search" : "compass"}
                 size={11}
-                color="#0E7490"
+                color="#156436"
               />
             </View>
             <Text style={styles.sectionHeroTitle}>
@@ -952,7 +953,7 @@ const HomeScreen = ({ navigation }) => {
                 <Ionicons
                   name={error ? "alert-circle-outline" : "search-outline"}
                   size={32}
-                  color={error ? "#F97316" : COLORS.textLight}
+                  color={error ? "#FE6C01" : COLORS.textLight}
                 />
               </View>
               <Text style={styles.emptyAgencyTitle}>{catalogEmptyTitle}</Text>
@@ -1002,7 +1003,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.sectionIntro}>
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
-              <FontAwesome name="building-o" size={11} color="#0E7490" />
+              <FontAwesome name="building-o" size={11} color="#156436" />
             </View>
             <Text style={styles.sectionHeroTitle}>Agencias locales</Text>
           </View>
@@ -1010,7 +1011,7 @@ const HomeScreen = ({ navigation }) => {
           {(agencies.length > 0 || agencySearchQuery || loadingAgencies) && (
             <View style={styles.agencyFilterWrap}>
               <View style={styles.agencySearchBox}>
-                <Ionicons name="search-outline" size={17} color="#0E7490" />
+                <Ionicons name="search-outline" size={17} color="#156436" />
                 <TextInput
                   value={agencySearchQuery}
                   onChangeText={setAgencySearchQuery}
@@ -1032,7 +1033,7 @@ const HomeScreen = ({ navigation }) => {
                 ) : null}
               </View>
               {loadingAgencies ? (
-                <ActivityIndicator color="#0E7490" style={{ marginVertical: 14 }} />
+                <ActivityIndicator color="#156436" style={{ marginVertical: 14 }} />
               ) : agencies.length === 0 ? (
                 <Text style={styles.agencyEmptyText}>
                   No encontramos agencias con ese nombre.
@@ -1075,7 +1076,7 @@ const HomeScreen = ({ navigation }) => {
                         <Ionicons
                           name="business-outline"
                           size={17}
-                          color={isActive ? "#FFFFFF" : "#0E7490"}
+                          color={isActive ? "#FFFFFF" : "#156436"}
                         />
                       </View>
                       <View style={styles.agencyFilterInfo}>
@@ -1094,7 +1095,7 @@ const HomeScreen = ({ navigation }) => {
                         }}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name="information" size={14} color="#0E7490" />
+                        <Ionicons name="information" size={14} color="#156436" />
                       </TouchableOpacity>
                     </TouchableOpacity>
                     );
@@ -1110,11 +1111,11 @@ const HomeScreen = ({ navigation }) => {
                       activeOpacity={0.86}
                     >
                       {loadingMoreAgencies ? (
-                        <ActivityIndicator size="small" color="#0E7490" />
+                        <ActivityIndicator size="small" color="#156436" />
                       ) : (
                         <>
                           <Text style={styles.agencyMoreText}>Ver más agencias</Text>
-                          <Ionicons name="chevron-forward" size={15} color="#0E7490" />
+                          <Ionicons name="chevron-forward" size={15} color="#156436" />
                         </>
                       )}
                     </TouchableOpacity>
@@ -1147,7 +1148,7 @@ const HomeScreen = ({ navigation }) => {
                 <Ionicons
                   name={agenciesError ? "alert-circle-outline" : "business-outline"}
                   size={30}
-                  color={agenciesError ? "#F97316" : COLORS.textLight}
+                  color={agenciesError ? "#FE6C01" : COLORS.textLight}
                 />
               </View>
               <Text style={styles.emptyAgencyTitle}>
@@ -1194,7 +1195,7 @@ const HomeScreen = ({ navigation }) => {
           >
             <View style={styles.sectionTitleAccent} />
             <View style={styles.sectionIconBubble}>
-              <FontAwesome name="suitcase" size={11} color="#0E7490" />
+              <FontAwesome name="suitcase" size={11} color="#156436" />
             </View>
             <View
               style={{
@@ -1252,7 +1253,7 @@ const HomeScreen = ({ navigation }) => {
                 <Ionicons
                   name={packagesError ? "alert-circle-outline" : "briefcase-outline"}
                   size={32}
-                  color={packagesError ? "#F97316" : COLORS.textLight}
+                  color={packagesError ? "#FE6C01" : COLORS.textLight}
                 />
               </View>
               <Text style={styles.emptyAgencyTitle}>
@@ -1389,6 +1390,7 @@ const HomeScreen = ({ navigation }) => {
         onClose={closeReservation}
         selectedPackage={selectedPackage}
         reservationForm={reservationForm}
+        reservationQuote={reservationQuote}
         onReservationChange={handleReservationChange}
         onSubmit={submitReservation}
         loading={reservationLoading}

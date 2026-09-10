@@ -22,6 +22,7 @@ const ReservationModal = ({
   onClose,
   selectedPackage,
   reservationForm,
+  reservationQuote,
   onReservationChange,
   onSubmit,
   loading,
@@ -45,7 +46,7 @@ const ReservationModal = ({
           >
             <View style={styles.paymentHeaderLeft}>
               <View style={styles.paymentIcon}>
-                <FontAwesome name="calendar-check-o" size={14} color="#0E7490" />
+                <FontAwesome name="calendar-check-o" size={14} color="#156436" />
               </View>
               <View>
                 <Text style={styles.paymentTitle}>Solicitud de reserva</Text>
@@ -78,10 +79,16 @@ const ReservationModal = ({
               <View style={styles.paymentPackagePrice}>
                 <Text style={styles.paymentPackagePriceLabel}>Referencia</Text>
                 <Text style={styles.paymentPackagePriceValue}>
-                  {formatPrice(selectedPackage?.price || 0)}
+                  {formatPrice(reservationQuote?.finalPrice ?? selectedPackage?.price ?? 0)}
                 </Text>
               </View>
             </View>
+
+            {reservationQuote ? (
+              <Text style={styles.paymentSecureText}>
+                Cotización del servidor: {formatPrice(reservationQuote.finalPrice)}. El precio queda congelado al crear la reserva.
+              </Text>
+            ) : null}
 
             <View style={styles.paymentSecureRow}>
               <View style={styles.paymentSecureIcon}>
@@ -156,7 +163,7 @@ const ReservationModal = ({
                       <FontAwesome
                         name={option.icon}
                         size={13}
-                        color={active ? "#0E7490" : "#64748B"}
+                        color={active ? "#156436" : "#64748B"}
                       />
                       <Text
                         style={[
@@ -210,7 +217,7 @@ const ReservationModal = ({
               activeOpacity={0.9}
             >
               <LinearGradient
-                colors={["#14B8A6", "#FB923C"]}
+                colors={["#4E9A5F", "#FE6C01"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.paymentConfirmGradient}

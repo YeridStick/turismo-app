@@ -102,7 +102,7 @@ const FilterModal = ({
                   style={styles.distanceStepButton}
                   onPress={() => setDistanceKm(Math.max(1, distanceKm - 5))}
                 >
-                  <FontAwesome name="minus" size={14} color="#0E7490" />
+                  <FontAwesome name="minus" size={14} color="#156436" />
                 </TouchableOpacity>
                 
                 <View style={styles.distanceValueBox}>
@@ -113,7 +113,7 @@ const FilterModal = ({
                   style={styles.distanceStepButton}
                   onPress={() => setDistanceKm(Math.min(100, distanceKm + 5))}
                 >
-                  <FontAwesome name="plus" size={14} color="#0E7490" />
+                  <FontAwesome name="plus" size={14} color="#156436" />
                 </TouchableOpacity>
               </View>
 

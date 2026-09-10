@@ -272,7 +272,7 @@ const NearbyMapBlock = ({
               style={styles.mapLockBadge}
               onPress={onUnlockMapGesture}
             >
-              <FontAwesome name="lock" size={11} color="#0E7490" />
+              <FontAwesome name="lock" size={11} color="#156436" />
               <Text style={styles.mapLockBadgeText}>Modo mapa activo - Salir</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -292,7 +292,7 @@ const NearbyMapBlock = ({
       >
         {loadingNearby ? (
           <View style={styles.mapLoadingOverlay}>
-            <ActivityIndicator size="large" color="#0E7490" />
+            <ActivityIndicator size="large" color="#156436" />
             <Text style={styles.mapLoadingText}>Buscando...</Text>
           </View>
         ) : filteredNearby.length > 0 ? (
@@ -311,7 +311,7 @@ const NearbyMapBlock = ({
         ) : (
           <View style={styles.mapEmptyCard}>
             <View style={styles.mapEmptyIconContainer}>
-              <FontAwesome name={emptyState.icon} size={24} color="#0E7490" />
+              <FontAwesome name={emptyState.icon} size={24} color="#156436" />
             </View>
             <View style={{ alignItems: "center" }}>
               <Text style={styles.mapEmptyTitle}>{emptyState.title}</Text>
@@ -336,7 +336,7 @@ const NearbyMapBlock = ({
                   disabled={loadingNearby}
                   activeOpacity={0.8}
                 >
-                  <FontAwesome name="refresh" size={15} color="#0E7490" />
+                  <FontAwesome name="refresh" size={15} color="#156436" />
                   <Text
                     style={[
                       styles.mapEmptyButtonText,

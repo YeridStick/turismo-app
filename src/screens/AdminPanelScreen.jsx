@@ -19,7 +19,7 @@ import { getAgencies, createAgency, updateAgency, deleteAgency, getAgencyUsers, 
 import { PremiumModal } from '../components/ui/PremiumModal';
 import { useAuth } from '../context/AuthContext';
 
-const ACCENT = "#0E7490";
+const ACCENT = "#156436";
 const COLORS = {
     bg: "#FFFFFF",
     text: "#0F172A",
@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
     repInputLocked: {
         backgroundColor: "#EEF6F8",
         borderColor: "rgba(14,116,144,0.35)",
-        color: "#0E7490",
+        color: "#156436",
     },
     creatorBadge: {
         paddingHorizontal: 10,
